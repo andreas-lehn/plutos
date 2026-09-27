@@ -5,16 +5,6 @@ from fastapi import FastAPI, Request
 import httpx
 import os
 
-# Die App zieht sich die Daten direkt aus der aktiven Conda-Umgebung (bzw. Render-Umgebung)
-TRADOVATE_URL = "https://tradovateapi.com"
-TRADOVATE_USER = os.getenv("TRADOVATE_USER")
-TRADOVATE_PASS = os.getenv("TRADOVATE_PASS")
-TRADOVATE_APP_KEY = os.getenv("TRADOVATE_APP_KEY")
-
-# Eine kleine Sicherheitsprüfung beim Start des Bots
-if not all([TRADOVATE_USER, TRADOVATE_PASS, TRADOVATE_APP_KEY]):
-    raise RuntimeError("❌ KRITISCH: Wichtige Tradovate-Umgebungsvariablen fehlen! Bot stoppt.")
-
 logger = logging.getLogger("uvicorn.error")
 
 app = FastAPI(
@@ -24,6 +14,53 @@ app = FastAPI(
 
 # Globale Variable zur Steuerung der Hintergrund-Schleife
 bot_running = False
+
+# Die App zieht sich die Daten direkt aus der aktiven Conda-Umgebung bzw. Render-Umgebung
+TRADOVATE_URL = "https://tradovateapi.com"
+TRADOVATE_USER = os.getenv("TRADOVATE_USER")
+TRADOVATE_PASS = os.getenv("TRADOVATE_PASS")
+TRADOVATE_APP_KEY = os.getenv("TRADOVATE_APP_KEY")
+
+# Sicherheitsprüfung beim Start des Bots, ob alle wichtigen Umgebungsvariablen gesetzt sind
+if not TRADOVATE_USER:
+    logger.error("TRADOVATE_USER not set!")
+if not TRADOVATE_PASS:
+    logger.error("TRADOVATE_PASS not set!")
+if not TRADOVATE_APP_KEY:
+    logger.error("TRADOVATE_APP_KEY not set!")
+
+# Globale Variable, um das Token für andere Funktionen bereitzuhalten
+token_store = {
+    "access_token": None,
+    "expiration": None
+}
+
+async def get_tradovate_token() -> bool:
+    """ Holt sich ein frisches OAuth-Token von Tradovate """
+    url = f"{TRADOVATE_URL}/auth/accesstokenrequest"
+    payload = {
+        "name": TRADOVATE_USER,
+        "password": TRADOVATE_PASS,
+        "appId": TRADOVATE_APP_KEY,
+        "appVersion": "1.0.0"
+    }
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(url, json=payload, timeout=5.0)
+            
+            if response.status_code == 200:
+                data = response.json()
+                token_store["access_token"] = data.get("accessToken")
+                logger.info("🔐 TRADOVATE: Login erfolgreich! Access Token empfangen.")
+                return True
+            else:
+                logger.error(f"❌ TRADOVATE: Login fehlgeschlagen. Status: {response.status_code}, Info: {response.text}")
+                return False
+                
+    except Exception as e:
+        logger.error(f"❌ TRADOVATE: Fehler bei Verbindung zu Tradovate: {e}")
+        return False
 
 # --- MINIMALE PLATZHALTER-LOGIK ---
 
