@@ -7,7 +7,7 @@ logger = logging.getLogger("uvicorn.error")
 
 app = FastAPI(
     title="Plotos trading bot",
-    description="AI supported hight performance sculping bot for Nasdaq Futures (NQ/MNQ).",
+    description="AI supported high performance sculping bot for Nasdaq Futures (NQ/MNQ).",
     version="1.0.0")
 
 # Globale Variable zur Steuerung der Hintergrund-Schleife
