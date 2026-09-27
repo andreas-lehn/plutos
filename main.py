@@ -3,13 +3,7 @@ import logging
 import random
 from fastapi import FastAPI, Request
 
-# Logging konfigurieren (wichtig für render.com Live-Logs)
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
-logger = logging.getLogger("plutos")
+logger = logging.getLogger("uvicorn.error")
 
 app = FastAPI(
     title="Plotos trading bot",
