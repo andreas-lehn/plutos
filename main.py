@@ -6,7 +6,7 @@ from fastapi import FastAPI, Request
 logger = logging.getLogger("uvicorn.error")
 
 app = FastAPI(
-    title="Plotos trading bot",
+    title="Plutos bot",
     description="AI supported high performance sculping bot for Nasdaq Futures (NQ/MNQ).",
     version="1.0.0")
 
