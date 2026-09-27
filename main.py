@@ -2,6 +2,18 @@ import asyncio
 import logging
 import random
 from fastapi import FastAPI, Request
+import httpx
+import os
+
+# Die App zieht sich die Daten direkt aus der aktiven Conda-Umgebung (bzw. Render-Umgebung)
+TRADOVATE_URL = "https://tradovateapi.com"
+TRADOVATE_USER = os.getenv("TRADOVATE_USER")
+TRADOVATE_PASS = os.getenv("TRADOVATE_PASS")
+TRADOVATE_APP_KEY = os.getenv("TRADOVATE_APP_KEY")
+
+# Eine kleine Sicherheitsprüfung beim Start des Bots
+if not all([TRADOVATE_USER, TRADOVATE_PASS, TRADOVATE_APP_KEY]):
+    raise RuntimeError("❌ KRITISCH: Wichtige Tradovate-Umgebungsvariablen fehlen! Bot stoppt.")
 
 logger = logging.getLogger("uvicorn.error")
 
