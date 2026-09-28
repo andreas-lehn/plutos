@@ -8,12 +8,9 @@ import os
 logger = logging.getLogger("uvicorn.error")
 
 app = FastAPI(
-    title="Plutos bot",
-    description="AI supported high performance sculping bot for Nasdaq Futures (NQ/MNQ).",
+    title="Plutos Bot",
+    description="High performance trading bot for Nasdaq Futures (NQ/MNQ).",
     version="1.0.0")
-
-# Globale Variable zur Steuerung der Hintergrund-Schleife
-bot_running = False
 
 # Die App zieht sich die Daten direkt aus der aktiven Conda-Umgebung bzw. Render-Umgebung
 TRADOVATE_URL = "https://tradovateapi.com"
@@ -62,6 +59,7 @@ async def get_tradovate_token() -> bool:
         logger.error(f"❌ TRADOVATE: Fehler bei Verbindung zu Tradovate: {e}")
         return False
 
+<<<<<<< HEAD
 # --- MINIMALE PLATZHALTER-LOGIK ---
 
 def mock_ki_prediction() -> float:
@@ -103,22 +101,32 @@ async def trading_loop():
         # Exakt 10 Sekunden warten
         await asyncio.sleep(10)
 
+=======
+>>>>>>> main
 # --- FASTAPI ENDPOINTS ---
 
 @app.on_event("startup")
 async def startup_event():
     """Wird aufgerufen, sobald FastAPI startet."""
+<<<<<<< HEAD
     global bot_running
     bot_running = True
     asyncio.create_task(trading_loop())
     logger.info("✅ Bot initialisiert und Hintergrund-Task läuft.")
+=======
+    logger.info("Bot startup...")
+>>>>>>> main
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Wird aufgerufen, wenn der Server gestoppt wird."""
+<<<<<<< HEAD
     global bot_running
     bot_running = False
     logger.info("🛑 Bot wird heruntergefahren...")
+=======
+    logger.info("Bot shutting down...")
+>>>>>>> main
 
 @app.get("/")
 def read_root(request: Request):
@@ -135,4 +143,8 @@ def read_root(request: Request):
 @app.get("/health")
 def health_check():
     """Wichtig für das Deployment auf render.com"""
+<<<<<<< HEAD
     return {"status": "healthy", "bot_running": bot_running}
+=======
+    return {"status": "healthy" }
+>>>>>>> main
