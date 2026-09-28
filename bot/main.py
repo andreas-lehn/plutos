@@ -8,8 +8,8 @@ import os
 logger = logging.getLogger("uvicorn.error")
 
 app = FastAPI(
-    title="Plutos bot",
-    description="AI supported high performance sculping bot for Nasdaq Futures (NQ/MNQ).",
+    title="Plutos Bot",
+    description="High performance trading bot for Nasdaq Futures (NQ/MNQ).",
     version="1.0.0")
 
 # Die App zieht sich die Daten direkt aus der aktiven Conda-Umgebung bzw. Render-Umgebung
@@ -86,4 +86,4 @@ def read_root(request: Request):
 @app.get("/health")
 def health_check():
     """Wichtig für das Deployment auf render.com"""
-    return {"status": "healthy", "bot_running": bot_running}
+    return {"status": "healthy" }
