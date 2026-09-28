@@ -11,4 +11,4 @@ File name follow a convention:
 
 Example:
 
-    PBN-001---general_thoughts_about_a_trading_bot
+    PBN-001---general_thoughts_about_a_trading_bot.md
