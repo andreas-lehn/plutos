@@ -8,10 +8,7 @@ import uuid
 import pandas as pd
 import requests
 import websocket
-
-# Festgelegte Endpunkte (Demo)
-BASE_URL = "https://demo.tradovateapi.com/v1"
-WS_URL = "wss://md.tradovateapi.com/v1/websocket"
+import tradovate
 
 # --- GLOBALE STATUSVARIABLEN ---
 access_token = None
@@ -79,7 +76,7 @@ def get_active_symbol(symbol, target_date):
         contract_code = 'H'
         contract_year = str(year + 1)[-1]
     
-    return f"{symbol.upper()}{contract_code}{contract_year}", rollovers
+    return f"{symbol.upper()}{contract_code}{contract_year}"
 
 
 def get_access_token(name = None, password = None, sec = None, cid = None, app_id = "plutos_bot"):
@@ -109,7 +106,7 @@ def get_access_token(name = None, password = None, sec = None, cid = None, app_i
         "sec": sec,
         "deviceId": str(uuid.uuid4())
     }
-    response = requests.post(f"{BASE_URL}/auth/accesstokenrequest", json=payload)
+    response = requests.post(f"{tradovate.DEMO_URL}/auth/accesstokenrequest", json=payload)
     if response.status_code == 200:
         data = response.json()
         if "accessToken" in data:
