@@ -1,4 +1,5 @@
 import argparse
+import sys
 from datetime import datetime, timedelta
 import json
 import os
@@ -37,9 +38,9 @@ def get_third_friday(year, month):
     return third_friday
 
 
-def get_active_mnq_symbol(target_date):
+def get_active_symbol(symbol, target_date):
     """
-    Ermittelt automatisch das aktive MNQ-Kontraktsymbol für ein gegebenes Datum.
+    Ermittelt automatisch das aktive Kontraktsymbol für ein gegebenes Datum.
     Rollover findet am Donnerstag vor dem 3. Freitag im März, Juni, September und Dezember statt.
     """
     year = target_date.year
@@ -77,70 +78,43 @@ def get_active_mnq_symbol(target_date):
     else:
         contract_code = 'H'
         contract_year = str(year + 1)[-1]
-        
-    symbol = f"MNQ{contract_code}{contract_year}"
-    return symbol, rollovers
+    
+    return f"{symbol.upper()}{contract_code}{contract_year}", rollovers
 
 
-# --- CLI-ARGUMENTE ---
-parser = argparse.ArgumentParser(description="Tradovate API - Automatischer MNQ Tages-Tick-Downloader")
-parser.add_argument("--username", required=True, help="Ihr Tradovate Benutzername")
-parser.add_argument("--password", required=True, help="Ihr Tradovate Passwort")
-parser.add_argument("--sec", required=True, help="Ihr API Secret Key (SEC)")
-parser.add_argument("--cid", required=True, type=int, help="Ihre Client ID (CID)")
-parser.add_argument("--date", required=True, help="Ziel-Datum im Format YYYY-MM-DD (z.B. 2026-09-28)")
-parser.add_argument("--appid", default="MyAutoCliDownloader", help="Beliebiger App-Name")
-args = parser.parse_args()
-
-# Datum parsen und Symbol bestimmen
-try:
-    target_date = datetime.strptime(args.date, "%Y-%m-%d")
-    
-    # Automatisches Symbol-Routing
-    SYMBOL, rollovers_info = get_active_mnq_symbol(target_date)
-    
-    # Start- und End-Zeitstempel für den Tag
-    start_dt = target_date
-    end_dt = target_date + timedelta(days=1) - timedelta(seconds=1)
-    
-    START_MS = int(start_dt.timestamp() * 1000)
-    END_MS = int(end_dt.timestamp() * 1000)
-    
-    print(f"🎯 Automatisches Symbol-Routing für den {args.date}:")
-    print(f"   👉 Aktives Symbol: {SYMBOL}")
-    print(f"   📅 Rollover-Details für dieses Jahr:")
-    for month, ro_date in rollovers_info.items():
-        month_name = {3: 'März', 6: 'Juni', 9: 'Sept', 12: 'Dez'}[month]
-        print(f"     - {month_name} Rollover-Donnerstag: {ro_date.strftime('%Y-%m-%d')}")
-    print(f"\n⏳ Zeitfenster für den Download:")
-    print(f"   Start: {start_dt}")
-    print(f"   Ende:  {end_dt}")
-    print("-" * 50)
-    
-except Exception as e:
-    print(f"❌ Fehler bei der Datums- oder Symbolermittlung: {e}")
-    exit(1)
-
-
-def get_access_token():
+def get_access_token(name = None, password = None, sec = None, cid = None, app_id = "plutos_bot"):
     """Authentifiziert sich über die REST-API und holt das Access-Token."""
-    print("🔑 Authentifiziere mit Tradovate...")
+    if (name is None):
+        name = os.getenv("TRADOVATE_NAME")
+        if name is None:
+            raise Exception("TRADOVATE_NAME environment variable is not set.")
+    if (password is None):
+        password = os.getenv("TRADOVATE_PASSWORD")
+        if password is None:
+            raise Exception("TRADOVATE_PASSWORD environment variable is not set.")
+    if (sec is None):
+        sec = os.getenv("TRADOVATE_SEC")
+        if sec is None:
+            raise Exception("TRADOVATE_SEC environment variable is not set.")
+    if (cid is None):
+        cid = os.getenv("TRADOVATE_CID")
+        if cid is None:
+            raise Exception("TRADOVATE_CID environment variable is not set.")
     payload = {
-        "name": args.username,
-        "password": args.password,
-        "appId": args.appid,
+        "name": name,
+        "password": password,
+        "appId": app_id,
         "appVersion": "1.0",
-        "cid": args.cid,
-        "sec": args.sec,
+        "cid": cid,
+        "sec": sec,
         "deviceId": str(uuid.uuid4())
     }
     response = requests.post(f"{BASE_URL}/auth/accesstokenrequest", json=payload)
     if response.status_code == 200:
         data = response.json()
         if "accessToken" in data:
-            print("🔑 Authentifizierung erfolgreich!")
             return data["accessToken"]
-    raise Exception(f"Fehler bei Authentifizierung: {response.text}")
+    raise Exception(f"authentication failed: {response.text}")
 
 
 def request_tick_packet(ws, closest_timestamp):
@@ -149,7 +123,7 @@ def request_tick_packet(ws, closest_timestamp):
     request_id += 1
     
     chart_params = {
-        "symbol": SYMBOL,
+        "symbol": symbol,
         "chartStyle": "Tick",
         "elementSize": 1,
         "underlyingType": "Tick",
@@ -158,7 +132,6 @@ def request_tick_packet(ws, closest_timestamp):
             "asMuchAsElements": 4096
         }
     }
-    
     message = f"md/getChart\n{request_id}\n\n{json.dumps(chart_params)}"
     ws.send(message)
 
@@ -212,21 +185,11 @@ def on_message(ws, message):
 
 
 def on_close(ws, close_status_code, close_msg):
-    print("⚫ Verbindung geschlossen. Speichere Daten...")
-    save_data_to_csv()
-
-
-def save_data_to_csv():
     """Bereitet die Daten auf und speichert sie als tagesbasierte CSV-Datei."""
     if not all_ticks:
-        print("⚠️ Keine Daten im ausgewählten Tageszeitfenster gefunden.")
-        return
+        raise("no ticks available to save")
         
-    filename = f"ticks_{SYMBOL}_{args.date}.csv"
-    print(f"💾 Konvertiere {len(all_ticks)} Ticks in {filename}...")
-    
     df = pd.DataFrame(all_ticks)
-    
     df.rename(columns={
         't': 'timestamp',
         'o': 'price',
@@ -240,14 +203,30 @@ def save_data_to_csv():
         df.sort_values(by='timestamp', ascending=True, inplace=True)
         df['datetime_utc'] = pd.to_datetime(df['timestamp'], unit='ms')
     
-    df.to_csv(filename, index=False)
-    print(f"✅ Download erfolgreich beendet! Datei: {os.path.abspath(filename)}")
+    df.to_csv(f"{symbol}_{args.date}.csv", index=False)
 
 
 # --- START ---
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Tradovate API - Automatischer MNQ Tages-Tick-Downloader")
+    parser.add_argument("--date", required=True, help="Ziel-Datum im Format YYYY-MM-DD (z.B. 2026-09-28)")
+    parser.add_argument("--symbol", default="MNQ", help="Symbol for download (Standard: MNQ)")
+    args = parser.parse_args()
+
     try:
-        access_token = get_access_token()
+        target_date = datetime.strptime(args.date, "%Y-%m-%d")
+        
+        symbol = get_active_symbol(args.symbol, target_date)
+        
+        start_dt = target_date
+        end_date = target_date + timedelta(days=1) - timedelta(seconds=1)
+        
+        START_MS = int(target_date.timestamp() * 1000)
+        END_MS = int(end_date.timestamp() * 1000)
+        
+        print(f"{parser.prog}: downloading ticks for {symbol}: {target_date} .. {end_date}")
+        
+        access_token = get_access_token(app_id=parser.prog)
         
         ws_client = websocket.WebSocketApp(
             WS_URL,
@@ -257,7 +236,6 @@ if __name__ == "__main__":
         ws_client.run_forever()
         
     except KeyboardInterrupt:
-        print("\nAbgebrochen durch Nutzer. Bisherige Daten werden gesichert...")
-        save_data_to_csv()
+        print(f"{parser.prog}: aborted by user. No data saved.", file=sys.stderr)
     except Exception as e:
-        print(f"❌ Fehler: {e}")
+        print(f"{parser.prog}: error: {e}", file=sys.stderr)
