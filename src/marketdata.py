@@ -458,11 +458,13 @@ class TradeStatistics:
 class KentBeckTrader:
     """ Der einfachste aller Trader, der möglicherweise Gewinn machen könnte """
 
-    def __init__(self, filter_constant: float = 0.5):
+    def __init__(self, filter_constant: float = 0.5, slope_threshold: float = 0.1):
         self._filter_constant: float = filter_constant
+        self._slope_threshold: float = slope_threshold
         self._state = 'flat'
         self._stop_loss: float = 0.0
         self._current_trade = {}
+        self._old_slope: float = 0.0
 
         self.analytics_schema = {
             'time': 'int',
@@ -472,7 +474,7 @@ class KentBeckTrader:
         }
         self.analytics_data: pd.DataFrame = pd.DataFrame(columns=self.analytics_schema.keys())
         self.analytics_data = self.analytics_data.astype(self.analytics_schema)
-        self._listeners: List[TradeListener] = []
+        self._listeners: List[TraderListener] = []
 
 
     def add_listener(self, listener: TraderListener):
@@ -506,11 +508,13 @@ class KentBeckTrader:
             average = last['average'] + current_slope
             new_slope = last['slope'] + (current_slope - last['slope']) * self._filter_constant
             decision = 'none'
-            if (new_slope * last['slope']) < 0.0:
-                if new_slope > 0.0:
-                    decision = 'buy'
-                if new_slope < 0.0:
-                    decision = 'sell'
+            if (abs(new_slope) > self._slope_threshold):
+                if (new_slope * self._old_slope) < 0.0:
+                    if new_slope > 0.0:
+                        decision = 'buy'
+                    if new_slope < 0.0:
+                        decision = 'sell'
+                self._old_slope = new_slope
             
             analytics = {
                 'time': bar.start_time,
@@ -651,4 +655,3 @@ if __name__ == "__main__":
     loader.load_and_stream(args.filename)
 
     print(collector.data_frame)
-    
