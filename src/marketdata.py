@@ -565,6 +565,7 @@ class KentBeckTrader:
         self.trade(analytics, bar)
 
     def on_end_of_day(self) -> None:
+        print("568: end of day recieved")
         self._stat = 'flat'
         self._current_trade = {}
         self._notify_day_closed()
@@ -573,27 +574,27 @@ class KentBeckTrader:
 class BarLoader:
     """Liest die CSV-Datei chronologisch ein und verteilt die Zeilen als Events."""
 
-    _bar_listeners = []
-
     def __init__(self):
         self._listeners = []
 
     def add_bar_listener(self, listener: BarListener):
         """Registriert einen Trader/Bot für die fertigen Balken."""
-        if listener not in self._bar_listeners:
-            self._bar_listeners.append(listener)
+        if listener not in self._listeners:
+            self._listeners.append(listener)
 
     def remove_bar_listener(self, listener: BarListener):
         """Entfernt einen registrierten Bar-Listener."""
-        if listener in self._bar_listeners:
-            self._bar_listeners.remove(listener)
+        if listener in self._listeners:
+            self._listeners.remove(listener)
 
     def _notify_new_bar(self, bar: VolumeBar):
-        for listener in self._bar_listeners:
+        for listener in self._listeners:
             listener.on_new_bar(bar)
 
     def _notify_end_of_day(self):
-        for listener in self._bar_listeners:
+        print("596: notify_end_of_day")
+        print(f"598: {len(self._listeners)}")
+        for listener in self._listeners:
             listener.on_end_of_day()
 
     def load_and_stream(self, csv_path):
