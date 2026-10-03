@@ -4,25 +4,6 @@ import marketdata
 import pandas as pd
 from typing import List, Dict, Iterator, Tuple, Protocol
 
-pd.options.display.float_format = "{:.2f}".format
-
-class StatisticsListener:
-    """collects the statistics of each simulated day"""
-
-    def __init__(self):
-        self._stats: List[marketdata.Statistics] = []
-        self._data_frame: pd.DataFrame = None
-
-    @property
-    def data_frame(self) -> pd.DataFrame:
-        if self._data_frame is None:
-            self._data_frame = pd.DataFrame([stats.model_dump() for stats in self._stats])
-        return self._data_frame
-
-    def on_day_closed(self, statistics):
-        self._stats.append(statistics)
-        self._data_frame = None
-
 
 def simulate(filename: str, filter_constant: float = 0.5, slope_thershold: float = 0.1, statistics_listener: marketdata.TradeStatisticsListener = None):
     trade_statistics = marketdata.TradeStatistics()
@@ -41,13 +22,14 @@ if __name__ == "__main__":
     parser.add_argument("files", nargs="+", help="list of CSV file with bars to be simulated")
     args = parser.parse_args()
 
-    statistics = StatisticsListener()
+    collector = marketdata.StatisticsCollector()
 
     args.files.sort()
     for file in args.files:
         print(f"{parser.prog}: simulating {os.path.basename(file)} ...", end='')
-        simulate(file, filter_constant = args.filter, slope_thershold = args.slope_threshold, statistics_listener = statistics)
+        simulate(file, filter_constant = args.filter, slope_thershold = args.slope_threshold, statistics_listener = collector)
         print('done.')
 
-    print(statistics.data_frame)
+    print()
+    print(collector.data_frame)
     

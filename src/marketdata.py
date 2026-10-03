@@ -92,6 +92,26 @@ class TradeStatisticsListener(Protocol):
     def on_day_closed(self, statistics: Statistics):
         ...
 
+pd.options.display.float_format = "{:.2f}".format
+
+class StatisticsCollector:
+    """collects the trade statistics of each simulated day"""
+
+    def __init__(self):
+        self._stats: List[marketdata.Statistics] = []
+        self._data_frame: pd.DataFrame = None
+
+    @property
+    def data_frame(self) -> pd.DataFrame:
+        if self._data_frame is None:
+            self._data_frame = pd.DataFrame([stats.model_dump() for stats in self._stats])
+        return self._data_frame
+
+    def on_day_closed(self, statistics):
+        self._stats.append(statistics)
+        self._data_frame = None
+
+
 # =====================================================================
 # 3. TICK PROVIDER (Publisher für den Datenstrom)
 # =====================================================================
@@ -565,7 +585,6 @@ class KentBeckTrader:
         self.trade(analytics, bar)
 
     def on_end_of_day(self) -> None:
-        print("568: end of day recieved")
         self._stat = 'flat'
         self._current_trade = {}
         self._notify_day_closed()
@@ -592,8 +611,6 @@ class BarLoader:
             listener.on_new_bar(bar)
 
     def _notify_end_of_day(self):
-        print("596: notify_end_of_day")
-        print(f"598: {len(self._listeners)}")
         for listener in self._listeners:
             listener.on_end_of_day()
 
@@ -624,7 +641,7 @@ if __name__ == "__main__":
     parser.add_argument("--filename", help="CSV with volume bars")
     args = parser.parse_args()
 
-    # Setup
+
     trade_statistics = TradeStatistics()
     trader = KentBeckTrader(filter_constant=0.5)
     trader.add_listener(trade_statistics)
