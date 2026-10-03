@@ -10,8 +10,9 @@ from datetime import datetime, timedelta
 
 # Festgelegte Endpunkte (Demo)
 DEMO_URL = "https://demo.tradovateapi.com/v1"
+DEMO_WSS = "wss://demo.tradovateapi.com/v1/websocket"
 LIVE_URL = "https://live.tradovateapi.com/v1"
-WS_URL = "wss://md.tradovateapi.com/v1/websocket"
+LIVE_WSS = "wss://md.tradovateapi.com/v1/websocket"
 
 async def get_access_token(name = None, password = None, sec = None, cid = None, app_id = "plutos_bot", url = DEMO_URL):
     """Authenticate by REST-API and retrieve the access token."""
@@ -34,9 +35,9 @@ async def get_access_token(name = None, password = None, sec = None, cid = None,
     payload = {
         "name": name,
         "password": password,
-        "appId": app_id,
+        "appId": "plutos_bot",
         "appVersion": "1.0",
-        "cid": cid,
+        "cid": int(cid),
         "sec": sec,
     }
     response = requests.post(f"{url}/auth/accesstokenrequest", json=payload)
@@ -114,10 +115,11 @@ class TradovateAPI:
         
         # Basis-URLs für Demo- oder Live-Umgebung
         if is_demo:
-            self.rest_url = "https://tradovateapi.com"
+            self.rest_url = LIVE_URL
+            self.ws_url = LIVE_WSS                  
         else:
-            self.rest_url = "https://tradovateapi.com"
-        self.ws_url = "wss://://tradovateapi.com"
+            self.rest_url = DEMO_URL
+            self.ws_url = DEMO_WSS
             
         self.token = None
         self.websocket = None

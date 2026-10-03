@@ -39,7 +39,7 @@ def on_message(ws, message):
     
     if message == 'o':
         print("🟢 WebSocket geöffnet. Sende Autorisierung...")
-        ws.send(f"authorize\n1\n\n{access_token}")
+        ws.send(f'["authorize\n1\n\n{access_token}"]')
         
     elif message == 'h':
         pass
@@ -83,6 +83,10 @@ def on_message(ws, message):
 
 
 def on_close(ws, close_status_code, close_msg):
+    print("!!! VERBINDUNG GESCHLOSSEN !!!")
+    print(f"Status Code: {close_status_code}")
+    print(f"Grund vom Server: {close_msg}")
+
     """Bereitet die Daten auf und speichert sie als tagesbasierte CSV-Datei."""
     if not all_ticks:
         raise("no ticks available to save")
@@ -114,9 +118,10 @@ async def download_ticks_for_day(symbol, target_date):
     print(f"{parser.prog}: downloading ticks for {symbol}: {target_date} .. {end_date}")
         
     access_token = await tradovate.get_access_token(app_id="plutos_bot")
+    print(f"🔑 Access Token erhalten: {access_token}")
 
     ws_client = websocket.WebSocketApp(
-        tradovate.WS_URL,
+        tradovate.DEMO_WSS,
         on_message=on_message,
         on_close=on_close
     )
