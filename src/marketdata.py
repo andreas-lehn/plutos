@@ -8,6 +8,7 @@ import csv
 import time
 import random
 import numpy as np
+import pandas as pd
 from pydantic import BaseModel, Field
 from typing import List, Dict, Iterator, Tuple, Protocol
 
@@ -24,7 +25,7 @@ class Tick(BaseModel):
 
 
 class VolumeBar(BaseModel):
-    """Kapselt die Daten eines fertigen Volumenbalkens (OHLC) inkl. VWAP."""
+    """Kapselt die Daten eines fertigen Volumenbalkens"""
     start_time: int = Field(..., description="Startzeit des Balkens in Millisekunden")
     end_time: int = Field(..., description="Endzeit des Balkens in Millisekunden")
     open: float = Field(..., description="Eröffnungspreis des Intervalls")
@@ -32,8 +33,15 @@ class VolumeBar(BaseModel):
     low: float = Field(..., description="Tiefstpreis im Intervalls")
     close: float = Field(..., description="Schlusskurs des Intervalls")
     volume: int = Field(..., description="Kumuliertes Gesamtvolumen des Balkens")
-    vwap: float = Field(..., description="Volumengewichteter Durchschnittspreis (VWAP)")
+    average: float = Field(..., description="(Volumengewichteter) Durchschnittspreis")
 
+class Trade(BaseModel):
+    """Kapselt die Daten eines abgeschlossenen Trades"""
+    buy_time: int = Field(..., description="Zeitpunkt des Kaufs in Millisekunden")
+    buy_price: float = Field(..., description="Kaufpreis des Futures")
+    sell_time: int = Field(..., description="Zeitpunkt des Kaufs in Millisekunden")
+    sell_price: float = Field(..., description="Kaufpreis des Futures")
+    volume: int = Field(..., description="Kumuliertes Gesamtvolumen des Balkens")
 
 # =====================================================================
 # 2. PROTOKOLLE (Schnittstellen für das Observer-Pattern)
@@ -41,7 +49,7 @@ class VolumeBar(BaseModel):
 
 class BarListener(Protocol):
     """Schnittstelle für Observer, die auf fertige Volumenbalken reagieren."""
-    def on_new_bar(self, bar: VolumeBar, index: int, sender: Sequence[VolumeBar]) -> None:
+    def on_new_bar(self, bar: VolumeBar) -> None:
         """Wird aufgerufen, sobald ein neuer Volumenbalken fertiggestellt wurde."""
         ...
 
@@ -54,6 +62,12 @@ class TickListener(Protocol):
         
     def on_ticks_completed(self) -> None:
         """Wird aufgerufen, wenn der Datenstrom beendet ist (z.B. Dateiende oder Session-Ende)."""
+        ...
+
+class TradeListener(Protocol):
+    """Schnittstelle für Trade Listener"""
+    def on_trade_closed(self, trade: Trade) -> None:
+        """Wird bei einem abgeschlossenen Trade aufgerufen"""
         ...
 
 
@@ -89,7 +103,6 @@ class TickProvider:
 
     def stream_from_csv(self, filename: str):
         """Liest eine CSV-Datei zeilenweise und streamt sie als validierte Ticks."""
-        print(f"[TickProvider] Starte Streaming aus '{filename}'...")
         with open(filename, 'r') as f:
             reader = csv.DictReader(f)
             for row in reader:
@@ -105,7 +118,6 @@ class TickProvider:
                     print(f"[TickProvider] Fehler bei Zeilen-Parsing {row}: {e}")
         
         # Stream-Abschluss signalisieren
-        print("[TickProvider] Streaming beendet. Sende Abschluss-Signal an alle Listener.")
         self._notify_ticks_completed()
 
 
@@ -218,7 +230,7 @@ class VolumeBarBuilder:
 
     def _notify_bar_listeners(self, bar: VolumeBar, index: int):
         for listener in self._bar_listeners:
-            listener.on_new_bar(bar, index, self)
+            listener.on_new_bar(bar)
 
     def _reset_current_bar(self):
         """Setzt den Konstruktionspuffer für den nächsten Balken zurück."""
@@ -296,30 +308,283 @@ class VolumeBarBuilder:
         return iter(self.volume_bars)
 
 
+
+class TradeStatistics:
+    """Collects trades as a trade listener and calculates statistics on these trades"""
+
+    def __init__(self, filter_constant: float = 0.5):
+
+        self.trades_schema = {
+            'buy_time': 'int',
+            'buy_price': 'float',
+            'sell_time': 'int',
+            'sell_price': 'float',
+            'volume': int,
+            'profit': 'float',
+            'duration': 'int'
+        }
+        self.trades: pd.DataFrame = pd.DataFrame(columns=self.trades_schema.keys())
+        self.trades = self.trades.astype(self.trades_schema)
+
+    def on_trade_closed(self, closed_trade: Trade) -> None:
+        trade = {
+            'buy_time': closed_trade.buy_time,
+            'buy_price': closed_trade.buy_price,
+            'sell_time': closed_trade.sell_time,
+            'sell_price': closed_trade.sell_price,
+            'volume': closed_trade.volume,
+            'profit': (closed_trade.sell_price - closed_trade.buy_price) * closed_trade.volume,
+            'duration': abs(closed_trade.buy_time - closed_trade.sell_time)
+        }
+        new_frame = pd.DataFrame([trade], columns=self.trades_schema.keys()).astype(self.trades_schema)
+        self.trades = pd.concat([self.trades, new_frame], ignore_index=True)
+
+    @property
+    def _win_trades(self):
+        return self.trades[self.trades["profit"] > 0.0]
+
+    @property
+    def _loss_trades(self):
+        return self.trades[self.trades['profit'] <= 0.0]
+
+    @property
+    def number_of_trades(self) -> int:
+        return len(self.trades)
+    
+    @property
+    def total_profit(self) -> float:
+        return self.trades['profit'].sum()
+
+    @property
+    def max_profit(self) -> float:
+        return self.trades['profit'].max()
+
+    @property
+    def min_profit(self) -> float:
+        return self.trades['profit'].min()
+
+    @property
+    def win_profit(self) -> float:
+        return self._win_trades['profit'].sum()
+    
+    @property
+    def loss_profit(self) -> float:
+        return self._loss_trades['profit'].sum()
+    
+    @property
+    def win_rate(self) -> float:
+        n_wins = len(self._win_trades)
+        n_loss = len(self._loss_trades)
+        n_total = n_wins + n_loss
+        return (n_wins / n_total) if n_total > 0 else 0.0
+
+    @property
+    def profit_factor(self) -> float:
+        loss_profit = -self.loss_profit
+        return self.win_profit / loss_profit if loss_profit != 0.0 else 0.0 
+
+    def get_statistics(self):
+        stats = {
+            'total_profit': self.total_profit,
+            'number_of_trades': self.number_of_trades,
+            'win_rate': self.win_rate,
+            'profit_factor': self.profit_factor,
+            'max_profit': self.max_profit,
+            'min_profit': self.min_profit
+        }
+        return stats
+
+    def to_csv(filename: str) -> None:
+        pass
+
+
 # Ein einfacher Beispiel-Trader
-class Trader:
-    def on_new_bar(self, bar: VolumeBar, index: int):
-        print(f"Balken #{index} gebaut! Close: {bar.close} | VWAP: {bar.vwap:.2f}")
+class KentBeckTrader:
+    """ Der einfachste aller Trader, der möglicherweise Gewinn machen könnte """
+
+    def __init__(self, filter_constant: float = 0.5):
+        self._filter_constant: float = filter_constant
+        self._state = 'flat'
+        self._stop_loss: float = 0.0
+        self._current_trade = {}
+
+        self.analytics_schema = {
+            'time': 'int',
+            'average': 'float',
+            'slope': 'float',
+            'decision': 'str',
+        }
+        self.analytics_data: pd.DataFrame = pd.DataFrame(columns=self.analytics_schema.keys())
+        self.analytics_data = self.analytics_data.astype(self.analytics_schema)
+        self._trade_listeners: List[TradeListener] = []
+
+
+    def add_trade_listener(self, listener: TradeListener):
+        """Registriert einen Trader/Bot für die fertigen Balken."""
+        if listener not in self._trade_listeners:
+            self._trade_listeners.append(listener)
+
+    def remove_trade_listener(self, listener: TradeListener):
+        """Entfernt einen registrierten Bar-Listener."""
+        if listener in self._trade_listeners:
+            self._trade_listeners.remove(listener)
+
+    def _notify_trade_listeners(self, trade: Trade):
+        for listener in self._trade_listeners:
+            listener.on_trade_closed(trade)
+
+
+    def analyse(self, bar: VolumeBar) -> Dict:
+        analytics = {}
+        if self.analytics_data.empty:
+            analytics = {
+                'time': bar.start_time,
+                'average': bar.average,
+                'slope': 0.0,
+                'decision': 'none' 
+            }
+        else:
+            last = self.analytics_data.iloc[-1]
+            current_slope = (bar.average - last['average']) * self._filter_constant
+            average = last['average'] + current_slope
+            new_slope = last['slope'] + (current_slope - last['slope']) * self._filter_constant
+            decision = 'none'
+            if (new_slope * last['slope']) < 0.0:
+                if new_slope > 0.0:
+                    decision = 'buy'
+                if new_slope < 0.0:
+                    decision = 'sell'
+            
+            analytics = {
+                'time': bar.start_time,
+                'average': average,
+                'slope': new_slope,
+                'decision': decision,
+            }
+        return analytics
+
+    def trade(self, analytics: Dict, bar: VolumeBar):
+        # now we have the analytics, we can make a trade decision based on the slope and the current state
+        if self._state == 'flat':
+            # we are flat, so we can enter a trade if the decision is buy or sell
+            if analytics['decision'] == 'buy':
+                self._state = 'buy' # we place a buy order
+                self._stop_loss = bar.low
+            if analytics['decision'] == 'sell':
+                self._state = 'sell' # we place a sell order
+                self._stop_loss = bar.high
+
+        if self._state == 'buy':
+            # we are in a buy position
+            # we assume, that our order was fulfilled one tick over the opening price
+            self._current_trade['buy_time'] = bar.start_time
+            self._current_trade['buy_price'] = bar.open + 0.25
+            self._stop_loss = bar.low
+            self._state = 'long'
+
+        if self._state == 'long':
+            # we are long. so we have to check, if we ran into our stop loss
+            # print(f".   stop_loss: {self._stop_loss} | low: {bar.low}")
+            if self._stop_loss > bar.low:
+                # we assume, that we were stopped out one tick below our stop loss
+                self._current_trade['sell_price'] = self._stop_loss - 0.25
+                self._current_trade['sell_time'] = bar.start_time
+                self._state = 'flat'
+                self._close_current_trade()
+            else:
+                # we are still going, so adapt stop loss...
+                self._stop_loss = bar.low
+
+        if self._state == 'sell':
+            # we place a sell order and assume that we could sell is one tick less than the opening price
+            self._current_trade['sell_time'] = bar.start_time
+            self._current_trade['sell_price'] = bar.open - 0.25
+            self._stop_loss = bar.high
+            self._state = 'short'
+
+        if self._state == 'short':
+            # we are short, so we have to check, if we ran into out stop loss
+            if self._stop_loss < bar.high:
+                # we assume that we were stopped out one tick over our stop loss
+                self._current_trade['buy_time'] = bar.start_time
+                self._current_trade['buy_price'] = self._stop_loss + 0.25
+                self._state = 'flat'
+                self._close_current_trade()
+            else:
+                # trade is still active. we adjust stop loss...
+                self._stop_loss = bar.high
+
+
+    def _close_current_trade(self):
+        self._current_trade['volume'] = 1
+        trade = Trade.model_validate(self._current_trade)
+        self._notify_trade_listeners(trade)
+        self._current_trade = {}
+
+
+    def on_new_bar(self, bar: VolumeBar):
+        analytics = self.analyse(bar)
+        self.analytics_data = pd.concat([self.analytics_data, pd.DataFrame([analytics])], ignore_index=True)
+        self.trade(analytics, bar)
+
+
+class BarLoader:
+    """Liest die CSV-Datei chronologisch ein und verteilt die Zeilen als Events."""
+
+    _bar_listeners = []
+
+    def __init__(self):
+        self._listeners = []
+
+    def add_bar_listener(self, listener: BarListener):
+        """Registriert einen Trader/Bot für die fertigen Balken."""
+        if listener not in self._bar_listeners:
+            self._bar_listeners.append(listener)
+
+    def remove_bar_listener(self, listener: BarListener):
+        """Entfernt einen registrierten Bar-Listener."""
+        if listener in self._bar_listeners:
+            self._bar_listeners.remove(listener)
+
+    def _notify_bar_listeners(self, bar: VolumeBar):
+        for listener in self._bar_listeners:
+            listener.on_new_bar(bar)
+
+    def load_and_stream(self, csv_path):
+        """Öffnet die CSV-Datei und streamt sie Zeile für Zeile an die Listener."""
+        print(f"Öffne Datei: {csv_path} und starte Streaming...")
+        
+        with open(csv_path, mode='r', newline='') as file:
+            reader = csv.DictReader(file)
+            for row in reader:
+                bar = VolumeBar(
+                    start_time=int(row['Timestamp']),
+                    end_time=int(row['Timestamp']),
+                    open=float(row['Open']),
+                    high=float(row['High']),
+                    low=float(row['Low']),
+                    close=float(row['Close']),
+                    average=float(row['Average']),
+                    volume=int(row['Volume'])
+                )
+                self._notify_bar_listeners(bar)
+
 
 if __name__ == "__main__":
     # --- CLI-ARGUMENTE ---
     import argparse
 
-    parser = argparse.ArgumentParser(description="Tradovate API - Automatischer MNQ Tages-Tick-Downloader")
-    parser.add_argument("--filename", help="CSV with tick data")
+    parser = argparse.ArgumentParser(description="Trade simulator: Lädt Volumenbalken aus einer CSV-Datei und simuliert Echtzeit-Events.")
+    parser.add_argument("--filename", help="CSV with volume bars")
     args = parser.parse_args()
 
     # Setup
-    tick_provider = TickProvider()
-    bar_builder = VolumeBarBuilder(volume_per_bar=1000)
-    histogram = PriceHistogram()
-    trader = Trader()
+    trade_statistics = TradeStatistics()
+    trader = KentBeckTrader(filter_constant=0.5)
+    trader.add_trade_listener(trade_statistics)
+    loader = BarLoader()
+    loader.add_bar_listener(trader)     # Trader reagiert auf fertige Balken
+    loader.load_and_stream(args.filename)
 
-    # Registrierungen (Wer lauscht auf wen?)
-    tick_provider.add_listener(bar_builder)  # Baut die Kerzen
-    tick_provider.add_listener(histogram)    # Baut das High-Speed-Histogramm
-
-    bar_builder.add_bar_listener(trader)     # Trader reagiert auf fertige Balken
-
-    # Starten
-    tick_provider.stream_from_csv("deine_tick_daten.csv")
+    stats = trade_statistics.get_statistics()
+    print(f"Trades: {stats['number_of_trades']}, total profit: {stats['total_profit']:.2f}, win_rate: {stats['win_rate']*100:.2f}%, profit factor: {stats['profit_factor']:.2f}, max win: {stats['max_profit']:.2f}, max loss: {stats['min_profit']:.2f}")
