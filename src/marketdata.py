@@ -5,43 +5,57 @@ Marktdatenstrukturen (Volumenbalken, Histogramme) aus einem Tick-Datenstrom.
 """
 
 import csv
-import time
-import random
 import numpy as np
 import pandas as pd
-from pydantic import BaseModel, Field
+import pydantic
 from typing import List, Dict, Iterator, Tuple, Protocol
 
 # =====================================================================
 # 1. PYDANTIC MODELLE (Datenkapselung & API-Bereitschaft)
 # =====================================================================
 
-class Tick(BaseModel):
+class Tick(pydantic.BaseModel):
     """Kapselt die Daten eines einzelnen Ticks mit Pydantic-Validierung."""
-    timestamp_ms: int = Field(..., description="Zeitpunkt des Ticks in Millisekunden seit 1970")
-    price: float = Field(..., gt=0, description="Preis des Futures")
-    ask_volume: int = Field(..., ge=0, description="Ask-Volumen")
-    bid_volume: int = Field(..., ge=0, description="Bid-Volumen")
+
+    timestamp: int
+    price: float
+    ask_volume: int
+    bid_volume: int
 
 
-class VolumeBar(BaseModel):
+class VolumeBar(pydantic.BaseModel):
     """Kapselt die Daten eines fertigen Volumenbalkens"""
-    start_time: int = Field(..., description="Startzeit des Balkens in Millisekunden")
-    end_time: int = Field(..., description="Endzeit des Balkens in Millisekunden")
-    open: float = Field(..., description="Eröffnungspreis des Intervalls")
-    high: float = Field(..., description="Höchstpreis im Intervalls")
-    low: float = Field(..., description="Tiefstpreis im Intervalls")
-    close: float = Field(..., description="Schlusskurs des Intervalls")
-    volume: int = Field(..., description="Kumuliertes Gesamtvolumen des Balkens")
-    average: float = Field(..., description="(Volumengewichteter) Durchschnittspreis")
 
-class Trade(BaseModel):
+    start_time: int
+    end_time: int
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: int
+    average: float
+
+
+class Trade(pydantic.BaseModel):
     """Kapselt die Daten eines abgeschlossenen Trades"""
-    buy_time: int = Field(..., description="Zeitpunkt des Kaufs in Millisekunden")
-    buy_price: float = Field(..., description="Kaufpreis des Futures")
-    sell_time: int = Field(..., description="Zeitpunkt des Kaufs in Millisekunden")
-    sell_price: float = Field(..., description="Kaufpreis des Futures")
-    volume: int = Field(..., description="Kumuliertes Gesamtvolumen des Balkens")
+
+    buy_time: int
+    buy_price: float
+    sell_time: int
+    sell_price: float
+    volume: int
+
+
+class Statistics(pydantic.BaseModel):
+    """Statistic data of a trading day"""
+
+    total_profit: float
+    number_of_trades: int
+    win_rate: float
+    profit_factor: float
+    max_profit: float
+    min_profit: float
+
 
 # =====================================================================
 # 2. PROTOKOLLE (Schnittstellen für das Observer-Pattern)
@@ -51,6 +65,10 @@ class BarListener(Protocol):
     """Schnittstelle für Observer, die auf fertige Volumenbalken reagieren."""
     def on_new_bar(self, bar: VolumeBar) -> None:
         """Wird aufgerufen, sobald ein neuer Volumenbalken fertiggestellt wurde."""
+        ...
+
+    def on_end_of_day() -> None:
+        """Wird aufgerufen, wenn der Handelstag zu ende ist"""
         ...
 
 
@@ -64,12 +82,15 @@ class TickListener(Protocol):
         """Wird aufgerufen, wenn der Datenstrom beendet ist (z.B. Dateiende oder Session-Ende)."""
         ...
 
-class TradeListener(Protocol):
+class TraderListener(Protocol):
     """Schnittstelle für Trade Listener"""
     def on_trade_closed(self, trade: Trade) -> None:
         """Wird bei einem abgeschlossenen Trade aufgerufen"""
         ...
 
+class TradeStatisticsListener(Protocol):
+    def on_day_closed(self, statistics: Statistics):
+        ...
 
 # =====================================================================
 # 3. TICK PROVIDER (Publisher für den Datenstrom)
@@ -325,7 +346,20 @@ class TradeStatistics:
         }
         self.trades: pd.DataFrame = pd.DataFrame(columns=self.trades_schema.keys())
         self.trades = self.trades.astype(self.trades_schema)
+        self._listeners: List[TradeStatisticsListener] = []
 
+    def add_listener(self, listener: TradeStatisticsListener):
+        if listener not in self._listeners:
+            self._listeners.append(listener)
+
+    def remove_listener(self, listener: TradeStatisticsListener):
+        if listener in self._listeners:
+            self._listeners.remove(listener)
+
+    def _notify_day_closed(self, stats: Statistics):
+        for listener in self._listeners:
+            listener.on_day_closed(stats)
+    
     def on_trade_closed(self, closed_trade: Trade) -> None:
         trade = {
             'buy_time': closed_trade.buy_time,
@@ -338,6 +372,9 @@ class TradeStatistics:
         }
         new_frame = pd.DataFrame([trade], columns=self.trades_schema.keys()).astype(self.trades_schema)
         self.trades = pd.concat([self.trades, new_frame], ignore_index=True)
+
+    def on_day_closed(self):
+        self._notify_day_closed(self.get_statistics())
 
     @property
     def _win_trades(self):
@@ -383,16 +420,15 @@ class TradeStatistics:
         loss_profit = -self.loss_profit
         return self.win_profit / loss_profit if loss_profit != 0.0 else 0.0 
 
-    def get_statistics(self):
-        stats = {
-            'total_profit': self.total_profit,
-            'number_of_trades': self.number_of_trades,
-            'win_rate': self.win_rate,
-            'profit_factor': self.profit_factor,
-            'max_profit': self.max_profit,
-            'min_profit': self.min_profit
-        }
-        return stats
+    def get_statistics(self) -> Statistics:
+        return Statistics(
+            total_profit = self.total_profit,
+            number_of_trades = self.number_of_trades,
+            win_rate = self.win_rate,
+            profit_factor = self.profit_factor,
+            max_profit = self.max_profit,
+            min_profit = self.min_profit
+        )
 
     def to_csv(filename: str) -> None:
         pass
@@ -416,23 +452,24 @@ class KentBeckTrader:
         }
         self.analytics_data: pd.DataFrame = pd.DataFrame(columns=self.analytics_schema.keys())
         self.analytics_data = self.analytics_data.astype(self.analytics_schema)
-        self._trade_listeners: List[TradeListener] = []
+        self._listeners: List[TradeListener] = []
 
 
-    def add_trade_listener(self, listener: TradeListener):
-        """Registriert einen Trader/Bot für die fertigen Balken."""
-        if listener not in self._trade_listeners:
-            self._trade_listeners.append(listener)
+    def add_listener(self, listener: TraderListener):
+        if listener not in self._listeners:
+            self._listeners.append(listener)
 
-    def remove_trade_listener(self, listener: TradeListener):
-        """Entfernt einen registrierten Bar-Listener."""
-        if listener in self._trade_listeners:
-            self._trade_listeners.remove(listener)
+    def remove_listener(self, listener: TraderListener):
+        if listener in self._listeners:
+            self._listeners.remove(listener)
 
-    def _notify_trade_listeners(self, trade: Trade):
-        for listener in self._trade_listeners:
+    def _notify_trade_closed(self, trade: Trade):
+        for listener in self._listeners:
             listener.on_trade_closed(trade)
 
+    def _notify_day_closed(self):
+        for listener in self._listeners:
+            listener.on_day_closed()
 
     def analyse(self, bar: VolumeBar) -> Dict:
         analytics = {}
@@ -518,14 +555,19 @@ class KentBeckTrader:
     def _close_current_trade(self):
         self._current_trade['volume'] = 1
         trade = Trade.model_validate(self._current_trade)
-        self._notify_trade_listeners(trade)
+        self._notify_trade_closed(trade)
         self._current_trade = {}
 
 
-    def on_new_bar(self, bar: VolumeBar):
+    def on_new_bar(self, bar: VolumeBar) -> None:
         analytics = self.analyse(bar)
         self.analytics_data = pd.concat([self.analytics_data, pd.DataFrame([analytics])], ignore_index=True)
         self.trade(analytics, bar)
+
+    def on_end_of_day(self) -> None:
+        self._stat = 'flat'
+        self._current_trade = {}
+        self._notify_day_closed()
 
 
 class BarLoader:
@@ -546,14 +588,16 @@ class BarLoader:
         if listener in self._bar_listeners:
             self._bar_listeners.remove(listener)
 
-    def _notify_bar_listeners(self, bar: VolumeBar):
+    def _notify_new_bar(self, bar: VolumeBar):
         for listener in self._bar_listeners:
             listener.on_new_bar(bar)
 
+    def _notify_end_of_day(self):
+        for listener in self._bar_listeners:
+            listener.on_end_of_day()
+
     def load_and_stream(self, csv_path):
-        """Öffnet die CSV-Datei und streamt sie Zeile für Zeile an die Listener."""
-        print(f"Öffne Datei: {csv_path} und starte Streaming...")
-        
+        """Öffnet die CSV-Datei und streamt sie Zeile für Zeile an die Listener."""        
         with open(csv_path, mode='r', newline='') as file:
             reader = csv.DictReader(file)
             for row in reader:
@@ -567,7 +611,8 @@ class BarLoader:
                     average=float(row['Average']),
                     volume=int(row['Volume'])
                 )
-                self._notify_bar_listeners(bar)
+                self._notify_new_bar(bar)
+            self._notify_end_of_day()
 
 
 if __name__ == "__main__":
@@ -581,10 +626,10 @@ if __name__ == "__main__":
     # Setup
     trade_statistics = TradeStatistics()
     trader = KentBeckTrader(filter_constant=0.5)
-    trader.add_trade_listener(trade_statistics)
+    trader.add_listener(trade_statistics)
     loader = BarLoader()
     loader.add_bar_listener(trader)     # Trader reagiert auf fertige Balken
     loader.load_and_stream(args.filename)
 
     stats = trade_statistics.get_statistics()
-    print(f"Trades: {stats['number_of_trades']}, total profit: {stats['total_profit']:.2f}, win_rate: {stats['win_rate']*100:.2f}%, profit factor: {stats['profit_factor']:.2f}, max win: {stats['max_profit']:.2f}, max loss: {stats['min_profit']:.2f}")
+    print(f"Trades: {stats.number_of_trades}, total profit: {stats.total_profit}, win_rate: {stats.win_rate*100:.2f}%, profit factor: {stats.profit_factor:.2f}, max win: {stats.max_profit:.2f}, max loss: {stats.min_profit:.2f}")
