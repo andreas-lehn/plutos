@@ -641,13 +641,14 @@ if __name__ == "__main__":
     parser.add_argument("--filename", help="CSV with volume bars")
     args = parser.parse_args()
 
-
+    collector = StatisticsCollector()
     trade_statistics = TradeStatistics()
+    trade_statistics.add_listener(collector)
     trader = KentBeckTrader(filter_constant=0.5)
     trader.add_listener(trade_statistics)
     loader = BarLoader()
     loader.add_bar_listener(trader)     # Trader reagiert auf fertige Balken
     loader.load_and_stream(args.filename)
 
-    stats = trade_statistics.get_statistics()
-    print(f"Trades: {stats.number_of_trades}, total profit: {stats.total_profit}, win_rate: {stats.win_rate*100:.2f}%, profit factor: {stats.profit_factor:.2f}, max win: {stats.max_profit:.2f}, max loss: {stats.min_profit:.2f}")
+    print(collector.data_frame)
+    
