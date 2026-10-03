@@ -458,7 +458,7 @@ class TradeStatistics:
 class KentBeckTrader:
     """ Der einfachste aller Trader, der möglicherweise Gewinn machen könnte """
 
-    def __init__(self, filter_constant: float = 0.5, slope_threshold: float = 0.1):
+    def __init__(self, filter_constant: float = 0.5, slope_threshold: float = 0.001):
         self._filter_constant: float = filter_constant
         self._slope_threshold: float = slope_threshold
         self._state = 'flat'

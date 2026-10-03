@@ -18,7 +18,7 @@ def simulate(filename: str, filter_constant: float = 0.5, slope_thershold: float
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Trader simulation.")
     parser.add_argument("-f", "--filter", type=float, default=0.5, help="PT1 filter constant")
-    parser.add_argument("-s", "--slope-threshold",type=float,default=0.1, help="threshold for slope direction change evaluation") 
+    parser.add_argument("-s", "--slope-threshold",type=float,default=0.001, help="threshold for slope") 
     parser.add_argument("files", nargs="+", help="list of CSV file with bars to be simulated")
     args = parser.parse_args()
 
