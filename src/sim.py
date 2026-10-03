@@ -30,7 +30,7 @@ def simulate(filename: str, filter_constant: float = 0.5, slope_thershold: float
     trader = marketdata.KentBeckTrader(filter_constant=0.5)
     trader.add_listener(trade_statistics)
     loader = marketdata.BarLoader()
-    loader.add_bar_listener(trader)     # Trader reagiert auf fertige Balken
+    loader.add_bar_listener(trader)
     loader.load_and_stream(filename)
 
 
@@ -49,14 +49,5 @@ if __name__ == "__main__":
         simulate(file, filter_constant = args.filter, slope_thershold = args.slope_threshold, statistics_listener = statistics)
         print('done.')
 
-    data_frame = statistics.data_frame
-    styled_data_frame = data_frame.style.format({
-            "total_profit": "{:.2f}",
-            "max_profit": "{:.2f}",
-            "min_profit": "{:.2f}",
-            "win_rate": "{:.1%}",  # Macht aus 0.556 automatisch 55.6%
-            "profit_factor": "{:.2f}",  # Einfach sauber auf 2 Stellen gerundet
-        }
-    )
-    print(data_frame)
+    print(statistics.data_frame)
     
