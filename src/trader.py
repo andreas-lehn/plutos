@@ -167,23 +167,14 @@ class TradeStatistics:
         pass
 
 
+class Trader:
+    """ Base trader that handle buy and sell decision but does no detection of them """
 
-# Ein einfacher Beispiel-Trader
-class KentBeckTrader:
-    """ Der einfachste aller Trader, der möglicherweise Gewinn machen könnte """
-
-    def __init__(self, filter_constant: float = 0.5, slope_threshold: float = 0.001):
-        self._filter_constant: float = filter_constant
-        self._slope_threshold: float = slope_threshold
+    def __init__(self):
         self._state: str = 'flat'
-        self._average: float = 0.0
-        self._slope: float = 0.0
-        self._old_slope: float = 0.0
         self._stop_loss: float = 0.0
         self._current_trade = {}
-
         self._listeners: List[TraderListener] = []
-
 
     def add_listener(self, listener: TraderListener):
         if listener not in self._listeners:
@@ -201,27 +192,6 @@ class KentBeckTrader:
         for listener in self._listeners:
             listener.on_day_closed()
 
-
-    def analyse(self, bar: VolumeBar) -> str:
-        """
-        analysis the current volume bar and decides what to
-        
-        returns "none", "buy", "sell"
-        """
-
-        current_slope = (bar.average - self._average) * self._filter_constant
-        self._average += current_slope
-        self._slope += (current_slope - self._slope) * self._filter_constant
-        decision = 'none'
-        if (abs(self._slope) > self._slope_threshold):
-            if (self._slope * self._old_slope) < 0.0:
-                if self._slope > 0.0:
-                    decision = 'buy'
-                if self._slope < 0.0:
-                    decision = 'sell'
-            self._old_slope = self._slope
-
-        return decision
 
     def trade(self, decision: str, bar: VolumeBar):
         """
@@ -285,15 +255,58 @@ class KentBeckTrader:
         self._current_trade = {}
 
 
-    def on_new_bar(self, bar: VolumeBar) -> None:
-        decision = self.analyse(bar)
-        self.trade(decision, bar)
-
-
     def on_end_of_day(self) -> None:
         self._stat = 'flat'
         self._current_trade = {}
         self._notify_day_closed()
+
+
+
+class KentBeckTrader(Trader):
+    """
+    Der einfachste aller Trader, der möglicherweise Gewinn machen könnte
+    
+    Er versucht über die Veränderung des gewichteten Durchschnitt von Kerzen ein Trendumkehr zu erkennen.
+    Daraus erzeugt er dann Kauf/Verkauf/Haltesignal.
+    """
+
+    def __init__(self, filter_constant: float = 0.5, slope_threshold: float = 0.001):
+        super.__init__(self)
+        
+        self._filter_constant: float = filter_constant
+        self._slope_threshold: float = slope_threshold
+        self._state: str = 'flat'
+        self._average: float = 0.0
+        self._slope: float = 0.0
+        self._old_slope: float = 0.0
+
+
+    def analyse(self, bar: VolumeBar) -> str:
+        """
+        analysis the current volume bar and decides what to
+        
+        returns "none", "buy", "sell"
+        """
+
+        current_slope = (bar.average - self._average) * self._filter_constant
+        self._average += current_slope
+        self._slope += (current_slope - self._slope) * self._filter_constant
+        decision = 'none'
+        if (abs(self._slope) > self._slope_threshold):
+            if (self._slope * self._old_slope) < 0.0:
+                if self._slope > 0.0:
+                    decision = 'buy'
+                if self._slope < 0.0:
+                    decision = 'sell'
+            self._old_slope = self._slope
+
+        return decision
+
+
+    def on_new_bar(self, bar: VolumeBar) -> None:
+        decision = self.analyse(bar)
+        self.trade(decision, bar)
+
 
 
 if __name__ == "__main__":
