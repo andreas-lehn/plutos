@@ -79,7 +79,7 @@ def get_active_symbol(symbol, target_date):
     rollovers = {}
     for m in [3, 6, 9, 12]:
         third_friday = get_third_friday(year, m)
-        rollover_thursday = third_friday - timedelta(days=8)  # 8 Tage zurück, um den Donnerstag vor dem 3. Freitag zu erhalten
+        rollover_thursday = third_friday - timedelta(days=4)  # 4 Tage zurück, um den Montag vor dem 3. Freitag zu erhalten
         rollovers[m] = rollover_thursday
         
     # Bestimme, in welchem Quartalsfenster wir uns befinden
