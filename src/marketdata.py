@@ -36,27 +36,6 @@ class VolumeBar(pydantic.BaseModel):
     average: float
 
 
-class Trade(pydantic.BaseModel):
-    """Kapselt die Daten eines abgeschlossenen Trades"""
-
-    buy_time: int
-    buy_price: float
-    sell_time: int
-    sell_price: float
-    volume: int
-
-
-class Statistics(pydantic.BaseModel):
-    """Statistic data of a trading day"""
-
-    total_profit: float
-    number_of_trades: int
-    win_rate: float
-    profit_factor: float
-    max_profit: float
-    min_profit: float
-
-
 # =====================================================================
 # 2. PROTOKOLLE (Schnittstellen für das Observer-Pattern)
 # =====================================================================
@@ -67,7 +46,7 @@ class BarListener(Protocol):
         """Wird aufgerufen, sobald ein neuer Volumenbalken fertiggestellt wurde."""
         ...
 
-    def on_end_of_day() -> None:
+    def on_end_of_day(self) -> None:
         """Wird aufgerufen, wenn der Handelstag zu ende ist"""
         ...
 
@@ -81,36 +60,6 @@ class TickListener(Protocol):
     def on_ticks_completed(self) -> None:
         """Wird aufgerufen, wenn der Datenstrom beendet ist (z.B. Dateiende oder Session-Ende)."""
         ...
-
-class TraderListener(Protocol):
-    """Schnittstelle für Trade Listener"""
-    def on_trade_closed(self, trade: Trade) -> None:
-        """Wird bei einem abgeschlossenen Trade aufgerufen"""
-        ...
-
-class TradeStatisticsListener(Protocol):
-    def on_day_closed(self, statistics: Statistics):
-        ...
-
-pd.options.display.float_format = "{:.2f}".format
-
-class StatisticsCollector:
-    """collects the trade statistics of each simulated day"""
-
-    def __init__(self):
-        self._stats: List[marketdata.Statistics] = []
-        self._data_frame: pd.DataFrame = None
-
-    @property
-    def data_frame(self) -> pd.DataFrame:
-        if self._data_frame is None:
-            self._data_frame = pd.DataFrame([stats.model_dump() for stats in self._stats])
-        return self._data_frame
-
-    def on_day_closed(self, statistics):
-        self._stats.append(statistics)
-        self._data_frame = None
-
 
 # =====================================================================
 # 3. TICK PROVIDER (Publisher für den Datenstrom)
@@ -350,262 +299,18 @@ class VolumeBarBuilder:
 
 
 
-class TradeStatistics:
-    """Collects trades as a trade listener and calculates statistics on these trades"""
-
-    def __init__(self, filter_constant: float = 0.5):
-
-        self.trades_schema = {
-            'buy_time': 'int',
-            'buy_price': 'float',
-            'sell_time': 'int',
-            'sell_price': 'float',
-            'volume': int,
-            'profit': 'float',
-            'duration': 'int'
-        }
-        self.trades: pd.DataFrame = pd.DataFrame(columns=self.trades_schema.keys())
-        self.trades = self.trades.astype(self.trades_schema)
-        self._listeners: List[TradeStatisticsListener] = []
-
-    def add_listener(self, listener: TradeStatisticsListener):
-        if listener not in self._listeners:
-            self._listeners.append(listener)
-
-    def remove_listener(self, listener: TradeStatisticsListener):
-        if listener in self._listeners:
-            self._listeners.remove(listener)
-
-    def _notify_day_closed(self, stats: Statistics):
-        for listener in self._listeners:
-            listener.on_day_closed(stats)
-    
-    def on_trade_closed(self, closed_trade: Trade) -> None:
-        trade = {
-            'buy_time': closed_trade.buy_time,
-            'buy_price': closed_trade.buy_price,
-            'sell_time': closed_trade.sell_time,
-            'sell_price': closed_trade.sell_price,
-            'volume': closed_trade.volume,
-            'profit': (closed_trade.sell_price - closed_trade.buy_price) * closed_trade.volume,
-            'duration': abs(closed_trade.buy_time - closed_trade.sell_time)
-        }
-        new_frame = pd.DataFrame([trade], columns=self.trades_schema.keys()).astype(self.trades_schema)
-        self.trades = pd.concat([self.trades, new_frame], ignore_index=True)
-
-    def on_day_closed(self):
-        self._notify_day_closed(self.get_statistics())
-
-    @property
-    def _win_trades(self):
-        return self.trades[self.trades["profit"] > 0.0]
-
-    @property
-    def _loss_trades(self):
-        return self.trades[self.trades['profit'] <= 0.0]
-
-    @property
-    def number_of_trades(self) -> int:
-        return len(self.trades)
-    
-    @property
-    def total_profit(self) -> float:
-        return self.trades['profit'].sum()
-
-    @property
-    def max_profit(self) -> float:
-        return self.trades['profit'].max()
-
-    @property
-    def min_profit(self) -> float:
-        return self.trades['profit'].min()
-
-    @property
-    def win_profit(self) -> float:
-        return self._win_trades['profit'].sum()
-    
-    @property
-    def loss_profit(self) -> float:
-        return self._loss_trades['profit'].sum()
-    
-    @property
-    def win_rate(self) -> float:
-        n_wins = len(self._win_trades)
-        n_loss = len(self._loss_trades)
-        n_total = n_wins + n_loss
-        return (n_wins / n_total) if n_total > 0 else 0.0
-
-    @property
-    def profit_factor(self) -> float:
-        loss_profit = -self.loss_profit
-        return self.win_profit / loss_profit if loss_profit != 0.0 else 0.0 
-
-    def get_statistics(self) -> Statistics:
-        return Statistics(
-            total_profit = self.total_profit,
-            number_of_trades = self.number_of_trades,
-            win_rate = self.win_rate,
-            profit_factor = self.profit_factor,
-            max_profit = self.max_profit,
-            min_profit = self.min_profit
-        )
-
-    def to_csv(filename: str) -> None:
-        pass
-
-
-# Ein einfacher Beispiel-Trader
-class KentBeckTrader:
-    """ Der einfachste aller Trader, der möglicherweise Gewinn machen könnte """
-
-    def __init__(self, filter_constant: float = 0.5, slope_threshold: float = 0.001):
-        self._filter_constant: float = filter_constant
-        self._slope_threshold: float = slope_threshold
-        self._state = 'flat'
-        self._stop_loss: float = 0.0
-        self._current_trade = {}
-        self._old_slope: float = 0.0
-
-        self.analytics_schema = {
-            'time': 'int',
-            'average': 'float',
-            'slope': 'float',
-            'decision': 'str',
-        }
-        self.analytics_data: pd.DataFrame = pd.DataFrame(columns=self.analytics_schema.keys())
-        self.analytics_data = self.analytics_data.astype(self.analytics_schema)
-        self._listeners: List[TraderListener] = []
-
-
-    def add_listener(self, listener: TraderListener):
-        if listener not in self._listeners:
-            self._listeners.append(listener)
-
-    def remove_listener(self, listener: TraderListener):
-        if listener in self._listeners:
-            self._listeners.remove(listener)
-
-    def _notify_trade_closed(self, trade: Trade):
-        for listener in self._listeners:
-            listener.on_trade_closed(trade)
-
-    def _notify_day_closed(self):
-        for listener in self._listeners:
-            listener.on_day_closed()
-
-    def analyse(self, bar: VolumeBar) -> Dict:
-        analytics = {}
-        if self.analytics_data.empty:
-            analytics = {
-                'time': bar.start_time,
-                'average': bar.average,
-                'slope': 0.0,
-                'decision': 'none' 
-            }
-        else:
-            last = self.analytics_data.iloc[-1]
-            current_slope = (bar.average - last['average']) * self._filter_constant
-            average = last['average'] + current_slope
-            new_slope = last['slope'] + (current_slope - last['slope']) * self._filter_constant
-            decision = 'none'
-            if (abs(new_slope) > self._slope_threshold):
-                if (new_slope * self._old_slope) < 0.0:
-                    if new_slope > 0.0:
-                        decision = 'buy'
-                    if new_slope < 0.0:
-                        decision = 'sell'
-                self._old_slope = new_slope
-            
-            analytics = {
-                'time': bar.start_time,
-                'average': average,
-                'slope': new_slope,
-                'decision': decision,
-            }
-        return analytics
-
-    def trade(self, analytics: Dict, bar: VolumeBar):
-        # now we have the analytics, we can make a trade decision based on the slope and the current state
-        if self._state == 'flat':
-            # we are flat, so we can enter a trade if the decision is buy or sell
-            if analytics['decision'] == 'buy':
-                self._state = 'buy' # we place a buy order
-                self._stop_loss = bar.low
-            if analytics['decision'] == 'sell':
-                self._state = 'sell' # we place a sell order
-                self._stop_loss = bar.high
-
-        if self._state == 'buy':
-            # we are in a buy position
-            # we assume, that our order was fulfilled one tick over the opening price
-            self._current_trade['buy_time'] = bar.start_time
-            self._current_trade['buy_price'] = bar.open + 0.25
-            self._stop_loss = bar.low
-            self._state = 'long'
-
-        if self._state == 'long':
-            # we are long. so we have to check, if we ran into our stop loss
-            # print(f".   stop_loss: {self._stop_loss} | low: {bar.low}")
-            if self._stop_loss > bar.low:
-                # we assume, that we were stopped out one tick below our stop loss
-                self._current_trade['sell_price'] = self._stop_loss - 0.25
-                self._current_trade['sell_time'] = bar.start_time
-                self._state = 'flat'
-                self._close_current_trade()
-            else:
-                # we are still going, so adapt stop loss...
-                self._stop_loss = bar.low
-
-        if self._state == 'sell':
-            # we place a sell order and assume that we could sell is one tick less than the opening price
-            self._current_trade['sell_time'] = bar.start_time
-            self._current_trade['sell_price'] = bar.open - 0.25
-            self._stop_loss = bar.high
-            self._state = 'short'
-
-        if self._state == 'short':
-            # we are short, so we have to check, if we ran into out stop loss
-            if self._stop_loss < bar.high:
-                # we assume that we were stopped out one tick over our stop loss
-                self._current_trade['buy_time'] = bar.start_time
-                self._current_trade['buy_price'] = self._stop_loss + 0.25
-                self._state = 'flat'
-                self._close_current_trade()
-            else:
-                # trade is still active. we adjust stop loss...
-                self._stop_loss = bar.high
-
-
-    def _close_current_trade(self):
-        self._current_trade['volume'] = 1
-        trade = Trade.model_validate(self._current_trade)
-        self._notify_trade_closed(trade)
-        self._current_trade = {}
-
-
-    def on_new_bar(self, bar: VolumeBar) -> None:
-        analytics = self.analyse(bar)
-        self.analytics_data = pd.concat([self.analytics_data, pd.DataFrame([analytics])], ignore_index=True)
-        self.trade(analytics, bar)
-
-    def on_end_of_day(self) -> None:
-        self._stat = 'flat'
-        self._current_trade = {}
-        self._notify_day_closed()
-
-
 class BarLoader:
     """Liest die CSV-Datei chronologisch ein und verteilt die Zeilen als Events."""
 
     def __init__(self):
         self._listeners = []
 
-    def add_bar_listener(self, listener: BarListener):
+    def add_listener(self, listener: BarListener):
         """Registriert einen Trader/Bot für die fertigen Balken."""
         if listener not in self._listeners:
             self._listeners.append(listener)
 
-    def remove_bar_listener(self, listener: BarListener):
+    def remove_listener(self, listener: BarListener):
         """Entfernt einen registrierten Bar-Listener."""
         if listener in self._listeners:
             self._listeners.remove(listener)
@@ -636,22 +341,31 @@ class BarLoader:
                 self._notify_new_bar(bar)
             self._notify_end_of_day()
 
+class BarListener:
+    """recieves bars and stores them"""
+
+    def __init__(self):
+        self._bars: List[VolumeBar] = []
+        self.data_frame = None
+
+    def on_new_bar(self, bar: VolumeBar) -> None:
+        self._bars.append(bar)
+        self.data_frame = None
+
+    def on_end_of_day(self) -> None:
+        self.data_frame = pd.DataFrame([bar.model_dump() for bar in self._bars])
+
 
 if __name__ == "__main__":
-    # --- CLI-ARGUMENTE ---
     import argparse
 
     parser = argparse.ArgumentParser(description="Trade simulator: Lädt Volumenbalken aus einer CSV-Datei und simuliert Echtzeit-Events.")
-    parser.add_argument("--filename", help="CSV with volume bars")
+    parser.add_argument("-b", "--bars", help="CSV with volume bars")
     args = parser.parse_args()
 
-    collector = StatisticsCollector()
-    trade_statistics = TradeStatistics()
-    trade_statistics.add_listener(collector)
-    trader = KentBeckTrader(filter_constant=0.5)
-    trader.add_listener(trade_statistics)
+    listener = BarListener()
     loader = BarLoader()
-    loader.add_bar_listener(trader)     # Trader reagiert auf fertige Balken
-    loader.load_and_stream(args.filename)
+    loader.add_listener(listener)
+    loader.load_and_stream(args.bars)
 
-    print(collector.data_frame)
+    print(listener.data_frame)
