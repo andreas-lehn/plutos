@@ -3,7 +3,7 @@ trader module
 enthalt alles was mit dem kaufen und verkaufen zu tun hat.
 """
 
-import csv
+import random
 import numpy as np
 import pandas as pd
 from pydantic import BaseModel
@@ -192,7 +192,6 @@ class Trader:
         for listener in self._listeners:
             listener.on_day_closed()
 
-
     def trade(self, decision: str, bar: VolumeBar):
         """
         trades based on the decision and current state
@@ -247,19 +246,20 @@ class Trader:
                 # trade is still active. we adjust stop loss...
                 self._stop_loss = bar.high
 
-
     def _close_current_trade(self):
         self._current_trade['volume'] = 1
         trade = Trade.model_validate(self._current_trade)
         self._notify_trade_closed(trade)
         self._current_trade = {}
 
-
     def on_end_of_day(self) -> None:
         self._stat = 'flat'
         self._current_trade = {}
         self._notify_day_closed()
 
+    def on_new_bar(self, bar: VolumeBar) -> None:
+        decision = self.decide(bar)
+        self.trade(decision, bar)
 
 
 class KentBeckTrader(Trader):
@@ -271,7 +271,7 @@ class KentBeckTrader(Trader):
     """
 
     def __init__(self, filter_constant: float = 0.5, slope_threshold: float = 0.001):
-        super.__init__(self)
+        super().__init__()
         
         self._filter_constant: float = filter_constant
         self._slope_threshold: float = slope_threshold
@@ -280,8 +280,7 @@ class KentBeckTrader(Trader):
         self._slope: float = 0.0
         self._old_slope: float = 0.0
 
-
-    def analyse(self, bar: VolumeBar) -> str:
+    def decide(self, bar: VolumeBar) -> str:
         """
         analysis the current volume bar and decides what to
         
@@ -299,28 +298,40 @@ class KentBeckTrader(Trader):
                 if self._slope < 0.0:
                     decision = 'sell'
             self._old_slope = self._slope
-
         return decision
 
 
-    def on_new_bar(self, bar: VolumeBar) -> None:
-        decision = self.analyse(bar)
-        self.trade(decision, bar)
+class RandomTrader(Trader):
+    """
+    Ein Trader, der eine Münze wirft, um zu entscheiden, ob gekauft oder verkauft wird.
+    """
 
+    def decide(self, bar: VolumeBar) -> str:
+        """ entscheidung würfeln """
+        decisions = ['buy', 'sell']
+        return random.choice(decisions)
 
 
 if __name__ == "__main__":
-    # --- CLI-ARGUMENTE ---
+    import sys
     import argparse
 
     parser = argparse.ArgumentParser(description="Trade simulator: Lädt Volumenbalken aus einer CSV-Datei und simuliert Echtzeit-Events.")
-    parser.add_argument("-f", "--filename", help="CSV with volume bars")
+    parser.add_argument("filename", help="CSV with volume bars")
+    parser.add_argument('-t', '--trader', default="kentbeck", help='selects a trader: ( random | kentbeck )')
     args = parser.parse_args()
+    trader_name = args.trader.lower()
 
     collector = StatisticsCollector()
     trade_statistics = TradeStatistics()
     trade_statistics.add_listener(collector)
-    trader = KentBeckTrader(filter_constant=0.5)
+    if trader_name == 'kentbeck':
+        trader = KentBeckTrader()
+    elif trader_name == 'random':
+        trader = RandomTrader()
+    else:
+        print("{parser.prog}: error: unknoen trader '{args.trader}'")
+        sys.exit(1)
     trader.add_listener(trade_statistics)
     loader = BarLoader()
     loader.add_listener(trader)     # Trader reagiert auf fertige Balken
