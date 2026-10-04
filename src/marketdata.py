@@ -26,14 +26,13 @@ class Tick(pydantic.BaseModel):
 class VolumeBar(pydantic.BaseModel):
     """Kapselt die Daten eines fertigen Volumenbalkens"""
 
-    start_time: int
-    end_time: int
+    timestamp: int
     open: float
-    high: float
     low: float
+    average: float
+    high: float
     close: float
     volume: int
-    average: float
 
 
 # =====================================================================
@@ -329,14 +328,13 @@ class BarLoader:
             reader = csv.DictReader(file)
             for row in reader:
                 bar = VolumeBar(
-                    start_time=int(row['Timestamp']),
-                    end_time=int(row['Timestamp']),
-                    open=float(row['Open']),
-                    high=float(row['High']),
-                    low=float(row['Low']),
-                    close=float(row['Close']),
-                    average=float(row['Average']),
-                    volume=int(row['Volume'])
+                    timestamp=int(row['timestamp']),
+                    open=float(row['open']),
+                    low=float(row['low']),
+                    average=float(row['average']),
+                    high=float(row['high']),
+                    close=float(row['close']),
+                    volume=int(row['volume'])
                 )
                 self._notify_new_bar(bar)
             self._notify_end_of_day()

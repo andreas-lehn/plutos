@@ -209,7 +209,7 @@ class Trader:
         if self._state == 'buy':
             # we are in a buy position
             # we assume, that our order was fulfilled one tick over the opening price
-            self._current_trade['buy_time'] = bar.start_time
+            self._current_trade['buy_time'] = bar.timestamp
             self._current_trade['buy_price'] = bar.open + 0.25
             self._stop_loss = bar.low
             self._state = 'long'
@@ -220,7 +220,7 @@ class Trader:
             if self._stop_loss > bar.low:
                 # we assume, that we were stopped out one tick below our stop loss
                 self._current_trade['sell_price'] = self._stop_loss - 0.25
-                self._current_trade['sell_time'] = bar.start_time
+                self._current_trade['sell_time'] = bar.timestamp
                 self._state = 'flat'
                 self._close_current_trade()
             else:
@@ -229,7 +229,7 @@ class Trader:
 
         if self._state == 'sell':
             # we place a sell order and assume that we could sell is one tick less than the opening price
-            self._current_trade['sell_time'] = bar.start_time
+            self._current_trade['sell_time'] = bar.timestamp
             self._current_trade['sell_price'] = bar.open - 0.25
             self._stop_loss = bar.high
             self._state = 'short'
@@ -238,7 +238,7 @@ class Trader:
             # we are short, so we have to check, if we ran into out stop loss
             if self._stop_loss < bar.high:
                 # we assume that we were stopped out one tick over our stop loss
-                self._current_trade['buy_time'] = bar.start_time
+                self._current_trade['buy_time'] = bar.timestamp
                 self._current_trade['buy_price'] = self._stop_loss + 0.25
                 self._state = 'flat'
                 self._close_current_trade()
