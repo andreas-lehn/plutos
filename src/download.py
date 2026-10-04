@@ -1,7 +1,6 @@
 import os
 import yfinance as yf
 import databento as db
-import pandas as pd
 from tradovate import get_active_symbol
 from datetime import datetime, timedelta
 
@@ -76,9 +75,12 @@ def yahoo_download(prog_name, base_symbol, target_date, target_dir):
     print(f"{prog_name}: {len(clean_data)} lines written to {filename}")
 
 
+def day_range(days: int) -> range:
+    return range(days + 1, 1) if (days < 0) else range(0, days)
+
+
 if __name__ == "__main__":
     import argparse
-    import sys
 
     parser = argparse.ArgumentParser(description="Automatisierter Downloader für historische 1-Minuten-Futures-Kerzen von Yahoo Finance")
     parser.add_argument("date", type=str, help="Das gewünschte Datum im Format YYYY-MM-DD (z.B. 2026-10-01) [Pflichtfeld]")
@@ -94,16 +96,17 @@ if __name__ == "__main__":
     days = args.days
     provider = args.provider.lower()
 
-    print("params:", base_symbol, date_str, target_dir, days, provider)
-
     try:
         target_date = datetime.strptime(date_str, "%Y-%m-%d")
-        if provider == "yahoo":
-            yahoo_download(parser.prog, base_symbol, target_date, target_dir)
-        elif provider == "databento":
-            databento_download(parser.prog, base_symbol, target_date, target_dir)
-        else:
-            print(f'{parser.prog}: error: unknown provider "{provider}"')
+
+        for offset in day_range(days):
+            download_date = target_date + timedelta(days=offset)
+            if provider == "yahoo":
+                yahoo_download(parser.prog, base_symbol, download_date, target_dir)
+            elif provider == "databento":
+                databento_download(parser.prog, base_symbol, download_date, target_dir)
+            else:
+                print(f'{parser.prog}: error: unknown provider "{provider}"')
     except ValueError:
         print(f"{parser.prog}: error: wrong date (format YYYY-MM-DD e.g., 2026-10-01)")
     except Exception as e:
