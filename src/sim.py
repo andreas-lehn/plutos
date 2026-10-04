@@ -1,17 +1,18 @@
 import argparse
 import os
-import marketdata
-import pandas as pd
+from marketdata import BarLoader
+from trader import TradeStatistics, KentBeckTrader, StatisticsCollector
+#import pandas as pd
 from typing import List, Dict, Iterator, Tuple, Protocol
 from pandas.io.formats.format import DataFrameFormatter
 
 def simulate(filename: str, filter_constant: float = 0.5, slope_thershold: float = 0.1, statistics_listener: marketdata.TradeStatisticsListener = None):
-    trade_statistics = marketdata.TradeStatistics()
+    trade_statistics = TradeStatistics()
     trade_statistics.add_listener(statistics_listener)
-    trader = marketdata.KentBeckTrader(filter_constant, slope_thershold)
+    trader = KentBeckTrader(filter_constant, slope_thershold)
     trader.add_listener(trade_statistics)
-    loader = marketdata.BarLoader()
-    loader.add_bar_listener(trader)
+    loader = BarLoader()
+    loader.add_listener(trader)
     loader.load_and_stream(filename)
 
 
@@ -22,7 +23,7 @@ if __name__ == "__main__":
     parser.add_argument("files", nargs="+", help="list of CSV file with bars to be simulated")
     args = parser.parse_args()
 
-    collector = marketdata.StatisticsCollector()
+    collector = StatisticsCollector()
 
     args.files.sort()
     for file in args.files:
@@ -45,7 +46,6 @@ if __name__ == "__main__":
     strcols = formatter.get_strcols()
     w = [max(len(zeile) for zeile in spalte) for spalte in strcols]
     w_total = sum(w) + (len(w) - 1)
-    #print("-" * w_total)
     text = (f' ', f'{total:.2f}', f'{trades}', f'{win_rate:.2f}', f'{profit_factor:.2f}', f'{max_win:.2f}', f'{max_loss:.2f}')
     for t, w in zip(text, w):
         print(f'{t:>{w}} ', end='')
