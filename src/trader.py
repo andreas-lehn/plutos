@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 from pydantic import BaseModel
 from typing import List, Dict, Iterator, Tuple, Protocol
-from marketdata import BarLoader
+from marketdata import BarLoader, VolumeBar
 
 class Trade(BaseModel):
     """Kapselt die Daten eines abgeschlossenen Trades"""
@@ -167,6 +167,7 @@ class TradeStatistics:
         pass
 
 
+
 # Ein einfacher Beispiel-Trader
 class KentBeckTrader:
     """ Der einfachste aller Trader, der möglicherweise Gewinn machen könnte """
@@ -174,19 +175,13 @@ class KentBeckTrader:
     def __init__(self, filter_constant: float = 0.5, slope_threshold: float = 0.001):
         self._filter_constant: float = filter_constant
         self._slope_threshold: float = slope_threshold
-        self._state = 'flat'
+        self._state: str = 'flat'
+        self._average: float = 0.0
+        self._slope: float = 0.0
+        self._old_slope: float = 0.0
         self._stop_loss: float = 0.0
         self._current_trade = {}
-        self._old_slope: float = 0.0
 
-        self.analytics_schema = {
-            'time': 'int',
-            'average': 'float',
-            'slope': 'float',
-            'decision': 'str',
-        }
-        self.analytics_data: pd.DataFrame = pd.DataFrame(columns=self.analytics_schema.keys())
-        self.analytics_data = self.analytics_data.astype(self.analytics_schema)
         self._listeners: List[TraderListener] = []
 
 
@@ -206,45 +201,39 @@ class KentBeckTrader:
         for listener in self._listeners:
             listener.on_day_closed()
 
-    def analyse(self, bar: VolumeBar) -> Dict:
-        analytics = {}
-        if self.analytics_data.empty:
-            analytics = {
-                'time': bar.start_time,
-                'average': bar.average,
-                'slope': 0.0,
-                'decision': 'none' 
-            }
-        else:
-            last = self.analytics_data.iloc[-1]
-            current_slope = (bar.average - last['average']) * self._filter_constant
-            average = last['average'] + current_slope
-            new_slope = last['slope'] + (current_slope - last['slope']) * self._filter_constant
-            decision = 'none'
-            if (abs(new_slope) > self._slope_threshold):
-                if (new_slope * self._old_slope) < 0.0:
-                    if new_slope > 0.0:
-                        decision = 'buy'
-                    if new_slope < 0.0:
-                        decision = 'sell'
-                self._old_slope = new_slope
-            
-            analytics = {
-                'time': bar.start_time,
-                'average': average,
-                'slope': new_slope,
-                'decision': decision,
-            }
-        return analytics
 
-    def trade(self, analytics: Dict, bar: VolumeBar):
-        # now we have the analytics, we can make a trade decision based on the slope and the current state
+    def analyse(self, bar: VolumeBar) -> str:
+        """
+        analysis the current volume bar and decides what to
+        
+        returns "none", "buy", "sell"
+        """
+
+        current_slope = (bar.average - self._average) * self._filter_constant
+        self._average += current_slope
+        self._slope += (current_slope - self._slope) * self._filter_constant
+        decision = 'none'
+        if (abs(self._slope) > self._slope_threshold):
+            if (self._slope * self._old_slope) < 0.0:
+                if self._slope > 0.0:
+                    decision = 'buy'
+                if self._slope < 0.0:
+                    decision = 'sell'
+            self._old_slope = self._slope
+
+        return decision
+
+    def trade(self, decision: str, bar: VolumeBar):
+        """
+        trades based on the decision and current state
+        """
+
         if self._state == 'flat':
             # we are flat, so we can enter a trade if the decision is buy or sell
-            if analytics['decision'] == 'buy':
+            if decision == 'buy':
                 self._state = 'buy' # we place a buy order
                 self._stop_loss = bar.low
-            if analytics['decision'] == 'sell':
+            if decision == 'sell':
                 self._state = 'sell' # we place a sell order
                 self._stop_loss = bar.high
 
@@ -297,14 +286,15 @@ class KentBeckTrader:
 
 
     def on_new_bar(self, bar: VolumeBar) -> None:
-        analytics = self.analyse(bar)
-        self.analytics_data = pd.concat([self.analytics_data, pd.DataFrame([analytics])], ignore_index=True)
-        self.trade(analytics, bar)
+        decision = self.analyse(bar)
+        self.trade(decision, bar)
+
 
     def on_end_of_day(self) -> None:
         self._stat = 'flat'
         self._current_trade = {}
         self._notify_day_closed()
+
 
 if __name__ == "__main__":
     # --- CLI-ARGUMENTE ---
