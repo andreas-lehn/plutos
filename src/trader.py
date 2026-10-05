@@ -24,7 +24,7 @@ class Statistics(BaseModel):
     """Statistic data of a trading day"""
 
     total_profit: float
-    number_of_trades: int
+    trades: int
     win_rate: float
     profit_factor: float
     max_profit: float
@@ -156,7 +156,7 @@ class TradeStatistics:
     def get_statistics(self) -> Statistics:
         return Statistics(
             total_profit = self.total_profit,
-            number_of_trades = self.number_of_trades,
+            trades = self.number_of_trades,
             win_rate = self.win_rate,
             profit_factor = self.profit_factor,
             max_profit = self.max_profit,

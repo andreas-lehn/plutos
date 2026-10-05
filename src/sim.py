@@ -36,7 +36,7 @@ if __name__ == "__main__":
     print(df)
 
     total = df["total_profit"].sum()
-    trades = df["number_of_trades"].sum()
+    trades = df["trades"].sum()
     win_rate = df["win_rate"].mean() 
     profit_factor = df["profit_factor"].mean()
     max_win = df["max_profit"].max()
