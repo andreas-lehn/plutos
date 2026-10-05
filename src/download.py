@@ -1,8 +1,10 @@
 import os
 import yfinance as yf
 import databento as db
+import pandas as pd
 from tradovate import get_active_symbol
 from datetime import datetime, timedelta
+from convertdate import databento_download_intervall
 
 
 def full_path_name(target_dir: str, file_name: str) -> str:
@@ -10,30 +12,30 @@ def full_path_name(target_dir: str, file_name: str) -> str:
 
 
 def databento_download(prog_name, base_symbol, target_date, target_dir):
-    date_str = target_date.strftime("%Y-%m-%d")
-    start_time = f"{date_str}T00:00:00"
-    end_time = (target_date + timedelta(days=1)).strftime("%Y-%m-%d") + "T00:00:00"
+    symbol = get_active_symbol(base_symbol, target_date)
+    date_str = target_date.date().isoformat()
+    download_intervall = databento_download_intervall(target_date)
 
     API_KEY = os.getenv("DATABENTO_API_KEY")
     if API_KEY is None:
         raise "DATABENTO_API_KEY not set!"
+    
     client = db.Historical(API_KEY)
-
-    symbol = get_active_symbol(base_symbol, target_date)
     data = client.timeseries.get_range(
         dataset="GLBX.MDP3",  # CME Globex Datensatz
         symbols=symbol,
         schema="trades",  # 'trades' lädt die reinen ausgeführten Ticks (vollständige Trades)
-        start=start_time,
-        end=end_time,
+        start=download_intervall[0].isoformat(),
+        end=download_intervall[1].isoformat(),
     )
-    print(f"{prog_name}: loading tick data of {symbol} for {date_str}...")
-    df = data.to_df()
+    print(f"{prog_name}: loading tick data of {symbol} for {download_intervall[0]} ... {download_intervall[1]}")
+    df = data.to_df(pretty_ts=False)
     if df.empty:
         print(f"{prog_name} warning: no tick data of {symbol} found for {date_str}")
         return
     
     filename = full_path_name(target_dir, f"{symbol}_{date_str}_ticks.csv")
+    df.index = pd.to_datetime(df.index, utc=True).astype('int64')
     df.to_csv(filename, index=True)
     print(f"{prog_name}: {len(df)} ticks written to {filename}")
 
