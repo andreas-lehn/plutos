@@ -1,38 +1,59 @@
-#!/bin/env python
-#
-# converts databento tick data to bars
-#
-
-import argparse
-import glob
 import os
 import pandas as pd
 
 
-def erzeuge_zeit_kerzen(csv_pfad, sekunden_pro_kerze):
-    if not os.path.exists(csv_pfad):
-        print(f"Fehler: Die Datei '{csv_pfad}' wurde nicht gefunden.")
-        return
+def build_volume_bar(df: pd.DataFrame, volume: int) -> pd.DataFrame:
+    """create bar with fixed volume"""
 
-    print(f"Lese Datei ein: {csv_pfad}...")
-    df = pd.read_csv(csv_pfad)
+    df["preis_mal_volumen"] = df["price"] * df["size"]
+    df["kumuliertes_volumen"] = df["size"].cumsum()
+    df["kerzen_id"] = df["kumuliertes_volumen"] // volume
 
-    # ISO8601-Format explizit angeben
-    df["ts_event"] = pd.to_datetime(df["ts_event"], format="ISO8601")
-
-    print(
-        f"Berechne Zeit-Kerzen mit einer Größe von {sekunden_pro_kerze} Sekunden..."
+    # OHLCV + Summe des gewichteten Preises aggregieren
+    volumen_kerzen = (
+        df.groupby("kerzen_id")
+        .agg(
+            ts_event=("ts_event", "first"),
+            open=("price", "first"),
+            high=("price", "max"),
+            low=("price", "min"),
+            close=("price", "last"),
+            volume=("size", "sum"),
+            summe_preis_volumen=("preis_mal_volumen", "sum"),
+        )
+        .reset_index(drop=True)
     )
+
+    volumen_kerzen["timestamp"] = volumen_kerzen['ts_event'] // 1_000_000
+    volumen_kerzen["average"] = volumen_kerzen["summe_preis_volumen"] / volumen_kerzen["volume"]
+    volumen_kerzen = volumen_kerzen.drop(columns=["summe_preis_volumen"])
+
+    # Spaltenreihenfolge für ein sauberes Format definieren
+    spalten_reihenfolge = [
+        "timestamp",
+        "open",
+        "low",
+        "average",
+        "high",
+        "close",
+        "volume"
+    ]
+    return volumen_kerzen[spalten_reihenfolge]
+
+
+def build_time_bar(df: pd.DataFrame, seconds: int) -> pd.DataFrame:
+    """create bar with fixed period of time"""
 
     # Hilfsspalte für den gewichteten Preis erstellen (für den VWAP)
     df["preis_mal_volumen"] = df["price"] * df["size"]
 
     # Für resample() muss der Zeitstempel der Index des DataFrames sein
-    df = df.set_index("ts_event")
+    df["timestamp_dt"] = pd.to_datetime(df["ts_event"], unit='ns')
+    df = df.set_index("timestamp_dt")
 
-    # Zeitbasiertes Resampling (OHLCV + Summen für VWAP)
+    # Zeitbasiertes Resampling
     # 's' steht für Sekunden. label='left' sorgt dafür, dass der Startzeitpunkt als Timestamp genutzt wird.
-    zeit_str = f"{sekunden_pro_kerze}s"
+    zeit_str = f"{seconds}s"
     zeit_kerzen = (
         df.resample(zeit_str, label="left")
         .agg(
@@ -49,21 +70,13 @@ def erzeuge_zeit_kerzen(csv_pfad, sekunden_pro_kerze):
         .reset_index()
     )  # dropna entfernt Zeitintervalle, in denen kein Trade stattfand
 
-    # Absolut zeitzonensichere Berechnung der Millisekunden seit 00:00 Uhr
-    zeiten = zeit_kerzen["ts_event"].dt
-    zeit_kerzen["timestamp"] = (
-        (zeiten.hour * 3600000)
-        + (zeiten.minute * 60000)
-        + (zeiten.second * 1000)
-        + (zeiten.microsecond // 1000)
-    ).astype("int64")
+    zeit_kerzen["timestamp"] = zeit_kerzen['timestamp_dt'].astype("int64") // 10**6
 
-    # Gesichteten Durchschnitt (VWAP) berechnen
-    zeit_kerzen["average"] = (
-        zeit_kerzen["summe_preis_volumen"] / zeit_kerzen["volume"]
-    )
+    # Gewichteten Durchschnitt (VWAP) berechnen
+    zeit_kerzen["average"] = (zeit_kerzen["summe_preis_volumen"] / zeit_kerzen["volume"])
 
     # Temporäre Spalten entfernen und finale Reihenfolge festlegen
+    zeit_kerzen = zeit_kerzen.drop(columns=['timestamp_dt', 'summe_preis_volumen'])
     spalten_reihenfolge = [
         "timestamp",
         "open",
@@ -73,57 +86,43 @@ def erzeuge_zeit_kerzen(csv_pfad, sekunden_pro_kerze):
         "close",
         "volume",
     ]
-    zeit_kerzen = zeit_kerzen[spalten_reihenfolge]
+    return zeit_kerzen[spalten_reihenfolge]
 
-    # Namenskonvention anwenden (_ticks.csv durch _sNNN.csv ersetzen)
-    if "_ticks.csv" in csv_pfad:
-        ausgabe_pfad = csv_pfad.replace(
-            "_ticks.csv", f"_s{sekunden_pro_kerze}.csv"
-        )
-    else:
-        basisname, _ = os.path.splitext(csv_pfad)
-        ausgabe_pfad = f"{basisname}_s{sekunden_pro_kerze}.csv"
 
-    # Datei speichern
-    zeit_kerzen.to_csv(ausgabe_pfad, index=False)
-    print(zeit_kerzen)
-    print(f"Erfolgreich fertiggestellt! Gespeichert unter: {ausgabe_pfad}\n")
+def build_tick_bar(df: pd.DataFrame, size: int) -> pd.DataFrame:
+    """create bar with a fixed number of trades"""
+    pass
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Erzeugt zeit-basierte Kerzen (OHLCV + VWAP) aus mehreren Databento CSV-Dateien."
-    )
+    import argparse
 
-    # Erlaubt die Übergabe von beliebig vielen Dateien direkt als Positionsargumente
-    parser.add_argument(
-        "files",
-        nargs="+",
-        help="Pfad(e) zu den Databento CSV-Dateien (Unterstützt Wildcards wie *_ticks.csv)",
-    )
-    parser.add_argument(
-        "-s",
-        "--seconds",
-        type=int,
-        required=True,
-        help="Gewünschte Sekunden pro Kerze (z.B. 5 oder 60)",
-    )
-
+    parser = argparse.ArgumentParser(description="create bar")
+    parser.add_argument("files", nargs="+", help="files with databento ticks")
+    parser.add_argument("-t", "--type", choices=['volume', 'time', 'tick'], required=True, help="type of bar")
+    parser.add_argument("-s", "--size", type=int, required=True, help="size of bar (volume, seconds, trades)")
+    parser.add_argument("-v", "--verbose", action="store_true", help="activate verbose mode")
     args = parser.parse_args()
 
-    # Alle übergebenen Argumente/Wildcards auflösen
-    aufgeloeste_dateien = []
-    for muster in args.files:
-        dateien = glob.glob(muster)
-        if dateien:
-            aufgeloeste_dateien.extend(dateien)
-        else:
-            aufgeloeste_dateien.append(muster)
+    for file in args.files:
+        if args.verbose:
+            print(f'{parser.prog}: converting file {file}')
+        
+        df = pd.read_csv(file)
+        if args.type == 'volume':
+            bars = build_volume_bar(df, args.size)
+            post_fix = 'v'
+        if args.type == 'time':
+            bars = build_time_bar(df, args.size)
+            post_fix = 's'
+        if args.type == 'tick':
+            bars = build_tick_bar(df, args.size)
+            post_fix = 't'
 
-    aufgeloeste_dateien = sorted(list(set(aufgeloeste_dateien)))
-
-    print(f"Es wurden {len(aufgeloeste_dateien)} Datei(en) gefunden.")
-
-    # Schleife über alle Dateien
-    for datei_pfad in aufgeloeste_dateien:
-        erzeuge_zeit_kerzen(datei_pfad, args.seconds)
+        base_name = file.removesuffix('.csv').removesuffix('_ticks')
+        out_file = f"{base_name}_{args.size}{post_fix}.csv"
+        
+        bars.to_csv(out_file, index=False)
+        if args.verbose:
+            print(bars)
+            print(f'{parser.prog}: {len(bars)} bars written to {out_file}')
