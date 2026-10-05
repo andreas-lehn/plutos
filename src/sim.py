@@ -1,19 +1,25 @@
 import argparse
 import os
 from marketdata import BarLoader
-from trader import TradeStatistics, KentBeckTrader, StatisticsCollector
+from trader import TradeStatistics, KentBeckTrader, StatisticsCollector, TradeStatisticsListener
 #import pandas as pd
 from typing import List, Dict, Iterator, Tuple, Protocol
 from pandas.io.formats.format import DataFrameFormatter
 
-def simulate(filename: str, filter_constant: float = 0.5, slope_thershold: float = 0.1, statistics_listener: marketdata.TradeStatisticsListener = None):
+def simulate(filename: str, filter_constant: float, slope_threshold: float, statistics_listener: TradeStatisticsListener):
     trade_statistics = TradeStatistics()
     trade_statistics.add_listener(statistics_listener)
-    trader = KentBeckTrader(filter_constant, slope_thershold)
+    trader = KentBeckTrader(filter_constant, slope_threshold)
     trader.add_listener(trade_statistics)
     loader = BarLoader()
     loader.add_listener(trader)
     loader.load_and_stream(filename)
+
+def simulate_files(file_list: List[str], filter_constant: float, slope_threshold: float, statistics_listener: TradeStatisticsListener):
+    for file in file_list:
+        print(f"{parser.prog}: simulating {os.path.basename(file)} ...", end='')
+        simulate(file, filter_constant, slope_threshold, statistics_listener)
+        print('done.')
 
 
 if __name__ == "__main__":
@@ -24,13 +30,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     collector = StatisticsCollector()
-
-    args.files.sort()
-    for file in args.files:
-        print(f"{parser.prog}: simulating {os.path.basename(file)} ...", end='')
-        simulate(file, filter_constant = args.filter, slope_thershold = args.slope_threshold, statistics_listener = collector)
-        print('done.')
-
+    simulate_files(args.files, args.filter, args.slope_threshold, collector)
     df = collector.data_frame
     print()
     print(df)
