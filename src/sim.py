@@ -1,26 +1,41 @@
 import argparse
 import os
 from marketdata import BarLoader
-from trader import TradeStatistics, KentBeckTrader, StatisticsCollector, TradeStatisticsListener
-#import pandas as pd
+from trader import KentBeckTrader, Trade, Statistics
+import pandas as pd
 from typing import List, Dict, Iterator, Tuple, Protocol
-from pandas.io.formats.format import DataFrameFormatter
+from pathlib import Path
 
-def simulate(filename: str, filter_constant: float, slope_threshold: float, margin: float, statistics_listener: TradeStatisticsListener):
-    trade_statistics = TradeStatistics()
-    trade_statistics.add_listener(statistics_listener)
+pd.options.display.float_format = '{:.2f}'.format
+
+data_dir = Path(os.getenv('DATABENTO_DIR', "../databento"))
+
+default_symbol = "MNQZ6"
+default_date = "2026-10-01"
+default_bar = "30s"
+
+def make_filename(date: str = default_date, bar: str = default_bar, symbol: str = default_symbol):
+    return f'{symbol}_{date}_{bar}.csv'
+
+def sim(date: str = default_date, bar: str = default_bar, symbol: str = default_symbol) -> List[Trade]:
+    """simulation a symbol"""
+    return simulate(data_dir/make_filename(date, bar, symbol))
+
+def simulate(filename: str, filter_constant: float = 0.5, slope_threshold: float = 0.001, margin: float = 1.0)  -> List[Trade]:
     trader = KentBeckTrader(filter_constant, slope_threshold, margin)
-    trader.add_listener(trade_statistics)
     loader = BarLoader()
     loader.add_listener(trader)
     loader.load_and_stream(filename)
+    return trader.trades
 
-def simulate_files(file_list: List[str], filter_constant: float, slope_threshold: float, margin: float, statistics_listener: TradeStatisticsListener):
+def simulate_files(file_list: List[str], filter_constant: float = 0.5, slope_threshold: float = 0.001, margin: float = 1.0) -> List[Statistics]:
+    stats = []
     for file in file_list:
         print(f"{parser.prog}: simulating {os.path.basename(file)} ...", end='')
-        simulate(file, filter_constant, slope_threshold, margin, statistics_listener)
+        trades = simulate(file, filter_constant, slope_threshold, margin)
+        stats.append(Statistics.from_trades(trades))
         print('done.')
-
+    return stats
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Trader simulation.")
@@ -30,9 +45,9 @@ if __name__ == "__main__":
     parser.add_argument("files", nargs="+", help="list of CSV file with bars to be simulated")
     args = parser.parse_args()
 
-    collector = StatisticsCollector()
-    simulate_files(args.files, args.filter, args.slope_threshold, args.margin, collector)
-    df = collector.data_frame
+    stats = simulate_files(args.files, args.filter, args.slope_threshold, args.margin)
+    df = pd.DataFrame([stat.to_dict() for stat in stats])
+    df = df[['total_profit', 'trades', 'win_rate', 'profit_factor', 'max_profit', 'min_profit']]
     print()
     print(df)
 
@@ -43,7 +58,7 @@ if __name__ == "__main__":
     max_win = df["max_profit"].max()
     max_loss = df["min_profit"].min()
 
-    formatter = DataFrameFormatter(df)
+    formatter = pd.io.formats.format.DataFrameFormatter(df)
     strcols = formatter.get_strcols()
     w = [max(len(zeile) for zeile in spalte) for spalte in strcols]
     w_total = sum(w) + (len(w) - 1)

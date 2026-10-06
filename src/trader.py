@@ -50,151 +50,42 @@ class Trade(ToDictMixIn, BaseModel):
         return self.profit > 0.0
 
 
-class Statistics(BaseModel):
-    """Statistic data of a trading day"""
+class Statistics(ToDictMixIn, BaseModel):
+    """Statistics data of a trading day"""
 
     total_profit: float
+    total_win: float
     trades: int
-    win_rate: float
-    profit_factor: float
+    wins: int
     max_profit: float
     min_profit: float
+    volume: int
 
-
-# =====================================================================
-# 2. PROTOKOLLE (Schnittstellen für das Observer-Pattern)
-# =====================================================================
-
-class TraderListener(Protocol):
-    """Schnittstelle für Trade Listener"""
-    def on_trade_closed(self, trade: Trade) -> None:
-        """Wird bei einem abgeschlossenen Trade aufgerufen"""
-        ...
-
-class TradeStatisticsListener(Protocol):
-    def on_day_closed(self, statistics: Statistics):
-        ...
-
-class StatisticsCollector:
-    """collects the trade statistics of each simulated day"""
-
-    def __init__(self):
-        self._stats: List[Statistics] = []
-        self._data_frame: pd.DataFrame = None
-
-    @property
-    def data_frame(self) -> pd.DataFrame:
-        if self._data_frame is None:
-            self._data_frame = pd.DataFrame([stats.model_dump() for stats in self._stats])
-        return self._data_frame
-
-    def on_day_closed(self, statistics):
-        self._stats.append(statistics)
-        self._data_frame = None
-
-
-class TradeStatistics:
-    """Collects trades as a trade listener and calculates statistics on these trades"""
-
-    def __init__(self):
-
-        self.trades_schema = {
-            'buy_time': 'int',
-            'buy_price': 'float',
-            'sell_time': 'int',
-            'sell_price': 'float',
-            'volume': int,
-            'profit': 'float',
-            'duration': 'int'
-        }
-        self.trades: pd.DataFrame = pd.DataFrame(columns=self.trades_schema.keys())
-        self.trades = self.trades.astype(self.trades_schema)
-        self._listeners: List[TradeStatisticsListener] = []
-
-    def add_listener(self, listener: TradeStatisticsListener):
-        if listener not in self._listeners:
-            self._listeners.append(listener)
-
-    def remove_listener(self, listener: TradeStatisticsListener):
-        if listener in self._listeners:
-            self._listeners.remove(listener)
-
-    def _notify_day_closed(self, stats: Statistics):
-        for listener in self._listeners:
-            listener.on_day_closed(stats)
-    
-    def on_trade_closed(self, closed_trade: Trade) -> None:
-        trade = {
-            'buy_time': closed_trade.buy_time,
-            'buy_price': closed_trade.buy_price,
-            'sell_time': closed_trade.sell_time,
-            'sell_price': closed_trade.sell_price,
-            'volume': closed_trade.volume,
-            'profit': (closed_trade.sell_price - closed_trade.buy_price) * closed_trade.volume,
-            'duration': abs(closed_trade.buy_time - closed_trade.sell_time)
-        }
-        new_frame = pd.DataFrame([trade], columns=self.trades_schema.keys()).astype(self.trades_schema)
-        self.trades = pd.concat([self.trades, new_frame], ignore_index=True)
-
-    def on_day_closed(self):
-        self._notify_day_closed(self.get_statistics())
-
-    @property
-    def _win_trades(self):
-        return self.trades[self.trades["profit"] > 0.0]
-
-    @property
-    def _loss_trades(self):
-        return self.trades[self.trades['profit'] <= 0.0]
-
-    @property
-    def number_of_trades(self) -> int:
-        return len(self.trades)
-    
-    @property
-    def total_profit(self) -> float:
-        return self.trades['profit'].sum()
-
-    @property
-    def max_profit(self) -> float:
-        return self.trades['profit'].max()
-
-    @property
-    def min_profit(self) -> float:
-        return self.trades['profit'].min()
-
-    @property
-    def win_profit(self) -> float:
-        return self._win_trades['profit'].sum()
-    
-    @property
-    def loss_profit(self) -> float:
-        return self._loss_trades['profit'].sum()
-    
     @property
     def win_rate(self) -> float:
-        n_wins = len(self._win_trades)
-        n_loss = len(self._loss_trades)
-        n_total = n_wins + n_loss
-        return (n_wins / n_total) if n_total > 0 else 0.0
+        return self.wins / self.trades
 
     @property
     def profit_factor(self) -> float:
-        loss_profit = -self.loss_profit
-        return self.win_profit / loss_profit if loss_profit != 0.0 else 0.0 
+        return self.total_win / self.total_loss
 
-    def get_statistics(self) -> Statistics:
-        return Statistics(
-            total_profit = self.total_profit,
-            trades = self.number_of_trades,
-            win_rate = self.win_rate,
-            profit_factor = self.profit_factor,
-            max_profit = self.max_profit,
-            min_profit = self.min_profit
+    @property
+    def total_loss(self) -> float:
+        return self.total_win - self.total_profit
+
+    @classmethod
+    def from_trades(cls, trades: List[Trade]):
+        df = pd.DataFrame([trade.to_dict() for trade in trades])
+        win_trades = df[df["is_win"]]
+        return cls(
+            total_profit = df['profit'].sum(),
+            trades = len(df),
+            wins = len(win_trades),
+            total_win = win_trades['profit'].sum(),
+            max_profit = df['profit'].max(),
+            min_profit = df['profit'].min(),
+            volume = df['volume'].sum()
         )
-
-    def to_csv(filename: str) -> None:
-        pass
 
 
 class Trader:
@@ -205,23 +96,7 @@ class Trader:
         self._state: str = 'flat'
         self._stop_loss: float = 0.0
         self._current_trade = {}
-        self._listeners: List[TraderListener] = []
-
-    def add_listener(self, listener: TraderListener):
-        if listener not in self._listeners:
-            self._listeners.append(listener)
-
-    def remove_listener(self, listener: TraderListener):
-        if listener in self._listeners:
-            self._listeners.remove(listener)
-
-    def _notify_trade_closed(self, trade: Trade):
-        for listener in self._listeners:
-            listener.on_trade_closed(trade)
-
-    def _notify_day_closed(self):
-        for listener in self._listeners:
-            listener.on_day_closed()
+        self.trades: List[Trade] = []
 
     def stop_loss_long(self, bar: VolumeBar, old_stop_loss: float = None):
         """calculate stop loss for long trades"""
@@ -301,13 +176,12 @@ class Trader:
     def _close_current_trade(self):
         self._current_trade['volume'] = 1
         trade = Trade.model_validate(self._current_trade)
-        self._notify_trade_closed(trade)
+        self.trades.append(trade)
         self._current_trade = {}
 
     def on_end_of_day(self) -> None:
         self._stat = 'flat'
         self._current_trade = {}
-        self._notify_day_closed()
 
     def on_new_bar(self, bar: VolumeBar) -> None:
         decision = self.decide(bar)
