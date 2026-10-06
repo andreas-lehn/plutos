@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from typing import List, Dict, Iterator, Tuple, Protocol
 from marketdata import BarLoader, VolumeBar
 from datetime import datetime
+from collections import deque
 
 class ToDictMixIn:
     def to_dict(self) -> dict:
@@ -85,6 +86,9 @@ class Statistics(ToDictMixIn, BaseModel):
 
     @classmethod
     def from_trades(cls, trades: List[Trade]):
+        if not trades:
+            return None
+        
         df = pd.DataFrame([trade.to_dict() for trade in trades])
         win_trades = df[df["is_win"]]
         return cls(
@@ -102,6 +106,9 @@ class Statistics(ToDictMixIn, BaseModel):
         values = f'{self.total_profit:12.2f}  {self.trades:6d}   {(self.win_rate*100):7.2f}% {self.profit_factor:8.2f}  {self.max_profit:10.2f}  {self.min_profit:10.2f}'
         return title + values
 
+    def __str__(self):
+        return self.__repr__()
+
 
 class Trader:
     """ Base trader that handle buy and sell decision but does no detection of them """
@@ -112,6 +119,11 @@ class Trader:
         self._stop_loss: float = 0.0
         self._current_trade = {}
         self.trades: List[Trade] = []
+
+    def reset(self) -> None:
+        self.trades = []
+        self.state = 'flat'
+        self._current_trade = {}
 
     def stop_loss_long(self, bar: VolumeBar, old_stop_loss: float = None):
         """calculate stop loss for long trades"""
@@ -216,10 +228,15 @@ class KentBeckTrader(Trader):
         
         self._filter_constant: float = filter_constant
         self._slope_threshold: float = slope_threshold
-        self._state: str = 'flat'
-        self._average: float = 0.0
+        self._average: float | None = None
         self._slope: float = 0.0
         self._old_slope: float = 0.0
+
+    def reset(self):
+        super().reset()
+        self._average = None
+        self._slope = 0.0
+        self._old_slope = 0.0
 
     def decide(self, bar: VolumeBar) -> str:
         """
@@ -242,6 +259,48 @@ class KentBeckTrader(Trader):
         return decision
 
 
+class YesterdaysWeather(Trader):
+    """
+    Wenn es steigt, dann steigt es weiter, wenn es fällt, dann fällt es weiter...
+    """
+
+    def __init__(self, slope_threshold: float = 0.5, stop_loss_factor: float = 1.0):
+        super().__init__(stop_loss_factor)
+
+        self.averages: deque[float] = deque()
+        self.slope: float = 0.0
+        self.SLOPE_THRESHOLD = slope_threshold
+
+    def reset(self):
+        super().reset()
+        self.arverages = deque()
+        self.slope = 0.0
+
+    def decide(self, bar: VolumeBar) -> str:
+        """
+        wir extrapolieren die Steigung des Mittelwerts als schätzung für den nächsten mittelwert,
+        sobald sich der mittelwert 2 mal in die selbe richtung bewegt hat (der kleinst-mögliche trend)
+        """
+
+        self.averages.append(bar.average)
+        if len(self.averages) < 3:
+            return 'None'
+
+        decision = 'None'
+        slope = self.averages[2] - self.averages[0]
+        if (self.averages[0] - self.averages[1]) * (self.averages[1] - self.averages[2]) > 0:
+            # we have a trend
+            if slope > self.SLOPE_THRESHOLD:
+                decision = 'buy'
+                self._stop_loss = bar.low
+            if slope < -self.SLOPE_THRESHOLD:
+                decision = 'sell'
+                self._stop_loss = bar.high
+
+        self.averages.popleft()
+        return decision
+
+
 class RandomTrader(Trader):
     """
     Ein Trader, der eine Münze wirft, um zu entscheiden, ob gekauft oder verkauft wird.
@@ -254,29 +313,29 @@ class RandomTrader(Trader):
 
 
 if __name__ == "__main__":
-    import sys
     import argparse
 
     parser = argparse.ArgumentParser(description="Trade simulator: Lädt Volumenbalken aus einer CSV-Datei und simuliert Echtzeit-Events.")
     parser.add_argument("filename", help="CSV with volume bars")
-    parser.add_argument('-t', '--trader', choices=["kentbeck", 'random'], default='kentbeck', help='selects a trader: ( random | kentbeck )')
+    parser.add_argument('-t', '--trader', choices=["kentbeck", 'random', 'yw'], default='kentbeck', help='selects a trader: ( random | kentbeck | yw )')
     parser.add_argument('-m', '--margin', type=float, default=1.0, help='stop loss margin')
+    parser.add_argument('-s', '--slope', type=float, default=0.5, help='slope threshold')
+    parser.add_argument('-f', '--filter', type=float, default=0.5, help='filter constant for filtering of slope and average')
     args = parser.parse_args()
     trader_name = args.trader.lower()
 
-    collector = StatisticsCollector()
-    trade_statistics = TradeStatistics()
-    trade_statistics.add_listener(collector)
     if trader_name == 'kentbeck':
-        trader = KentBeckTrader(stop_loss_factor=args.margin)
+        trader = KentBeckTrader(filter_constant=args.filter, slope_threshold=args.slope, stop_loss_factor=args.margin)
     elif trader_name == 'random':
         trader = RandomTrader(stop_loss_factor=args.margin)
+    elif trader_name == 'yw':
+        trader = YesterdaysWeather(slope_threshold=args.slope, stop_loss_factor=args.margin)
     else:
         print(f"{parser.prog}: error: unknoen trader '{args.trader}'")
-        sys.exit(1)
-    trader.add_listener(trade_statistics)
+        exit(1)
+
     loader = BarLoader()
-    loader.add_listener(trader)     # Trader reagiert auf fertige Balken
+    loader.add_listener(trader)
     loader.load_and_stream(args.filename)
 
-    print(collector.data_frame)
+    print(Statistics.from_trades(trader.trades))
