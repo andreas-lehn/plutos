@@ -10,7 +10,17 @@ from pydantic import BaseModel
 from typing import List, Dict, Iterator, Tuple, Protocol
 from marketdata import BarLoader, VolumeBar
 
-class Trade(BaseModel):
+class ToDictMixIn:
+    def to_dict(self) -> dict:
+        """Konvertiert das Pydantic-Modell in ein Dict inklusive aller @properties."""
+        data = self.model_dump()
+        # Alle @properties der aktuellen Klasse dynamisch einsammeln
+        for name, attr in self.__class__.__dict__.items():
+            if isinstance(attr, property):
+                data[name] = getattr(self, name)
+        return data
+
+class Trade(ToDictMixIn, BaseModel):
     """Kapselt die Daten eines abgeschlossenen Trades"""
 
     buy_time: int
@@ -18,6 +28,26 @@ class Trade(BaseModel):
     sell_time: int
     sell_price: float
     volume: int
+
+    @property
+    def start_time(self) -> int:
+        return min(self.sell_time, self.buy_time)
+
+    @property
+    def end_time(self) -> int:
+        return max(self.sell_time, self.buy_time)
+
+    @property
+    def duration(self) -> int:
+        return self.end_time - self.start_time
+
+    @property
+    def profit(self) -> float:
+        return (self.sell_price - self.buy_price) * self.volume
+
+    @property
+    def is_win(self) -> bool:
+        return self.profit > 0.0
 
 
 class Statistics(BaseModel):
