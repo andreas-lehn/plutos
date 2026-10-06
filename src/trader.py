@@ -9,6 +9,7 @@ import pandas as pd
 from pydantic import BaseModel
 from typing import List, Dict, Iterator, Tuple, Protocol
 from marketdata import BarLoader, VolumeBar
+from datetime import datetime
 
 class ToDictMixIn:
     def to_dict(self) -> dict:
@@ -49,6 +50,15 @@ class Trade(ToDictMixIn, BaseModel):
     def is_win(self) -> bool:
         return self.profit > 0.0
 
+    @property
+    def long_short(self) -> str:
+        return 'short' if self.sell_time < self.buy_time else 'long '
+
+    def __repr__(self):
+        dt_start = datetime.fromtimestamp(self.start_time // 1000).strftime("%H:%M:%S")
+        dt_end   = datetime.fromtimestamp(self.end_time // 1000).strftime("%H:%M:%S")
+        return f'{dt_start}-{dt_end}  {self.long_short} {self.volume:3d} {self.profit:8.2f}'
+
 
 class Statistics(ToDictMixIn, BaseModel):
     """Statistics data of a trading day"""
@@ -86,6 +96,11 @@ class Statistics(ToDictMixIn, BaseModel):
             min_profit = df['profit'].min(),
             volume = df['volume'].sum()
         )
+
+    def __repr__(self):
+        title = 'total_profit  trades  win_rate  p_factor  max_profit  min_profit\n' 
+        values = f'{self.total_profit:12.2f}  {self.trades:6d}   {(self.win_rate*100):7.2f}% {self.profit_factor:8.2f}  {self.max_profit:10.2f}  {self.min_profit:10.2f}'
+        return title + values
 
 
 class Trader:
