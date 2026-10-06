@@ -6,31 +6,32 @@ from trader import TradeStatistics, KentBeckTrader, StatisticsCollector, TradeSt
 from typing import List, Dict, Iterator, Tuple, Protocol
 from pandas.io.formats.format import DataFrameFormatter
 
-def simulate(filename: str, filter_constant: float, slope_threshold: float, statistics_listener: TradeStatisticsListener):
+def simulate(filename: str, filter_constant: float, slope_threshold: float, margin: float, statistics_listener: TradeStatisticsListener):
     trade_statistics = TradeStatistics()
     trade_statistics.add_listener(statistics_listener)
-    trader = KentBeckTrader(filter_constant, slope_threshold)
+    trader = KentBeckTrader(filter_constant, slope_threshold, margin)
     trader.add_listener(trade_statistics)
     loader = BarLoader()
     loader.add_listener(trader)
     loader.load_and_stream(filename)
 
-def simulate_files(file_list: List[str], filter_constant: float, slope_threshold: float, statistics_listener: TradeStatisticsListener):
+def simulate_files(file_list: List[str], filter_constant: float, slope_threshold: float, margin: float, statistics_listener: TradeStatisticsListener):
     for file in file_list:
         print(f"{parser.prog}: simulating {os.path.basename(file)} ...", end='')
-        simulate(file, filter_constant, slope_threshold, statistics_listener)
+        simulate(file, filter_constant, slope_threshold, margin, statistics_listener)
         print('done.')
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Trader simulation.")
     parser.add_argument("-f", "--filter", type=float, default=0.5, help="PT1 filter constant")
-    parser.add_argument("-s", "--slope-threshold",type=float,default=0.001, help="threshold for slope") 
+    parser.add_argument("-s", "--slope-threshold",type=float,default=0.001, help="threshold for slope")
+    parser.add_argument('-m', '--margin', type=float, default=1.0, help='stop loss margin')
     parser.add_argument("files", nargs="+", help="list of CSV file with bars to be simulated")
     args = parser.parse_args()
 
     collector = StatisticsCollector()
-    simulate_files(args.files, args.filter, args.slope_threshold, collector)
+    simulate_files(args.files, args.filter, args.slope_threshold, args.margin, collector)
     df = collector.data_frame
     print()
     print(df)

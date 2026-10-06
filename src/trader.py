@@ -200,7 +200,8 @@ class TradeStatistics:
 class Trader:
     """ Base trader that handle buy and sell decision but does no detection of them """
 
-    def __init__(self):
+    def __init__(self, stop_loss_factor: float = 1.0):
+        self._stop_loss_factor: float = stop_loss_factor
         self._state: str = 'flat'
         self._stop_loss: float = 0.0
         self._current_trade = {}
@@ -222,6 +223,22 @@ class Trader:
         for listener in self._listeners:
             listener.on_day_closed()
 
+    def stop_loss_long(self, bar: VolumeBar, old_stop_loss: float = None):
+        """calculate stop loss for long trades"""
+        stop_loss = bar.average + (bar.low - bar.average) * self._stop_loss_factor
+        stop_loss = round(stop_loss / 0.25) * 0.25
+        if old_stop_loss is not None:
+            stop_loss = max(stop_loss, old_stop_loss) # only increase stop loss 
+        return stop_loss 
+
+    def stop_loss_short(self, bar: VolumeBar, old_stop_loss: float = None):
+        """calculate stop loss for short trades"""
+        stop_loss = bar.average + (bar.high - bar.average) * self._stop_loss_factor
+        stop_loss = round(stop_loss / 0.25) * 0.25
+        if old_stop_loss is not None:
+            stop_loss = min(stop_loss, old_stop_loss) # only decreas stopp loss
+        return stop_loss
+    
     def trade(self, decision: str, bar: VolumeBar):
         """
         trades based on the decision and current state
@@ -231,18 +248,20 @@ class Trader:
             # we are flat, so we can enter a trade if the decision is buy or sell
             if decision == 'buy':
                 self._state = 'buy' # we place a buy order
-                self._stop_loss = bar.low
+                self._stop_loss = self.stop_loss_long(bar)
             if decision == 'sell':
                 self._state = 'sell' # we place a sell order
-                self._stop_loss = bar.high
+                self._stop_loss = self.stop_loss_short(bar)
+            return
 
         if self._state == 'buy':
             # we are in a buy position
             # we assume, that our order was fulfilled one tick over the opening price
             self._current_trade['buy_time'] = bar.timestamp
             self._current_trade['buy_price'] = bar.open + 0.25
-            self._stop_loss = bar.low
+            self._stop_loss = self.stop_loss_long(bar, self._stop_loss)
             self._state = 'long'
+            return
 
         if self._state == 'long':
             # we are long. so we have to check, if we ran into our stop loss
@@ -255,14 +274,16 @@ class Trader:
                 self._close_current_trade()
             else:
                 # we are still going, so adapt stop loss...
-                self._stop_loss = bar.low
+                self._stop_loss = self.stop_loss_long(bar, self._stop_loss)
+            return
 
         if self._state == 'sell':
             # we place a sell order and assume that we could sell is one tick less than the opening price
             self._current_trade['sell_time'] = bar.timestamp
             self._current_trade['sell_price'] = bar.open - 0.25
-            self._stop_loss = bar.high
+            self._stop_loss = self.stop_loss_short(bar, self._stop_loss)
             self._state = 'short'
+            return
 
         if self._state == 'short':
             # we are short, so we have to check, if we ran into out stop loss
@@ -274,7 +295,8 @@ class Trader:
                 self._close_current_trade()
             else:
                 # trade is still active. we adjust stop loss...
-                self._stop_loss = bar.high
+                self._stop_loss = self.stop_loss_short(bar, self._stop_loss)
+            return
 
     def _close_current_trade(self):
         self._current_trade['volume'] = 1
@@ -300,8 +322,8 @@ class KentBeckTrader(Trader):
     Daraus erzeugt er dann Kauf/Verkauf/Haltesignal.
     """
 
-    def __init__(self, filter_constant: float = 0.5, slope_threshold: float = 0.001):
-        super().__init__()
+    def __init__(self, filter_constant: float = 0.5, slope_threshold: float = 0.001, stop_loss_factor: float = 1.0):
+        super().__init__(stop_loss_factor)
         
         self._filter_constant: float = filter_constant
         self._slope_threshold: float = slope_threshold
@@ -348,7 +370,8 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Trade simulator: Lädt Volumenbalken aus einer CSV-Datei und simuliert Echtzeit-Events.")
     parser.add_argument("filename", help="CSV with volume bars")
-    parser.add_argument('-t', '--trader', default="kentbeck", help='selects a trader: ( random | kentbeck )')
+    parser.add_argument('-t', '--trader', choices=["kentbeck", 'random'], default='kentbeck', help='selects a trader: ( random | kentbeck )')
+    parser.add_argument('-m', '--margin', type=float, default=1.0, help='stop loss margin')
     args = parser.parse_args()
     trader_name = args.trader.lower()
 
@@ -356,11 +379,11 @@ if __name__ == "__main__":
     trade_statistics = TradeStatistics()
     trade_statistics.add_listener(collector)
     if trader_name == 'kentbeck':
-        trader = KentBeckTrader()
+        trader = KentBeckTrader(stop_loss_factor=args.margin)
     elif trader_name == 'random':
-        trader = RandomTrader()
+        trader = RandomTrader(stop_loss_factor=args.margin)
     else:
-        print("{parser.prog}: error: unknoen trader '{args.trader}'")
+        print(f"{parser.prog}: error: unknoen trader '{args.trader}'")
         sys.exit(1)
     trader.add_listener(trade_statistics)
     loader = BarLoader()
