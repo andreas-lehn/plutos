@@ -12,6 +12,8 @@ def full_path_name(target_dir: str, file_name: str) -> str:
 
 
 def databento_download(prog_name, base_symbol, target_date, target_dir):
+    """ load trades for one session from databento """
+
     symbol = get_active_symbol(base_symbol, target_date)
     date_str = target_date.date().isoformat()
     download_intervall = databento_download_intervall(target_date)
@@ -20,6 +22,7 @@ def databento_download(prog_name, base_symbol, target_date, target_dir):
     if API_KEY is None:
         raise "DATABENTO_API_KEY not set!"
     
+    print(f"{prog_name}: loading trades of {symbol} for {download_intervall[0]} ... {download_intervall[1]}")
     client = db.Historical(API_KEY)
     data = client.timeseries.get_range(
         dataset="GLBX.MDP3",  # CME Globex Datensatz
@@ -28,16 +31,15 @@ def databento_download(prog_name, base_symbol, target_date, target_dir):
         start=download_intervall[0].isoformat(),
         end=download_intervall[1].isoformat(),
     )
-    print(f"{prog_name}: loading tick data of {symbol} for {download_intervall[0]} ... {download_intervall[1]}")
-    df = data.to_df(pretty_ts=False)
-    if df.empty:
-        print(f"{prog_name} warning: no tick data of {symbol} found for {date_str}")
-        return
-    
-    filename = full_path_name(target_dir, f"{symbol}_{date_str}_ticks.csv")
-    df.index = pd.to_datetime(df.index, utc=True).astype('int64')
-    df.to_csv(filename, index=True)
-    print(f"{prog_name}: {len(df)} ticks written to {filename}")
+    print(f'{prog_name}: downloaded: {data.metadata}')
+    filename = full_path_name(target_dir, f"{symbol}_{date_str}_trades.dbn")
+    data.to_file(filename)
+    #
+    # später das file wieder laden mit:
+    #
+    #    data = db.DBNStore.from_file("<name>_trades.dbn")
+    #
+    print(f"{prog_name}: {data.nbytes // 100} records written to {filename}")
 
 
 def yahoo_download(prog_name, base_symbol, target_date, target_dir):
