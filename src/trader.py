@@ -30,6 +30,10 @@ class Trade(ToDictMixIn, BaseModel):
     sell_time: int
     sell_price: float
     volume: int
+    average: float # at decision point in time
+    slope: float
+    close: float
+    decision: str
 
     @property
     def start_time(self) -> int:
@@ -58,7 +62,7 @@ class Trade(ToDictMixIn, BaseModel):
     def __repr__(self):
         dt_start = datetime.fromtimestamp(self.start_time // 1000).strftime("%H:%M:%S")
         dt_end   = datetime.fromtimestamp(self.end_time // 1000).strftime("%H:%M:%S")
-        return f'{dt_start}-{dt_end}  {self.long_short} {self.volume:3d} {self.profit:8.2f}'
+        return f'{dt_start}-{dt_end}  {self.long_short} {self.volume:3d} {self.sell_price:8.2f} {self.buy_price:8.2f} {self.profit:8.2f}'
 
 
 class Statistics(ToDictMixIn, BaseModel):
@@ -160,10 +164,13 @@ class Trader:
             # we are in a buy position
             # we assume, that our order was fulfilled one tick over the opening price
             self._current_trade['buy_time'] = bar.timestamp
-            self._current_trade['buy_price'] = bar.open + 0.25
-            self._stop_loss = self.stop_loss_long(bar, self._stop_loss)
+            buy_price = bar.open + 0.25
+            self._current_trade['buy_price'] = buy_price
+            if self._stop_loss > buy_price: # stop loss bereits beim kauf unterschritten
+                self._stop_loss = buy_price - 0.25 # stop loss 1 tick unter kaufkurs setzen
+            self._current_trade['stop_loss'] = self._stop_loss
             self._state = 'long'
-            return
+
 
         if self._state == 'long':
             # we are long. so we have to check, if we ran into our stop loss
@@ -182,10 +189,12 @@ class Trader:
         if self._state == 'sell':
             # we place a sell order and assume that we could sell is one tick less than the opening price
             self._current_trade['sell_time'] = bar.timestamp
-            self._current_trade['sell_price'] = bar.open - 0.25
-            self._stop_loss = self.stop_loss_short(bar, self._stop_loss)
+            sell_price = bar.open - 0.25
+            self._current_trade['sell_price'] = sell_price
+            if self._stop_loss < sell_price:
+                self._stop_loss = sell_price + 0.25
+            self._current_trade['stop_loss'] = self._stop_loss
             self._state = 'short'
-            return
 
         if self._state == 'short':
             # we are short, so we have to check, if we ran into out stop loss
@@ -296,7 +305,10 @@ class YesterdaysWeather(Trader):
             if slope < -self.SLOPE_THRESHOLD:
                 decision = 'sell'
                 self._stop_loss = bar.high
-
+            self._current_trade['average'] = bar.average
+            self._current_trade['close'] = bar.close
+            self._current_trade['slope'] = slope
+            self._current_trade['decision'] = decision
         self.averages.popleft()
         return decision
 

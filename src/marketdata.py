@@ -22,6 +22,10 @@ class Tick(pydantic.BaseModel):
     ask_volume: int
     bid_volume: int
 
+    @property
+    def volume(self):
+        return self.ask_volume + self.bid_volume
+
 
 class VolumeBar(pydantic.BaseModel):
     """Kapselt die Daten eines fertigen Volumenbalkens"""
