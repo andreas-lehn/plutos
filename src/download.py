@@ -17,13 +17,11 @@ def databento_download(prog_name, base_symbol, target_date, target_dir):
     symbol = get_active_symbol(base_symbol, target_date)
     date_str = target_date.date().isoformat()
     download_intervall = databento_download_intervall(target_date)
-
-    API_KEY = os.getenv("DATABENTO_API_KEY")
-    if API_KEY is None:
-        raise "DATABENTO_API_KEY not set!"
     
     print(f"{prog_name}: loading trades of {symbol} for {download_intervall[0]} ... {download_intervall[1]}")
-    client = db.Historical(API_KEY)
+    #API_KEY = os.getenv("DATABENTO_API_KEY")
+    #client = db.Historical(API_KEY) 
+    client = db.Historical() # DATABENTO_API_KEY will be used as default, if none is specified.
     data = client.timeseries.get_range(
         dataset="GLBX.MDP3",  # CME Globex Datensatz
         symbols=symbol,
@@ -31,7 +29,6 @@ def databento_download(prog_name, base_symbol, target_date, target_dir):
         start=download_intervall[0].isoformat(),
         end=download_intervall[1].isoformat(),
     )
-    print(f'{prog_name}: downloaded: {data.metadata}')
     filename = full_path_name(target_dir, f"{symbol}_{date_str}_trades.dbn")
     data.to_file(filename)
     #
