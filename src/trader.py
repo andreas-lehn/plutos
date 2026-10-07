@@ -55,10 +55,6 @@ class Trade(ToDictMixIn, BaseModel):
     def is_win(self) -> bool:
         return self.profit > 0.0
 
-    @property
-    def long_short(self) -> str:
-        return 'short' if self.sell_time < self.buy_time else 'long '
-
     def __repr__(self):
         dt_start = datetime.fromtimestamp(self.start_time // 1000).strftime("%H:%M:%S")
         dt_end   = datetime.fromtimestamp(self.end_time // 1000).strftime("%H:%M:%S")

@@ -156,6 +156,7 @@ Das letzte Sample hat den Zeitstempel:
 
     60 * 60 * 23 - 1 = 82800 - 1 = 82799
 
+
 Mit dem Sekunde seit Session-Start,
 können wir wieder den Index-Tricke machen:
 Wir speichern unsere Daten in einer Tabelle(numpy.Array) mit 82800 Zeilen
