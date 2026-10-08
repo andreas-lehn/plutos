@@ -46,7 +46,7 @@ class SampleBuilder:
             'timestamp': self.timestamp,
             'volume': self.volume,
             'low': self.low,
-            'avarage': self.volume_x_price // self.volume,
+            'average': self.volume_x_price // self.volume,
             'high': self.high,
         }
         self.volume = 0
