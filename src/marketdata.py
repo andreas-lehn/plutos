@@ -14,9 +14,11 @@ class Sample(BaseModel):
     """ Kapselt die Daten eines Samples """
 
     timestamp: int
-    low: int
-    average: int
+    open: int
     high: int
+    average: int
+    low: int
+    close: int
     volume: int
 
 
@@ -62,10 +64,12 @@ class SampleLoader:
             for row in reader:
                 sample = Sample(
                     timestamp=int(row['timestamp']),
-                    low=float(row['low']),
-                    average=float(row['average']),
-                    high=float(row['high']),
-                    volume=int(row['volume'])
+                    open=int(row['open']),
+                    high=int(row['high']),
+                    average=int(row['average']),
+                    low=int(row['low']),
+                    close=int(row['close']),
+                    volume=int(row['volume']),
                 )
                 self._notify_new_sample(sample)
             self._notify_end_of_samples()
@@ -76,9 +80,9 @@ class Bar(BaseModel):
 
     timestamp: int
     open: int
-    low: int
-    average: int
     high: int
+    average: int
+    low: int
     close: int
     volume: int
 
@@ -144,10 +148,10 @@ class BarBuilder:
     def _start_new_bar(self, timestamp: int, sample: Sample) -> None:
         self._current_bar_data = {
             'timestamp': timestamp,
-            'open': sample.average,
+            'open': sample.open,
             'high': sample.high,
             'low': sample.low,
-            'close': sample.average,
+            'close': sample.close,
             'volume': sample.volume,
             'price_volume_sum': sample.average * sample.volume
         }
@@ -178,7 +182,7 @@ class BarBuilder:
             'price_volume_sum': self._current_bar_data['price_volume_sum'] + (sample.average * sample.volume),
             'high': max(self._current_bar_data['high'], sample.high),
             'low': min(self._current_bar_data['low'], sample.low),
-            'close': sample.average,
+            'close': sample.close,
         })
 
 
