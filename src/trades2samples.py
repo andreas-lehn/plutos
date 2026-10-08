@@ -4,21 +4,10 @@ import databento as db
 from typing import Callable, List, Dict
 from datetime import datetime, timezone
 
-class SampleCollector:
-
-    def __init__(self):
-        self.samples: List[Dict] = []
-
-    def on_sample(self, sample):
-        self.samples.append(sample)
-
-
 class SampleBuilder:
     """ creates 1 sec samples from databento trade records """
 
-    def __init__(self, callout: Callable[int, int, int]):
-        """ callout is called when ever a new sample is finished or the stream is over """
-        self.callout = callout
+    def __init__(self):
         self.timestamp_offset: int = 0
         self.volume: int = 0
         self.volume_x_price: int = 0
@@ -27,8 +16,11 @@ class SampleBuilder:
         self.timestamp: int = None
         self.hour = 0
 
-    def on_trade(self, record: db.DBNRecord):
+    def on_trade(self, record: db.DBNRecord) -> Dict:
         """ process a databento trade record """
+        
+        sample = None
+
         timestamp = record.ts_event // 1_000_000_000 # - self.timestamp_offset
         timestamp -= self.timestamp_offset
         if self.timestamp is None:
@@ -37,7 +29,7 @@ class SampleBuilder:
             self.timestamp = 0
             timestamp = 0
         elif (timestamp > self.timestamp):
-            self._commit_sample()
+            sample = self.get_sample()
             self.timestamp = timestamp
 
         price = record.price // 250_000_000
@@ -46,25 +38,26 @@ class SampleBuilder:
         self.volume += volume
         self.high = max(self.high, price)
         self.low = min(self.low, price)
+        return sample
 
-    def _commit_sample(self):
-        self.callout({
+
+    def get_sample(self) -> dict:
+        sample = {
             'timestamp': self.timestamp,
             'volume': self.volume,
             'low': self.low,
             'avarage': self.volume_x_price // self.volume,
             'high': self.high,
-        })
+        }
         self.volume = 0
         self.volume_x_price = 0
         self.high = 0
         self.low = sys.maxsize
+        return sample
 
-    def close(self) -> None:
-        """ closes the current session """
-        if self.volume > 0:
-            # sample already started
-            self._commit_sample()
+    @property
+    def is_sample_available(self) -> bool:
+        return self.volume > 0
 
 
 if __name__ == "__main__":
@@ -84,13 +77,17 @@ if __name__ == "__main__":
 
         print(f'{parser.prog}: replaying file {filename}...', end='')
         data = db.DBNStore.from_file(filename)
-        collector = SampleCollector()
-        builder = SampleBuilder(collector.on_sample)
-        data.replay(builder.on_trade)
-        builder.close()
+        builder = SampleBuilder()
+        samples = []
+        for record in data:
+            sample = builder.on_trade(record)
+            if sample is not None:
+                samples.append(sample)
+        if builder.is_sample_available:
+            samples.append(builder.get_sample())
         print('done')
 
-        df = pd.DataFrame(collector.samples)
+        df = pd.DataFrame(samples)
         df.to_csv(out_name, index=False)
         print(f'{parser.prog}: {len(df)} lines written to {out_name}')
 
