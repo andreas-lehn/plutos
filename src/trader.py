@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 from pydantic import BaseModel
 from typing import List, Dict, Iterator, Tuple, Protocol
-from marketdata import BarLoader, VolumeBar
+from marketdata import SampleLoader, Bar, BarBuilder
 from datetime import datetime
 from collections import deque
 
@@ -26,14 +26,10 @@ class Trade(ToDictMixIn, BaseModel):
     """Kapselt die Daten eines abgeschlossenen Trades"""
 
     buy_time: int
-    buy_price: float
+    buy_price: int
     sell_time: int
-    sell_price: float
+    sell_price: int
     volume: int
-    average: float # at decision point in time
-    slope: float
-    close: float
-    decision: str
 
     @property
     def start_time(self) -> int:
@@ -48,7 +44,7 @@ class Trade(ToDictMixIn, BaseModel):
         return self.end_time - self.start_time
 
     @property
-    def profit(self) -> float:
+    def profit(self) -> int:
         return (self.sell_price - self.buy_price) * self.volume
 
     @property
@@ -58,18 +54,18 @@ class Trade(ToDictMixIn, BaseModel):
     def __repr__(self):
         dt_start = datetime.fromtimestamp(self.start_time // 1000).strftime("%H:%M:%S")
         dt_end   = datetime.fromtimestamp(self.end_time // 1000).strftime("%H:%M:%S")
-        return f'{dt_start}-{dt_end}  {self.long_short} {self.volume:3d} {self.sell_price:8.2f} {self.buy_price:8.2f} {self.profit:8.2f}'
+        return f'{dt_start}-{dt_end}  {self.long_short} {self.volume:3d} {self.sell_price/4:8.2f} {self.buy_price/4:8.2f} {self.profit/4:8.2f}'
 
 
 class Statistics(ToDictMixIn, BaseModel):
     """Statistics data of a trading day"""
 
-    total_profit: float
-    total_win: float
+    total_profit: int
+    total_win: int
     trades: int
     wins: int
-    max_profit: float
-    min_profit: float
+    max_profit: int
+    min_profit: int
     volume: int
 
     @property
@@ -81,7 +77,7 @@ class Statistics(ToDictMixIn, BaseModel):
         return self.total_win / self.total_loss
 
     @property
-    def total_loss(self) -> float:
+    def total_loss(self) -> int:
         return self.total_win - self.total_profit
 
     @classmethod
@@ -103,7 +99,7 @@ class Statistics(ToDictMixIn, BaseModel):
 
     def __repr__(self):
         title = 'total_profit  trades  win_rate  p_factor  max_profit  min_profit\n' 
-        values = f'{self.total_profit:12.2f}  {self.trades:6d}   {(self.win_rate*100):7.2f}% {self.profit_factor:8.2f}  {self.max_profit:10.2f}  {self.min_profit:10.2f}'
+        values = f'{self.total_profit/4:12.2f}  {self.trades:6d}   {(self.win_rate*100):7.2f}% {self.profit_factor:8.2f}  {self.max_profit/4:10.2f}  {self.min_profit/4:10.2f}'
         return title + values
 
     def __str__(self):
@@ -116,7 +112,7 @@ class Trader:
     def __init__(self, stop_loss_factor: float = 1.0):
         self._stop_loss_factor: float = stop_loss_factor
         self._state: str = 'flat'
-        self._stop_loss: float = 0.0
+        self._stop_loss: int = 0
         self._current_trade = {}
         self.trades: List[Trade] = []
 
@@ -125,23 +121,21 @@ class Trader:
         self.state = 'flat'
         self._current_trade = {}
 
-    def stop_loss_long(self, bar: VolumeBar, old_stop_loss: float = None):
+    def stop_loss_long(self, bar: Bar, old_stop_loss: int = None):
         """calculate stop loss for long trades"""
-        stop_loss = bar.average + (bar.low - bar.average) * self._stop_loss_factor
-        stop_loss = round(stop_loss / 0.25) * 0.25
+        stop_loss = bar.average + round((bar.low - bar.average) * self._stop_loss_factor)
         if old_stop_loss is not None:
             stop_loss = max(stop_loss, old_stop_loss) # only increase stop loss 
         return stop_loss 
 
-    def stop_loss_short(self, bar: VolumeBar, old_stop_loss: float = None):
+    def stop_loss_short(self, bar: Bar, old_stop_loss: int = None):
         """calculate stop loss for short trades"""
-        stop_loss = bar.average + (bar.high - bar.average) * self._stop_loss_factor
-        stop_loss = round(stop_loss / 0.25) * 0.25
+        stop_loss = bar.average + round((bar.high - bar.average) * self._stop_loss_factor)
         if old_stop_loss is not None:
             stop_loss = min(stop_loss, old_stop_loss) # only decreas stopp loss
         return stop_loss
     
-    def trade(self, decision: str, bar: VolumeBar):
+    def trade(self, decision: str, bar: Bar):
         """
         trades based on the decision and current state
         """
@@ -160,10 +154,10 @@ class Trader:
             # we are in a buy position
             # we assume, that our order was fulfilled one tick over the opening price
             self._current_trade['buy_time'] = bar.timestamp
-            buy_price = bar.open + 0.25
+            buy_price = bar.open + 1
             self._current_trade['buy_price'] = buy_price
             if self._stop_loss > buy_price: # stop loss bereits beim kauf unterschritten
-                self._stop_loss = buy_price - 0.25 # stop loss 1 tick unter kaufkurs setzen
+                self._stop_loss = buy_price - 1 # stop loss 1 tick unter kaufkurs setzen
             self._current_trade['stop_loss'] = self._stop_loss
             self._state = 'long'
 
@@ -173,7 +167,7 @@ class Trader:
             # print(f".   stop_loss: {self._stop_loss} | low: {bar.low}")
             if self._stop_loss > bar.low:
                 # we assume, that we were stopped out one tick below our stop loss
-                self._current_trade['sell_price'] = self._stop_loss - 0.25
+                self._current_trade['sell_price'] = self._stop_loss - 1
                 self._current_trade['sell_time'] = bar.timestamp
                 self._state = 'flat'
                 self._close_current_trade()
@@ -185,10 +179,10 @@ class Trader:
         if self._state == 'sell':
             # we place a sell order and assume that we could sell is one tick less than the opening price
             self._current_trade['sell_time'] = bar.timestamp
-            sell_price = bar.open - 0.25
+            sell_price = bar.open - 1
             self._current_trade['sell_price'] = sell_price
             if self._stop_loss < sell_price:
-                self._stop_loss = sell_price + 0.25
+                self._stop_loss = sell_price + 1
             self._current_trade['stop_loss'] = self._stop_loss
             self._state = 'short'
 
@@ -197,7 +191,7 @@ class Trader:
             if self._stop_loss < bar.high:
                 # we assume that we were stopped out one tick over our stop loss
                 self._current_trade['buy_time'] = bar.timestamp
-                self._current_trade['buy_price'] = self._stop_loss + 0.25
+                self._current_trade['buy_price'] = self._stop_loss + 1
                 self._state = 'flat'
                 self._close_current_trade()
             else:
@@ -215,7 +209,7 @@ class Trader:
         self._stat = 'flat'
         self._current_trade = {}
 
-    def on_new_bar(self, bar: VolumeBar) -> None:
+    def on_new_bar(self, bar: Bar) -> None:
         decision = self.decide(bar)
         self.trade(decision, bar)
 
@@ -239,17 +233,21 @@ class KentBeckTrader(Trader):
 
     def reset(self):
         super().reset()
-        self._average = None
-        self._slope = 0.0
-        self._old_slope = 0.0
+        self._average: float = None
+        self._slope: float = 0.0
+        self._old_slope: float = 0.0
 
-    def decide(self, bar: VolumeBar) -> str:
+    def decide(self, bar: Bar) -> str:
         """
         analysis the current volume bar and decides what to
         
         returns "none", "buy", "sell"
         """
 
+        if self._average is None:
+            self._average = bar.average
+            return 'none'
+        
         current_slope = (bar.average - self._average) * self._filter_constant
         self._average += current_slope
         self._slope += (current_slope - self._slope) * self._filter_constant
@@ -272,16 +270,16 @@ class YesterdaysWeather(Trader):
     def __init__(self, slope_threshold: float = 0.5, stop_loss_factor: float = 1.0):
         super().__init__(stop_loss_factor)
 
-        self.averages: deque[float] = deque()
-        self.slope: float = 0.0
-        self.SLOPE_THRESHOLD = slope_threshold
+        self.averages: deque[int] = deque()
+        self.slope: int = 0
+        self.SLOPE_THRESHOLD = round(slope_threshold * 4)
 
     def reset(self):
         super().reset()
         self.arverages = deque()
-        self.slope = 0.0
+        self.slope = 0
 
-    def decide(self, bar: VolumeBar) -> str:
+    def decide(self, bar: Bar) -> str:
         """
         wir extrapolieren die Steigung des Mittelwerts als schätzung für den nächsten mittelwert,
         sobald sich der mittelwert 2 mal in die selbe richtung bewegt hat (der kleinst-mögliche trend)
@@ -301,10 +299,10 @@ class YesterdaysWeather(Trader):
             if slope < -self.SLOPE_THRESHOLD:
                 decision = 'sell'
                 self._stop_loss = bar.high
-            self._current_trade['average'] = bar.average
-            self._current_trade['close'] = bar.close
-            self._current_trade['slope'] = slope
-            self._current_trade['decision'] = decision
+            #self._current_trade['average'] = bar.average
+            #self._current_trade['close'] = bar.close
+            #self._current_trade['slope'] = slope
+            #self._current_trade['decision'] = decision
         self.averages.popleft()
         return decision
 
@@ -314,7 +312,7 @@ class RandomTrader(Trader):
     Ein Trader, der eine Münze wirft, um zu entscheiden, ob gekauft oder verkauft wird.
     """
 
-    def decide(self, bar: VolumeBar) -> str:
+    def decide(self, bar: Bar) -> str:
         """ entscheidung würfeln """
         decisions = ['buy', 'sell']
         return random.choice(decisions)
@@ -329,6 +327,7 @@ if __name__ == "__main__":
     parser.add_argument('-m', '--margin', type=float, default=1.0, help='stop loss margin')
     parser.add_argument('-s', '--slope', type=float, default=0.5, help='slope threshold')
     parser.add_argument('-f', '--filter', type=float, default=0.5, help='filter constant for filtering of slope and average')
+    parser.add_argument('-b', '--bar_size', type=int, default=30, help="define the size[seconds] of a bar")
     args = parser.parse_args()
     trader_name = args.trader.lower()
 
@@ -342,8 +341,10 @@ if __name__ == "__main__":
         print(f"{parser.prog}: error: unknoen trader '{args.trader}'")
         exit(1)
 
-    loader = BarLoader()
-    loader.add_listener(trader)
+    loader = SampleLoader()
+    builder = BarBuilder(args.bar_size)
+    loader.add_listener(builder)
+    builder.add_listener(trader)
     loader.load_and_stream(args.filename)
 
     print(Statistics.from_trades(trader.trades))
