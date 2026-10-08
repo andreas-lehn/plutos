@@ -31,9 +31,9 @@ def databento_download(prog_name: str, base_symbol: str, date: date, target_dir:
         start=start_date.isoformat(),
         end=end_date.isoformat(),
     )
-    download_start = datetime.fromtimestamp(data.metadata.start // 10**9)
-    download_end = datetime.fromtimestamp(data.metadata.end // 10**9)
-    print(f'{prog_name}: start: {download_start.isoformat()}, end: {download_end.isoformat()}')
+    download_start = datetime.fromtimestamp(data.metadata.start // 10**9, timezone.utc)
+    download_end = datetime.fromtimestamp(data.metadata.end // 10**9, timezone.utc)
+    print(f'{prog_name}: records downloaded [{download_start.isoformat()}, {download_end.isoformat()}]')
     data.to_file(filename)
 
     #
