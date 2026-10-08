@@ -201,7 +201,6 @@ class Trader:
 
     def _close_current_trade(self):
         self._current_trade['volume'] = 1
-        print(f'208: {self._current_trade}')
         trade = Trade.model_validate(self._current_trade)
         self.trades.append(trade)
         self._current_trade = {}
