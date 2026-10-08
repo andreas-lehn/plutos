@@ -1,4 +1,5 @@
 import sys
+import pandas as pd
 import databento as db
 from typing import Callable, List, Dict
 from datetime import datetime, timezone
@@ -13,8 +14,10 @@ class SampleCollector:
 
 
 class SampleBuilder:
+    """ creates 1 sec samples from databento trade records """
 
     def __init__(self, callout: Callable[int, int, int]):
+        """ callout is called when ever a new sample is finished or the stream is over """
         self.callout = callout
         self.timestamp_offset: int = 0
         self.volume: int = 0
@@ -25,18 +28,16 @@ class SampleBuilder:
         self.hour = 0
 
     def on_trade(self, record: db.DBNRecord):
+        """ process a databento trade record """
         timestamp = record.ts_event // 1_000_000_000 # - self.timestamp_offset
         timestamp -= self.timestamp_offset
         if self.timestamp is None:
             # first sample starts
-            dt = datetime.fromtimestamp(timestamp, timezone.utc)
-            print(dt.isoformat())
-            exit()
+            self.timestamp_offset = timestamp
             self.timestamp = 0
-            self.timestamp_offet = timestamp
             timestamp = 0
         elif (timestamp > self.timestamp):
-            self.commit_new_sample()
+            self._commit_sample()
             self.timestamp = timestamp
 
         price = record.price // 250_000_000
@@ -46,7 +47,7 @@ class SampleBuilder:
         self.high = max(self.high, price)
         self.low = min(self.low, price)
 
-    def commit_new_sample(self):
+    def _commit_sample(self):
         self.callout({
             'timestamp': self.timestamp,
             'volume': self.volume,
@@ -60,7 +61,10 @@ class SampleBuilder:
         self.low = sys.maxsize
 
     def close(self) -> None:
-        self.commit_new_sample()
+        """ closes the current session """
+        if self.volume > 0:
+            # sample already started
+            self._commit_sample()
 
 
 if __name__ == "__main__":
@@ -72,16 +76,21 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     for filename in args.files:
-        base_name = filename.removesuffix('.csv').removesuffix('_trades')
+        base_name = filename.removesuffix('.dbn').removesuffix('_trades')
         out_name = base_name + '_samples.csv'
 
         if args.verbose:
             print(f'{parser.prog}: converting file {filename} to {out_name}')
 
+        print(f'{parser.prog}: replaying file {filename}...', end='')
         data = db.DBNStore.from_file(filename)
         collector = SampleCollector()
         builder = SampleBuilder(collector.on_sample)
         data.replay(builder.on_trade)
         builder.close()
-        print(collector.samples)
+        print('done')
+
+        df = pd.DataFrame(collector.samples)
+        df.to_csv(out_name, index=False)
+        print(f'{parser.prog}: {len(df)} lines written to {out_name}')
 
