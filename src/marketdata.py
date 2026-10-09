@@ -292,28 +292,37 @@ if __name__ == "__main__":
     parser.add_argument("filename", help="name of file with samples (.csv) or databento trade records (.dbn)")
     parser.add_argument('-s', '--start', type=int, default=0, help='start offest (seconds) from where to begin')
     parser.add_argument('-d', '--duration', type=int, default=24*60*60, help='duration (seconds)')
-    parser.add_argument('-b', '--barsize', type=int, default=0, help='size of the bars to be create. if no bar size is specified, no bars will be create. Output are the samples.')
+    parser.add_argument('-b', '--barsize', type=int, help='size of the bars to be create. if no bar size is specified, no bars will be create. Output are the samples.')
     parser.add_argument('-o', '--outfile', type=str, help="name of file for the output. no output file means stdout")
     args = parser.parse_args()
 
     filepath = Path(args.filename)
     result = None
+    bar_builder = None if args.barsize is None else BarBuilder(args.barsize)
+
+    def process_sample(sample):
+        # if a new sample is available, it is send to the bar builder of taken over in the sample list
+        if sample is None:
+            return
+        if bar_builder is None:
+            samples.append(sample)
+        else:
+            bar_builder.on_new_sample(sample)
+
     if filepath.suffix == '.csv':
         # we generate bars from samples stored in file
-        if args.barsize is None:
+        if bar_builder is None:
             print(f'{parser.prog}: barsize must be specified when .csv file is given as input', file=sys.stderr)
             exit(1)
-        builder = BarBuilder(args.barsize)
         loader = SampleLoader()
-        loader.add_listener(builder)
+        loader.add_listener(bar_builder)
         loader.load_and_stream(args.filename)
-        result = builder.bars_in_data_frame()
+        result = bar_builder.bars_in_data_frame()
 
     elif filepath.suffix == '.dbn':
         # we start from the ground up...
         samples = []
         sample_builder = SampleBuilder()
-        bar_builder = None if args.barsize is None else BarBuilder(args.barsize)
 
         data = db.DBNStore.from_file(args.filename)
         start_timestamp = data.metadata.start + args.start * 10**9
@@ -323,23 +332,17 @@ if __name__ == "__main__":
                 continue
             if record.ts_event > end_timestamp:
                 break
-
-            sample = sample_builder.on_trade(record)
-            if sample is not None:
-                if bar_builder is not None:
-                    bar_builder.on_new_sample(sample)
-                else:
-                    samples.append(sample)
+            process_sample(sample_builder.on_trade(record))
         
         if sample_builder.is_sample_available:
             # there is an open sample that has to be finished...
-            sample = sample_builder.get_sample()
-            if bar_builder is not None:
-                bar_builder.on_new_sample(sample)
-                bar_builder.on_end_of_samples()
-                result = bar_builder.bars_in_data_frame()
-            else:
-                result = pd.DataFrame([sample.model_dump() for sample in samples])
+            process_sample(sample_builder.get_sample())
+
+        if bar_builder is None:
+            result = pd.DataFrame([sample.model_dump() for sample in samples])
+        else:
+            bar_builder.on_end_of_samples()
+            result = bar_builder.bars_in_data_frame()
     
     else:
         # unknown file extension
