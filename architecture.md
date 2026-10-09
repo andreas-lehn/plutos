@@ -51,20 +51,46 @@ graph LR
     end
 
     %% Der Hauptdatenfluss von links nach rechts
-    bento[Databento] --Websocket--> bot
-    bot --REST--> trade[Tradovate]
-    trade --Websocket--> bot
+    bento[Databento] --WSS--> bot
+    bot --REST--> trado[Tradovate]
+    trado --WSS--> bot
 ```
 
 ### Dynamic
 
 Für die HTTP/REST-Anfragen an unseren Webservice hat FastAPI bereits eine Task per Default.
 Um die Verbindungen zu den Nachbarsystemen herzustellen, 
-brauchen wir drei weitere Task:
+erzeugen wir für jede Verbindung einen Task,
+der sich exclusiv um diese Verdingund kümmert:
 
- 1. `DatabentoTask`: kümmert sich um die Kommunikation mit Databento
- 2. `TradovateREST`: Ein Task für die REST-Schnittstelle von Tradovate
- 3. `TradovateWSS`:  Ein weiterer Task für Tradovate, um die Websocket-Verbindung zu bedienen.
+ 1. `bento_task`: kümmert sich um die Kommunikation mit Databento
+ 2. `trado_rest_task`: Ein Task für die REST-Schnittstelle von Tradovate
+ 3. `trado_wss_task`:  Ein weiterer Task für Tradovate, um die Websocket-Verbindung zu bedienen.
+
+Für das Trading als solches werden wir einen `plutos_task` haben.
+Insgesamt ergibt sich dann folgende Task-Archtitektur:
+
+```mermaid
+graph LR
+    subgraph Render
+        subgraph Plutos
+            bento_task
+            trado_wss_task
+            trado_rest_task
+            plutos_task
+        end
+    end
+
+    %% Der Hauptdatenfluss von links nach rechts
+    bento[Databento] ---- bento_task
+    bento_task --- plutos_task
+    plutos_task --- trado_rest_task
+    plutos_task --- trado_wss_task
+    trado_rest_task ---- trado[Tradovate]
+    trado_wss_task ---- trado
+```
+
+Für jeden Task gibt es eine eigene Klasse: `BentoTask`, `PlutosTask`, `TradoWSSTask`, `TradoRESTTask`.
 
 
 ### Echtzeit-Dynamik: 1-sec-Takt
