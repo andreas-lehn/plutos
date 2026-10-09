@@ -55,7 +55,7 @@ df = df.groupby('timestamp').agg({
     'volume': 'sum',
     'price_volume': 'sum'
 })
-df['average'] = df['price_volume'] // df['volume']
+df['average'] = (df['price_volume'] / df['volume']).round().astype(int)
 df = df[['open', 'high', 'average', 'low', 'close', 'volume']]
 
 if args.outfile is not None:

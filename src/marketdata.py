@@ -136,7 +136,7 @@ class SampleBuilder:
             timestamp = self.timestamp,
             volume = self.volume,
             low = self.low,
-            average = self.volume_x_price // self.volume,
+            average = round(self.volume_x_price / self.volume),
             high = self.high,
             open = self.open,
             close = self.close
@@ -211,7 +211,7 @@ class BarBuilder:
         """Erstellt den finalen Balken, validiert ihn und benachrichtigt Observer."""
 
         bar_volume = self._current_bar_data['volume']
-        vwap = self._current_bar_data['price_volume_sum'] // bar_volume
+        vwap = round(self._current_bar_data['price_volume_sum'] / bar_volume)
         
         # Erstelle valides Bar-Modell
         self._current_bar_data['average'] = vwap
@@ -245,7 +245,7 @@ class BarBuilder:
         if sample.timestamp > self._current_bar_data['timestamp'] + self.bar_size - 1:
             # die aktuelle Kerze ist voll: Verschicken und neue beginnen...
             self._commit_current_bar()
-            self._start_new_bar(self._current_bar_data['timestamp'] + 1, sample) # das kann schief gehen!
+            self._start_new_bar(self._current_bar_data['timestamp'] + self.bar_size, sample) # das kann schief gehen!
             # wenn zwischen diesem und dem letzten Sample ganz viel Zeit vergangen ist,
             # dann kann es hier passieren, dass das Sample nicht in die neue Kerze gehört, sondern erst in einer der nächsten.
             # Das Sample wird dann hier einer falsche Kerze zugeordnet.
