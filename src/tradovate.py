@@ -6,7 +6,7 @@ import aiohttp
 import websockets
 import os
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 
 # Festgelegte Endpunkte (Demo)
 DEMO_URL = "https://demo.tradovateapi.com/v1"
@@ -48,29 +48,20 @@ async def get_access_token(name = None, password = None, sec = None, cid = None,
     raise Exception(f"authentication failed: {response.text}")
 
 
-def get_third_friday(year, month):
+def third_friday(year: int, month: int) -> datetime:
     """Ermittelt den 3. Freitag eines bestimmten Monats und Jahres."""
-    # Start am 1. des Monats
     first_day = datetime(year, month, 1)
-    # Wochentag des 1. Tages (0 = Montag, 4 = Freitag, 6 = Sonntag)
-    first_weekday = first_day.weekday()
-    
-    # Tage bis zum ersten Freitag berechnen
+    first_weekday = first_day.weekday() # Wochentag des 1. Tages (0 = Montag, 4 = Freitag, 6 = Sonntag)
     days_to_first_friday = (4 - first_weekday) % 7
-    first_friday = first_day + timedelta(days=days_to_first_friday)
-    
-    # Der 3. Freitag ist 2 Wochen nach dem ersten Freitag
-    third_friday = first_friday + timedelta(weeks=2)
-    return third_friday
+    return first_day + timedelta(days=(days_to_first_friday + 14))
 
 
-def get_active_symbol(symbol, target_date):
+def active_symbol(symbol: str, date: date):
     """
     Ermittelt automatisch das aktive Kontraktsymbol für ein gegebenes Datum.
-    Rollover findet am Donnerstag vor dem 3. Freitag im März, Juni, September und Dezember statt.
+    Rollover findet am Montag vor dem 3. Freitag im März, Juni, September und Dezember statt.
     """
-    year = target_date.year
-    year_suffix = str(year)[-1]  # Die letzte Ziffer des Jahres (z.B. '6' für 2026)
+    year = date.year
     
     # Definition der Kontraktmonate und deren Kürzel
     months_map = {3: 'H', 6: 'M', 9: 'U', 12: 'Z'}
@@ -78,33 +69,30 @@ def get_active_symbol(symbol, target_date):
     # Wir bestimmen die Rollover-Termine für das aktuelle Jahr
     rollovers = {}
     for m in [3, 6, 9, 12]:
-        third_friday = get_third_friday(year, m)
-        rollover_thursday = third_friday - timedelta(days=4)  # 4 Tage zurück, um den Montag vor dem 3. Freitag zu erhalten
-        rollovers[m] = rollover_thursday
+        rollover_day = third_friday(year, m) - timedelta(days=4)  # 4 Tage zurück, um den Montag vor dem 3. Freitag zu erhalten
+        rollovers[m] = rollover_day
         
     # Bestimme, in welchem Quartalsfenster wir uns befinden
-    # Wenn das Datum VOR dem März-Rollover liegt -> März-Kontrakt (H)
+    target_date = datetime(date.year, date.month, date.day)
     if target_date < rollovers[3]:
+        # Wenn das Datum VOR dem März-Rollover liegt -> März-Kontrakt (H)
         contract_code = 'H'
-        contract_year = year_suffix
-    # Zwischen März-Rollover und Juni-Rollover -> Juni-Kontrakt (M)
     elif target_date < rollovers[6]:
+        # Zwischen März-Rollover und Juni-Rollover -> Juni-Kontrakt (M)
         contract_code = 'M'
-        contract_year = year_suffix
-    # Zwischen Juni-Rollover und September-Rollover -> September-Kontrakt (U)
     elif target_date < rollovers[9]:
+        # Zwischen Juni-Rollover und September-Rollover -> September-Kontrakt (U)
         contract_code = 'U'
-        contract_year = year_suffix
-    # Zwischen September-Rollover und Dezember-Rollover -> Dezember-Kontrakt (Z)
     elif target_date < rollovers[12]:
+        # Zwischen September-Rollover und Dezember-Rollover -> Dezember-Kontrakt (Z)
         contract_code = 'Z'
-        contract_year = year_suffix
-    # Nach dem Dezember-Rollover -> März-Kontrakt des NÄCHSTEN Jahres (H)
     else:
+        # Nach dem Dezember-Rollover -> März-Kontrakt des NÄCHSTEN Jahres (H)
         contract_code = 'H'
-        contract_year = str(year + 1)[-1]
-    
-    return f"{symbol.upper()}{contract_code}{contract_year}"
+        year += 1
+
+    return f"{symbol.upper()}{contract_code}{str(year)[-1]}"
+
 
 class TradovateAPI:
     def __init__(self, username, password, app_id, app_version, is_demo=True):

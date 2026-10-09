@@ -1,6 +1,6 @@
 import argparse
 import os
-from marketdata import BarLoader
+from marketdata import BarBuilder, SampleLoader
 from trader import KentBeckTrader, Trade, Statistics
 import pandas as pd
 from typing import List, Dict, Iterator, Tuple, Protocol
@@ -26,14 +26,15 @@ def pathname(date: str = DATE, bar: str = BAR_SIZE, symbol: str = SYMBOL) -> str
 def run(files: str | List[str], filter_constant: float = 0.5, slope_threshold: float = 0.001, margin: float = 1.0) -> List[Trade] | List[Statistics]:
     if isinstance(files, str) or isinstance(files, Path):
         trader = KentBeckTrader(filter_constant, slope_threshold, margin)
-        loader = BarLoader()
-        loader.add_listener(trader)
+        loader = SampleLoader()
+        builder = BarBuilder(60)
+        builder.add_listener(trader)
+        loader.add_listener(builder)
         loader.load_and_stream(files)
         return trader.trades
 
     stats = []
     for file in files:
-        print(file, end='\r', flush=True)
         trades = run(file, filter_constant, slope_threshold, margin)
         stats.append(Statistics.from_trades(trades))
     return stats
@@ -64,7 +65,7 @@ if __name__ == "__main__":
     strcols = formatter.get_strcols()
     w = [max(len(zeile) for zeile in spalte) for spalte in strcols]
     w_total = sum(w) + (len(w) - 1)
-    text = (f' ', f'{total:.2f}', f'{trades}', f'{win_rate:.2f}', f'{profit_factor:.2f}', f'{max_win:.2f}', f'{max_loss:.2f}')
+    text = (f' ', f'{total/4:.2f}', f'{trades}', f'{win_rate:.2f}', f'{profit_factor:.2f}', f'{max_win/4:.2f}', f'{max_loss/4:.2f}')
     for t, w in zip(text, w):
         print(f'{t:>{w}} ', end='')
     print()
