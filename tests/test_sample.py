@@ -24,6 +24,3 @@ def test_from_csv(csv_path):
     assert samples[7].high == 122667
     assert samples[8].open == 122662
     assert samples[9] == None
-
-if __name__ == '__main__':
-    unittest.main()

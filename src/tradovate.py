@@ -18,20 +18,12 @@ async def get_access_token(name = None, password = None, sec = None, cid = None,
     """Authenticate by REST-API and retrieve the access token."""
     if (name is None):
         name = os.getenv("TRADOVATE_NAME")
-        if name is None:
-            raise Exception("TRADOVATE_NAME environment variable is not set.")
     if (password is None):
         password = os.getenv("TRADOVATE_PASSWORD")
-        if password is None:
-            raise Exception("TRADOVATE_PASSWORD environment variable is not set.")
     if (sec is None):
         sec = os.getenv("TRADOVATE_SEC")
-        if sec is None:
-            raise Exception("TRADOVATE_SEC environment variable is not set.")
     if (cid is None):
         cid = os.getenv("TRADOVATE_CID")
-        if cid is None:
-            raise Exception("TRADOVATE_CID environment variable is not set.")
     payload = {
         "name": name,
         "password": password,
@@ -136,9 +128,6 @@ class TradovateAPI:
 
     async def connect_websocket(self):
         """Herstellt die WebSocket-Verbindung und autorisiert diese mit dem Token."""
-        if not self.token:
-            raise Exception("Bitte zuerst am() aufrufen, um ein Token zu generieren.")
-            
         print(f"[*] Verbinde mit WebSocket: {self.ws_url}")
         self.websocket = await websockets.connect(self.ws_url)
         

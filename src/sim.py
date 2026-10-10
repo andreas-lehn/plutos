@@ -67,6 +67,6 @@ if __name__ == "__main__":
     w = [max(len(zeile) for zeile in spalte) for spalte in strcols]
     w_total = sum(w) + (len(w) - 1)
     text = (' ', f'{total/4:.2f}', f'{trades}', f'{win_rate:.2f}', f'{profit_factor:.2f}', f'{max_win/4:.2f}', f'{max_loss/4:.2f}')
-    for t, w in zip(text, w):
-        print(f'{t:>{w}} ', end='')
+    for t, x in zip(text, w):
+        print(f'{t:>{x}} ', end='')
     print()
