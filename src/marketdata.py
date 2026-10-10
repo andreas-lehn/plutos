@@ -9,21 +9,145 @@ import csv
 import pandas as pd
 import databento as db
 from pydantic import BaseModel
-from typing import List, Dict, Iterator, Tuple, Protocol
+from typing import List, Dict, Iterator, Tuple, Protocol, Iterable
+
+class Histogram:
+    """ histogram of prices """
+
+    def __init__(self, low: int, values: Iterable):
+        if not isinstance(low, int):
+            raise TypeError(f"__init__() argument 'low' must be int, not {type(low).__name__}")
+        if not isinstance(values, Iterable):
+            raise TypeError(f"__init__() argument 'values' must be an iterable, not {type(values).__name__}")
+
+        self._low = low
+        self._values = [Histogram._validate_int(value, "__init__() values in 'values'") for value in values]
+        self._volume = 0
+        self._price_volume = 0
+        for p, v in enumerate(self._values):
+            self._volume += v
+            self._price_volume += (self._low + p) * v
+
+    @property
+    def low(self):
+        return self._low
+
+    @property
+    def high(self):
+        return self._low + len(self._values) - 1
+
+    @property
+    def volume(self):
+        return self._volume
+
+    @property
+    def average(self):
+        return round(self._price_volume / self.volume)
+
+    def merge(self, other):
+        if not isinstance(other, Histogram):
+            raise TypeError(f"merge(other) argument 'other' must be a Histogram, not {type(other).__name__}")
+
+        self._volume += other.volume
+        self._price_volume += other._price_volume
+
+        low = min(self.low, other.low)
+        high = max(self.high, other.high)
+        self._values = [self[i] + other[i] for i in range(low, high + 1)]
+        self._low = low
+        return self
+
+    def __getitem__(self, index: int) -> int:
+        if index < self.low or index > self.high:
+            return 0
+        return self._values[index - self._low]
+
+    def __setitem__(self, index: int, value: int):
+        Histogram._validate_int(value, '__setitem__(): value')
+        if index < self.low or index > self.high:
+            raise IndexError('Histogram: index out of range')
+        if value < 0:
+            raise ValueError('__setitem__(): value must not be negative')
+        
+        delta = value - self._values[index - self._low]
+        self._volume += delta
+        self._price_volume += index * delta
+        self._values[index - self._low] = value
+
+    def __delitem__(self, index):
+        raise TypeError("'Histogram' object does not support item deletion ")        
+
+    def __iter__(self):
+        for i, v in enumerate(self._values):
+            if v > 0:
+                yield i + self._low, v
+
+    def __add__(self, other):
+        if isinstance(other, Histogram):
+            histo = Histogram(self.low, self._values)
+            return histo.merge(other)
+        return NotImplemented
+
+    def __iadd__(self, other):
+        if isinstance(other, Histogram):
+            return self.merge(other)
+        return NotImplemented
+
+    def _eval(base: int, histo: List[int]) -> (int, int):
+        """ computes volume and price volu"""
+        return volume, price_volume
+
+    def _histo_value(low: int, histo: List[int], i) -> int:
+        return 0 if (i < low) or i > (low + len(histo) - 1) else histo[i - low]
+
+    def _validate_int(value, text: str) -> int:
+        if not isinstance(value,int):
+            raise TypeError(f"{text} must be int, not {type(value).__name__}")
+        if value < 0:
+            raise ValueError(f"{text} must be >= 0")
+        return value
 
 
 class Sample(BaseModel):
     """ Kapselt die Daten eines Samples """
 
-    timestamp: int
     open: int
     high: int
-    average: int
     low: int
     close: int
-    volume: int
+    histo: List[int]
 
+    def volume(self, price: int) -> int:
+        if price < self.low or price > self.high:
+            return 0
+        return self.histo[price - self.low]
 
+    def list_volumes(self):
+        for i in range(self.low, self.high + 1):
+            print(f'{i/4:8.2f} {self.volume(i):4d}')
+    
+    def from_dbn(filename: str, start: int = 0, duration: int = sys.maxsize) -> []:
+        samples = []
+        sample_builder = SampleBuilder()
+
+        data = db.DBNStore.from_file(filename)
+        start_timestamp = data.metadata.start + start * 10**9
+        end_timestamp = start_timestamp + duration * 10**9
+        for record in data:
+            if record.ts_event < start_timestamp:
+                continue
+            if record.ts_event > end_timestamp:
+                break
+            sample = sample_builder.on_trade(record)
+            if sample:
+                samples.append(sample)
+
+        if sample_builder.is_sample_available:
+            samples.append(sample_builder.get_sample())
+
+        return samples
+
+    
 class SampleListener(Protocol):
 
     def on_new_sample(self, sample: Sample) -> None:
@@ -82,14 +206,12 @@ class SampleBuilder:
 
     def __init__(self):
         self.timestamp_offset: int = 0
-        self.volume: int = 0
-        self.volume_x_price: int = 0
+        self.histo: Dict[int, int] = {}
         self.high: int = 0
         self.low: int = sys.maxsize
         self.open: int = None
         self.close: int = None
         self.timestamp: int = None
-        self.hour = 0
 
     def on_trade(self, record: db.DBNRecord) -> Dict:
         """ process a databento trade record """
@@ -123,8 +245,7 @@ class SampleBuilder:
             self.timestamp = timestamp
             self.open = price
 
-        self.volume_x_price += volume * price
-        self.volume += volume
+        self.histo[price] = volume + self.histo.get(price, 0)
         self.high = max(self.high, price)
         self.low = min(self.low, price)
         self.close = price
@@ -133,35 +254,124 @@ class SampleBuilder:
 
     def get_sample(self) -> dict:
         sample = Sample(
-            timestamp = self.timestamp,
-            volume = self.volume,
             low = self.low,
-            average = round(self.volume_x_price / self.volume),
             high = self.high,
             open = self.open,
-            close = self.close
+            close = self.close,
+            histo = [self.histo.get(i, 0) for i in range(self.low, self.high + 1)],
         )
-        self.volume = 0
-        self.volume_x_price = 0
+            
+        self.volume = {}
         self.high = 0
         self.low = sys.maxsize
         return sample
 
     @property
     def is_sample_available(self) -> bool:
-        return self.volume > 0
+        return len(self.histo) > 0
 
 
 class Bar(BaseModel):
     """ Kapselt die Daten einer fertigen Kerze """
 
-    timestamp: int
     open: int
     high: int
     average: int
     low: int
     close: int
     volume: int
+    price_volume: int
+    histo: List[int]
+
+    def volume_at_price(self, price: int) -> int:
+        if price < self.low or price > self.high:
+            return 0
+        return self.histo[price - self.low]
+
+
+    def _eval_histo(base: int, histo: List[int]) -> (int, int):
+        volume = 0
+        price_volume = 0
+        for i in range(0, len(histo)):
+            v = histo[i]
+            volume += v
+            price_volume = (base + i) * v
+        return volume, price_volume
+
+
+    def _histo_value(low: int, histo: List[int], i) -> int:
+        return 0 if (i < low) or i > (low + len(histo) - 1) else histo[i - low]
+
+            
+    def _combine_histo(low1: int, histo1: List[int], low2: int, histo2: int) -> (int, List[int]):
+        """ combines to histogram into a single """
+        low = min(low1, low2)
+        high = max(low1 + len(histo1), low2 + len(histo2))
+        histo = []
+        for i in range(low, high):
+            value = Bar._histo_value(low1, histo1, i) + Bar._histo_value(low2, histo2, i)
+            histo.append(value)
+        return low, histo
+
+    
+    def __init__(self, obj):
+        """ construct a new bar from another bar or a sample """
+        if isinstance(obj, Sample):
+            volume, price_volume = Bar._eval_histo(obj.low, obj.histo)
+            super().__init__(
+                open = obj.open,
+                high = obj.high,
+                average = round(price_volume / volume),
+                volume = volume,
+                price_volume = price_volume,
+                low = obj.low,
+                close = obj.close,
+                histo = obj.histo, # no copy needed, because histo of sample will never be changed.
+            )
+        elif isinstance(obj, Bar):
+            super().__init__(
+                open = obj.open,
+                high = obj.high,
+                average = obj.average,
+                volume = obj.volume,
+                price_volume = obj.price_volume,
+                low = obj.low,
+                close = obj.close,
+                histo = obj.histo.copy() # copy needed, because histo changes when other object are merged
+            )
+        else:
+            raise TypeError('Sample or Bar expected')
+
+    def to_dict(self) -> Dict:
+        return {
+            'open': self.open,
+            'high': self.high,
+            'low': self.low,
+            'close': self.close,
+            'histo': self.histo,
+        }
+    
+    def merge(self, other):
+        if isinstance(other, Sample):
+            other = Bar(other)
+        if isinstance(other, Bar):
+            self.high = max(self.high, other.high)
+            self.volume += other.volume
+            self.price_volume += other.price_volume
+            self.average = round(self.price_volume / self.volume)
+            self.close = other.close
+            self.low, self.histo = Bar._combine_histo(self.low, self.histo, other.low, other.histo)
+        else:
+            return NotImplemented
+
+        
+    def __add__(self, other):
+        return Bar(self).merge(other)
+
+
+    def __iadd__(self, other):
+        self.merge(other)
+
 
 
 class BarListener(Protocol):
@@ -176,12 +386,13 @@ class BarListener(Protocol):
 
 
 class BarBuilder:
-    """ Empfängt Trades und konstruiert daraus Bars. """
+    """ Empfängt Samples und konstruiert daraus Bars. """
     
     def __init__(self, bar_size: int):
-        self.bar_size = bar_size 
+        self.BAR_SIZE = bar_size 
         self.bars: List[Bar] = []
-        self._current_bar_data: Dict = {}
+        self._current_bar: Bar = None
+        self._current_size = 0
         self._bar_listeners: List[BarListener] = []
 
 
@@ -209,79 +420,41 @@ class BarBuilder:
 
     def _commit_current_bar(self):
         """Erstellt den finalen Balken, validiert ihn und benachrichtigt Observer."""
-
-        bar_volume = self._current_bar_data['volume']
-        vwap = round(self._current_bar_data['price_volume_sum'] / bar_volume)
-        
-        # Erstelle valides Bar-Modell
-        self._current_bar_data['average'] = vwap
-        del self._current_bar_data['price_volume_sum']  # Hilfsfeld entfernen
-        
-        new_bar = Bar(**self._current_bar_data)
+        new_bar = self._current_bar
         self.bars.append(new_bar)
+        self._current_bar = None
+        self._current_size = 0
         self._notify_new_bar(new_bar)
-
-
-    def _start_new_bar(self, timestamp: int, sample: Sample) -> None:
-        self._current_bar_data = {
-            'timestamp': timestamp,
-            'open': sample.open,
-            'high': sample.high,
-            'low': sample.low,
-            'close': sample.close,
-            'volume': sample.volume,
-            'price_volume_sum': sample.average * sample.volume
-        }
 
 
     def on_new_sample(self, sample: Sample) -> None:
         """Verarbeitet einen neues sample und entscheidet, ob ein Balken fertig ist."""
 
-        if not self._current_bar_data:
-            # Die allererste Kerze wird erstellt...
-            self._start_new_bar(sample.timestamp // 30, sample)
-            return
-        
-        if sample.timestamp > self._current_bar_data['timestamp'] + self.bar_size - 1:
-            # die aktuelle Kerze ist voll: Verschicken und neue beginnen...
+        if self._current_bar:
+            self._current_bar.merge(sample)
+        else:
+            self._current_bar = Bar(sample)
+
+        self._current_size += 1
+        if self._current_size >= self.BAR_SIZE:
             self._commit_current_bar()
-            self._start_new_bar(self._current_bar_data['timestamp'] + self.bar_size, sample) # das kann schief gehen!
-            # wenn zwischen diesem und dem letzten Sample ganz viel Zeit vergangen ist,
-            # dann kann es hier passieren, dass das Sample nicht in die neue Kerze gehört, sondern erst in einer der nächsten.
-            # Das Sample wird dann hier einer falsche Kerze zugeordnet.
-            # In der Praxis wird dieser Fall aller wahrscheinlichkeit niemals auftreten.
-            # Deahlag keine Gegenmaßnahme. Die unzulänglichkeit kann im Code enthalten bleiben.
-            return
-        
-        # Auf die bestehende Kerze aufakkumulieren...
-        self._current_bar_data.update({
-            'volume': self._current_bar_data['volume'] + sample.volume,
-            'price_volume_sum': self._current_bar_data['price_volume_sum'] + (sample.average * sample.volume),
-            'high': max(self._current_bar_data['high'], sample.high),
-            'low': min(self._current_bar_data['low'], sample.low),
-            'close': sample.close,
-        })
 
 
     def on_end_of_samples(self) -> None:
         """ Sichert, dass der letzte angefangene Balken beim Stream-Ende verschickt wird """
-        self._commit_current_bar()
+        if self._current_bar:
+            self._commit_current_bar()
 
 
     # --- Container-Protokoll (Klasse verhält sich wie eine Python-Liste) ---
     def __len__(self) -> int:
-        return len(self.volume_bars)
-
+        return len(self.bars)
 
     def __getitem__(self, index: int) -> Bar:
-        return self.volume_bars[index]
-
+        return self.bars[index]
 
     def __iter__(self) -> Iterator[Bar]:
-        return iter(self.volume_bars)
-
-    def bars_in_data_frame(self) -> pd.DataFrame:
-        return pd.DataFrame([bar.model_dump() for bar in self.bars])
+        return iter(self.bars)
 
 
 if __name__ == "__main__":
@@ -317,7 +490,7 @@ if __name__ == "__main__":
         loader = SampleLoader()
         loader.add_listener(bar_builder)
         loader.load_and_stream(args.filename)
-        result = bar_builder.bars_in_data_frame()
+        result = pd.DataFrame([bar.to_dict() for bar in bar_builder])
 
     elif filepath.suffix == '.dbn':
         # we start from the ground up...
@@ -342,7 +515,7 @@ if __name__ == "__main__":
             result = pd.DataFrame([sample.model_dump() for sample in samples])
         else:
             bar_builder.on_end_of_samples()
-            result = bar_builder.bars_in_data_frame()
+            result = pd.DataFrame([bar.to_dict() for bar in bar_builder])
     
     else:
         # unknown file extension
