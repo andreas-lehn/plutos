@@ -1,0 +1,6 @@
+[tool.pytest.ini_options]
+# Definiert den Suchpfad für deine Source-Dateien (ersetzt das -o pythonpath=src)
+pythonpath = ["src"]
+
+# Packt deine Coverage-Befehle und die ausführliche Anzeige (-v) direkt in den Standard-Lauf
+addopts = "-v --cov=src --cov-report=term-missing --cov-report=xml"
