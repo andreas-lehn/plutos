@@ -15,9 +15,8 @@ from marketdata import Histogram
 # 122654,122667,122654,122667,"[20, 10, 8, 6, 5, 28, 11, 12, 10, 11, 7, 27, 15, 10]"
 # 122662,122671,122662,122669,"[11, 11, 8, 28, 17, 10, 4, 8, 8, 3]"
 
+
 class TestHistogram(unittest.TestCase):
-
-
     def test_init_and_access(self):
         histo = Histogram(122659, [12, 8, 5, 3, 7, 6, 15, 6, 3, 1, 2, 3, 1, 2, 1, 0, 1])
         self.assertEqual(histo.low, 122659)
@@ -52,7 +51,7 @@ class TestHistogram(unittest.TestCase):
     def test_iterator(self):
         obj = Histogram(5, [10, 0, 20])
         ergebnis = list(obj)  # Macht aus dem Generator wieder eine Liste von Paaren
-        
+
         # Erwartet werden Paare aus (Index, Wert)
         selbst_erwartet = [(5, 10), (7, 20)]
         self.assertEqual(ergebnis, selbst_erwartet)
@@ -64,7 +63,7 @@ class TestHistogram(unittest.TestCase):
 
     def test_addition(self):
         a = Histogram(1, [1, 2, 3, 4])
-        b = Histogram(3,       [2, 1, 4, 3])
+        b = Histogram(3, [2, 1, 4, 3])
         c = a + b
 
         self.assertEqual(list(c), [(1, 1), (2, 2), (3, 5), (4, 5), (5, 4), (6, 3)])
@@ -74,25 +73,25 @@ class TestHistogram(unittest.TestCase):
 
     def test_iadd(self):
         a = Histogram(1, [1, 2, 3, 4])
-        b = Histogram(3,       [2, 1, 4, 3])
+        b = Histogram(3, [2, 1, 4, 3])
         c = a + b
         a += b
         self.assertEqual(a._values, c._values)
         self.assertEqual(list(b), [(3, 2), (4, 1), (5, 4), (6, 3)])
 
     def test_volume(self):
-        a = Histogram(1,[1, 2, 3, 4])
+        a = Histogram(1, [1, 2, 3, 4])
 
         self.assertEqual(a.volume, 10)
         a[1] = 0
         self.assertEqual(a.volume, 9)
 
-        b = Histogram(2,[4, 6])
+        b = Histogram(2, [4, 6])
         a.merge(b)
         self.assertEqual(a.volume, 19)
 
     def test_average(self):
-        a = Histogram(2,[2, 3, 1])
+        a = Histogram(2, [2, 3, 1])
         self.assertEqual(a.average, 3)
 
         a[4] = 0
@@ -104,5 +103,5 @@ class TestHistogram(unittest.TestCase):
 
 
 # Dieser Block sorgt dafür, dass die Tests starten, wenn man die Datei direkt ausführt
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

@@ -6,12 +6,14 @@ from marketdata import Sample
 
 
 @pytest.fixture
-def csv_path():    
-    return Path(__file__).resolve().parent/'test_samples.csv'
+def csv_path():
+    return Path(__file__).resolve().parent / "test_samples.csv"
+
 
 @pytest.fixture
 def dbn_path():
-    return Path(__file__).resolve().parent/'test_trades.dbn'
+    return Path(__file__).resolve().parent / "test_trades.dbn"
+
 
 def test_from_csv_stream(csv_path):
     samples = []
@@ -28,6 +30,7 @@ def test_from_csv_stream(csv_path):
     assert samples[8].open == 122662
     assert samples[9] == None
 
+
 def test_from_dbn(dbn_path):
     all_samples = Sample.from_dbn(dbn_path)
     assert len(all_samples) == 60
@@ -41,6 +44,7 @@ def test_from_dbn(dbn_path):
     assert len(duration_10_samples) == 10
     assert duration_10_samples[0].open == all_samples[0].open
     assert duration_10_samples[9].close == all_samples[9].close
+
 
 def test_from_dbn_stream(dbn_path):
     samples = []

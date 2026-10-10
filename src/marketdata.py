@@ -1,6 +1,6 @@
 """
 Modul: MarketData
-Verantwortlich für die Verarbeitung, Kapselung und den Aufbau von 
+Verantwortlich für die Verarbeitung, Kapselung und den Aufbau von
 Marktdatenstrukturen (Volumenbalken, Histogramme) aus einem Tick-Datenstrom.
 """
 
@@ -11,14 +11,13 @@ from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Protocol
 
+import databento as db
 import pandas as pd
 from pydantic import BaseModel
 
-import databento as db
-
 
 class Histogram:
-    """ histogram of prices """
+    """histogram of prices"""
 
     def __init__(self, low: int, values: Iterable):
         if not isinstance(low, int):
@@ -69,19 +68,19 @@ class Histogram:
         return self._values[index - self._low]
 
     def __setitem__(self, index: int, value: int):
-        Histogram._validate_int(value, '__setitem__(): value')
+        Histogram._validate_int(value, "__setitem__(): value")
         if index < self.low or index > self.high:
-            raise IndexError('Histogram: index out of range')
+            raise IndexError("Histogram: index out of range")
         if value < 0:
-            raise ValueError('__setitem__(): value must not be negative')
-        
+            raise ValueError("__setitem__(): value must not be negative")
+
         delta = value - self._values[index - self._low]
         self._volume += delta
         self._price_volume += index * delta
         self._values[index - self._low] = value
 
     def __delitem__(self, index):
-        raise TypeError("'Histogram' object does not support item deletion ")        
+        raise TypeError("'Histogram' object does not support item deletion ")
 
     def __iter__(self):
         for i, v in enumerate(self._values):
@@ -99,15 +98,11 @@ class Histogram:
             return self.merge(other)
         return NotImplemented
 
-    def _eval(base: int, histo: list[int]) -> (int, int):
-        """ computes volume and price volu"""
-        return volume, price_volume
-
     def _histo_value(low: int, histo: list[int], i) -> int:
         return 0 if (i < low) or i > (low + len(histo) - 1) else histo[i - low]
 
     def _validate_int(value, text: str) -> int:
-        if not isinstance(value,int):
+        if not isinstance(value, int):
             raise TypeError(f"{text} must be int, not {type(value).__name__}")
         if value < 0:
             raise ValueError(f"{text} must be >= 0")
@@ -115,29 +110,29 @@ class Histogram:
 
 
 class Sample(BaseModel):
-    """ Kapselt die Daten eines Samples """
+    """Kapselt die Daten eines Samples"""
 
     open: int
     high: int
     low: int
     close: int
     histo: list[int]
-    
+
     def from_csv_stream(csv_path: str | Path, callback: callable):
-        """ Öffnet die CSV-Datei und streamt sie Zeile für Zeile. """        
-        with open(csv_path, mode='r', newline='') as file:
-            reader = csv.DictReader(file, fieldnames=['open', 'high', 'low', 'close', 'histo'])
+        """Öffnet die CSV-Datei und streamt sie Zeile für Zeile."""
+        with open(csv_path, mode="r", newline="") as file:
+            reader = csv.DictReader(file, fieldnames=["open", "high", "low", "close", "histo"])
             next(reader)
             for row in reader:
                 sample = Sample(
-                    open=int(row['open']),
-                    high=int(row['high']),
-                    low=int(row['low']),
-                    close=int(row['close']),
-                    histo=ast.literal_eval(row['histo']),
+                    open=int(row["open"]),
+                    high=int(row["high"]),
+                    low=int(row["low"]),
+                    close=int(row["close"]),
+                    histo=ast.literal_eval(row["histo"]),
                 )
                 callback(sample)
-            callback(None) # end of file marker
+            callback(None)  # end of file marker
 
     def from_dbn(filename: str, start: int = 0, duration: int = sys.maxsize) -> list:
         samples = []
@@ -164,7 +159,7 @@ class Sample(BaseModel):
 
 
 class SampleBuilder:
-    """ builds 1 sec samples from databento trade records """
+    """builds 1 sec samples from databento trade records"""
 
     def __init__(self):
         self.timestamp_offset: int = 0
@@ -176,8 +171,8 @@ class SampleBuilder:
         self.timestamp: int = None
 
     def on_trade(self, record: db.DBNRecord) -> dict:
-        """ process a databento trade record """
-        
+        """process a databento trade record"""
+
         price = record.price // 250_000_000
         volume = record.size
         timestamp = record.ts_event // 1_000_000_000 - self.timestamp_offset
@@ -191,7 +186,7 @@ class SampleBuilder:
             timestamp = 0
             self.timestamp = 0
             self.open = price
-        elif (timestamp > self.timestamp):
+        elif timestamp > self.timestamp:
             # sample is ready to be delivered...
             sample = self.get_sample()
             # wir schicken das aktuelle sample erst ab, wenn ein neuer trade da ist.
@@ -213,16 +208,14 @@ class SampleBuilder:
         self.close = price
         return sample
 
-
     def get_sample(self) -> dict:
         sample = Sample(
-            low = self.low,
-            high = self.high,
-            open = self.open,
-            close = self.close,
-            histo = [self.histo.get(i, 0) for i in range(self.low, self.high + 1)],
+            low=self.low,
+            high=self.high,
+            open=self.open,
+            close=self.close,
+            histo=[self.histo.get(i, 0) for i in range(self.low, self.high + 1)],
         )
-            
         self.volume = {}
         self.high = 0
         self.low = sys.maxsize
@@ -234,7 +227,7 @@ class SampleBuilder:
 
 
 class Bar(BaseModel):
-    """ Kapselt die Daten einer fertigen Kerze """
+    """Kapselt die Daten einer fertigen Kerze"""
 
     open: int
     high: int
@@ -250,7 +243,6 @@ class Bar(BaseModel):
             return 0
         return self.histo[price - self.low]
 
-
     def _eval_histo(base: int, histo: list[int]) -> (int, int):
         volume = 0
         price_volume = 0
@@ -260,13 +252,11 @@ class Bar(BaseModel):
             price_volume = (base + i) * v
         return volume, price_volume
 
-
     def _histo_value(low: int, histo: list[int], i) -> int:
         return 0 if (i < low) or i > (low + len(histo) - 1) else histo[i - low]
 
-            
     def _combine_histo(low1: int, histo1: list[int], low2: int, histo2: int) -> (int, list[int]):
-        """ combines to histogram into a single """
+        """combines to histogram into a single"""
         low = min(low1, low2)
         high = max(low1 + len(histo1), low2 + len(histo2))
         histo = []
@@ -275,44 +265,43 @@ class Bar(BaseModel):
             histo.append(value)
         return low, histo
 
-    
     def __init__(self, obj):
-        """ construct a new bar from another bar or a sample """
+        """construct a new bar from another bar or a sample"""
         if isinstance(obj, Sample):
             volume, price_volume = Bar._eval_histo(obj.low, obj.histo)
             super().__init__(
-                open = obj.open,
-                high = obj.high,
-                average = round(price_volume / volume),
-                volume = volume,
-                price_volume = price_volume,
-                low = obj.low,
-                close = obj.close,
-                histo = obj.histo, # no copy needed, because histo of sample will never be changed.
+                open=obj.open,
+                high=obj.high,
+                average=round(price_volume / volume),
+                volume=volume,
+                price_volume=price_volume,
+                low=obj.low,
+                close=obj.close,
+                histo=obj.histo,  # no copy needed, because histo of sample will never be changed.
             )
         elif isinstance(obj, Bar):
             super().__init__(
-                open = obj.open,
-                high = obj.high,
-                average = obj.average,
-                volume = obj.volume,
-                price_volume = obj.price_volume,
-                low = obj.low,
-                close = obj.close,
-                histo = obj.histo.copy() # copy needed, because histo changes when other object are merged
+                open=obj.open,
+                high=obj.high,
+                average=obj.average,
+                volume=obj.volume,
+                price_volume=obj.price_volume,
+                low=obj.low,
+                close=obj.close,
+                histo=obj.histo.copy(),  # copy needed, because histo changes when other object are merged
             )
         else:
-            raise TypeError('Sample or Bar expected')
+            raise TypeError("Sample or Bar expected")
 
     def to_dict(self) -> dict:
         return {
-            'open': self.open,
-            'high': self.high,
-            'low': self.low,
-            'close': self.close,
-            'histo': self.histo,
+            "open": self.open,
+            "high": self.high,
+            "low": self.low,
+            "close": self.close,
+            "histo": self.histo,
         }
-    
+
     def merge(self, other):
         if isinstance(other, Sample):
             other = Bar(other)
@@ -326,18 +315,16 @@ class Bar(BaseModel):
         else:
             return NotImplemented
 
-        
     def __add__(self, other):
         return Bar(self).merge(other)
-
 
     def __iadd__(self, other):
         self.merge(other)
 
 
-
 class BarListener(Protocol):
     """Schnittstelle für Observer, die auf fertige Volumenbalken reagieren."""
+
     def on_new_bar(self, bar: Bar) -> None:
         """Wird aufgerufen, sobald ein neuer Volumenbalken fertiggestellt wurde."""
         ...
@@ -348,37 +335,32 @@ class BarListener(Protocol):
 
 
 class BarBuilder:
-    """ Empfängt Samples und konstruiert daraus Bars. """
-    
+    """Empfängt Samples und konstruiert daraus Bars."""
+
     def __init__(self, bar_size: int):
-        self.BAR_SIZE = bar_size 
+        self.BAR_SIZE = bar_size
         self.bars: list[Bar] = []
         self._current_bar: Bar = None
         self._current_size = 0
         self._bar_listeners: list[BarListener] = []
-
 
     def add_listener(self, listener: BarListener):
         """Registriert einen Trader/Bot für die fertigen Balken."""
         if listener not in self._bar_listeners:
             self._bar_listeners.append(listener)
 
-
     def remove_listener(self, listener: BarListener):
         """Entfernt einen registrierten Bar-Listener."""
         if listener in self._bar_listeners:
             self._bar_listeners.remove(listener)
 
-
     def _notify_new_bar(self, bar: Bar):
         for listener in self._bar_listeners:
             listener.on_new_bar(bar)
 
-
     def _notify_end_of_bars(self):
         for listener in self._bar_listeners:
             listener.on_end_of_bars()
-
 
     def _commit_current_bar(self):
         """Erstellt den finalen Balken, validiert ihn und benachrichtigt Observer."""
@@ -387,7 +369,6 @@ class BarBuilder:
         self._current_bar = None
         self._current_size = 0
         self._notify_new_bar(new_bar)
-
 
     def on_new_sample(self, sample: Sample) -> None:
         """Verarbeitet einen neues sample und entscheidet, ob ein Balken fertig ist."""
@@ -401,12 +382,10 @@ class BarBuilder:
         if self._current_size >= self.BAR_SIZE:
             self._commit_current_bar()
 
-
     def on_end_of_samples(self) -> None:
-        """ Sichert, dass der letzte angefangene Balken beim Stream-Ende verschickt wird """
+        """Sichert, dass der letzte angefangene Balken beim Stream-Ende verschickt wird"""
         if self._current_bar:
             self._commit_current_bar()
-
 
     # --- Container-Protokoll (Klasse verhält sich wie eine Python-Liste) ---
     def __len__(self) -> int:
@@ -425,10 +404,10 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="creates samples or bar out of sample or databento files.")
     parser.add_argument("filename", help="name of file with samples (.csv) or databento trade records (.dbn)")
-    parser.add_argument('-s', '--start', type=int, default=0, help='start offest (seconds) from where to begin')
-    parser.add_argument('-d', '--duration', type=int, default=24*60*60, help='duration (seconds)')
-    parser.add_argument('-b', '--barsize', type=int, help='size of the bars to be create. if no bar size is specified, no bars will be create. Output are the samples.')
-    parser.add_argument('-o', '--outfile', type=str, help="name of file for the output. no output file means stdout")
+    parser.add_argument("-s", "--start", type=int, default=0, help="start offest (seconds) from where to begin")
+    parser.add_argument("-d", "--duration", type=int, default=24 * 60 * 60, help="duration (seconds)")
+    parser.add_argument("-b", "--barsize", type=int, help="size of the bars or no bars, if bar size is missing")
+    parser.add_argument("-o", "--outfile", type=str, help="name of file for the output. no output file means stdout")
     args = parser.parse_args()
 
     filepath = Path(args.filename)
@@ -444,17 +423,20 @@ if __name__ == "__main__":
         else:
             bar_builder.on_new_sample(sample)
 
-    if filepath.suffix == '.csv':
+    if filepath.suffix == ".csv":
         # we generate bars from samples stored in file
         if bar_builder is None:
-            print(f'{parser.prog}: barsize must be specified when .csv file is given as input', file=sys.stderr)
+            print(
+                f"{parser.prog}: barsize must be specified when .csv file is given as input",
+                file=sys.stderr,
+            )
             sys.exit(1)
         loader = SampleLoader()
         loader.add_listener(bar_builder)
         loader.load_and_stream(args.filename)
         result = pd.DataFrame([bar.to_dict() for bar in bar_builder])
 
-    elif filepath.suffix == '.dbn':
+    elif filepath.suffix == ".dbn":
         # we start from the ground up...
         samples = []
         sample_builder = SampleBuilder()
@@ -468,7 +450,7 @@ if __name__ == "__main__":
             if record.ts_event > end_timestamp:
                 break
             process_sample(sample_builder.on_trade(record))
-        
+
         if sample_builder.is_sample_available:
             # there is an open sample that has to be finished...
             process_sample(sample_builder.get_sample())
@@ -478,7 +460,7 @@ if __name__ == "__main__":
         else:
             bar_builder.on_end_of_samples()
             result = pd.DataFrame([bar.to_dict() for bar in bar_builder])
-    
+
     else:
         # unknown file extension
         print(f"{parser.prog}: error: unknow file extension '{filepath.suffix}' (expected .csv or .dbn)")
@@ -486,5 +468,5 @@ if __name__ == "__main__":
 
     if args.outfile is None:
         print(result.to_csv(index=False))
-    else:    
+    else:
         result.to_csv(args.outfile, index=False)

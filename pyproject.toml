@@ -16,7 +16,15 @@ dependencies = [
 dev = [
     "pytest",
     "pytest-cov",
+    "ruff"
 ]
+
+[tool.ruff]
+line-length = 120
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
 
 [tool.pytest.ini_options]
 # Definiert den Suchpfad für deine Source-Dateien (ersetzt das -o pythonpath=src)

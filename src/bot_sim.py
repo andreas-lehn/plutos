@@ -4,9 +4,9 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
+import databento as db
 from fastapi import FastAPI, HTTPException
 
-import databento as db
 from marketdata import SampleBuilder
 
 # Logger initialisieren
@@ -31,7 +31,7 @@ async def databento_task():
     if not os.path.exists(FILE_PATH):
         raise BaseException(f"FEHLER: Datei '{FILE_PATH}' wurde nicht gefunden!")
 
-    builder = SampleBuilder()    
+    builder = SampleBuilder()
     trades = db.DBNStore.from_file(FILE_PATH)
     for record in trades:
         sample = builder.on_trade(record)
@@ -60,7 +60,7 @@ async def lifespan(app: FastAPI):
 
     # 0.5 Sekunden warten, damit die Tasks kurz anlaufen können
     await asyncio.sleep(0.5)
-    
+
     # Status prüfen
     if databento_job.done():
         logger.error(f"Databento Task ist bereits beendet! Ergebnis/Fehler: {databento_job.exception()}")
@@ -68,29 +68,31 @@ async def lifespan(app: FastAPI):
         logger.error(f"Consumer Task ist bereits beendet! Ergebnis/Fehler: {consumer_job.exception()}")
 
     yield  # Hier läuft die FastAPI App und nimmt HTTP-Requests entgegen
-    
+
     # 2. Shutdown-Logik: Tasks sauber beenden, wenn die App gestoppt wird
     databento_job.cancel()
     consumer_job.cancel()
     print("Hintergrund-Tasks sauber beendet.")
+
 
 # App-Instanz wird direkt mit dem Lifespan-Manager verknüpft
 app = FastAPI(lifespan=lifespan)
 
 # --- ENDPUNKTE ---
 
+
 @app.get("/count")
 async def get_count():
     """Liefert die Anzahl der aktuell verarbeiteten Sekunden-Samples."""
     return {"count": len(sample_list)}
+
 
 @app.get("/sample/{n}")
 async def get_sample(n: int):
     """Liefert das n-te Sample aus der Liste (0-basiert)."""
     if n < 0 or n >= len(sample_list):
         raise HTTPException(
-            status_code=404, 
-            detail=f"Sample am Index {n} nicht gefunden. Aktuelle Länge ist {len(sample_list)}."
+            status_code=404,
+            detail=f"Sample am Index {n} nicht gefunden. Aktuelle Länge ist {len(sample_list)}.",
         )
     return sample_list[n]
-
