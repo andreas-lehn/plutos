@@ -1,0 +1,36 @@
+name: Plutos Unit Tests
+
+# Wann soll der Test laufen?
+on:
+  push:
+    branches: [ "main", "production" ]
+  pull_request:
+    branches: [ "main", "production" ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    # 1. Quellcode aus GitHub auf den virtuellen Server laden
+    - name: Code auschecken
+      uses: actions/checkout@v4
+
+    # 2. Python auf dem Server einrichten
+    - name: Python einrichten
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11' # Hier kannst du deine Python-Version eintragen
+
+    # 3. Optionale Abhängigkeiten installieren (falls du z.B. pandas nutzt)
+    - name: Abhängigkeiten installieren
+      run: |
+        python -m pip install --upgrade pip
+        if [ -f requirements.txt ]; then python -m pip install -r requirements.txt; fi
+
+    # 4. Alle Tests genau wie in deiner tasks.json ausführen
+    - name: Plutos unit tests
+      env:
+        PYTHONPATH: ${{ github.workspace }}/src
+      run: |
+        python -m unittest discover -s tests -p "test_*.py"
