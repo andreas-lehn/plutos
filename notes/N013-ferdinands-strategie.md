@@ -43,3 +43,41 @@ Preis-Levels
 Die interessanten _Preisbereiche_ werden über das **Volumenprofil (VP)** und das **Marketprofile (MP)**, des Vortages, definiert. Das **VP** zeichnet das gehandelte Volumen pro Preis. Im **MP** sind die einzelnen _Auktionen_ zu sehen. An der Börse wird in _Auktionen_ gehandelt, welche jeweils eine halbe Stunde andauern. Hierbei ist jeder _Auktion_ ein Buchstabe zugeordnet, diese sind vertikal angeordnet und zeigen, wo sich der Preis innerhalb dieser _Auktion_ überall aufgehalten hat. Es ist also möglich das **MP** mit einem M30-Chart zu visualisieren. 
 
 Im **VP** sind _"Berge"_ und _"Kanten"_ ausschlaggebend. Wird der Preis von den Marktteilnehmern als fair betrachtet, werden viele Kontrakte umgesetzt und es entstehen **Volumenberge**. Diese zeigen also eine _Akkumulation_ auf. Das Ende des fairen Preisbereiches ist häufig durch eine starke **Volumenkante** zu erkennen. Ober-/Unterhalb der Akkumulation möchte nicht gehandelt werden, dort ist meist ein extremer Abfall des Volumens, von einem zum nächsten Preis, zu erkennen.  
+
+**Volumenkanten** stellen also ein _Support-/Ressistancelevel_ dar. Das ist logisch, denn hier besteht deutlich weniger bis gar kein Handelsinteresse. Diese Bereiche eignen sich gut um das _Spielfeld_ "abzustecken", also die Preisbewegung in Etappen zu unterteilen und den Weg des geringsten Widerstandes zu finden. Überschreitet der Preis eine **Volumenkante** und es findet Handel ober-/unterhalb statt, so bewegt er sich in der Regel schnell zum nächsten _fairen_ Preisbereich. Sprich dem nächsten **Volumenberg**.
+
+Konkreter Einstiegszeitpunkt
+----------------------------
+
+Den exakten Einstiegszeitpunkt ermitteln _Retailtrader_ über sogenannte **Setups**. Diese haben im wesentlichen zwei Varianten. Eine Divergenz der Preisbewegung und des aktuellen Orderflwos und eine Kerzenstruktur, welche aus dem Orderbuchverhalten abgeleitet wurde. 
+
+Ein bestimmtes Kerzenmuster erkennen kann jeder. Allerdings ist es in den Mainstreamcharts oft sehr undurchsichtig, aufgrund der zeitlichen Variablen. Muster sehen nie so "schön" aus wie in der Theorie und können dadurch gut Einstiege verwehren oder falsche Einstiegssignale erzeugen. Dennoch kann mit Kerzenmustern Profitabilität erreicht werden, wer jedoch den Orderflow lesen kann ist nicht nur präziser in den Einsteiegen, sondern vor allem schneller, als jemand der auf den Schlusskurs einer M5-Kerze wartet. 
+
+Welche Setups ich verwende variiert stark. Zumal es für die gleiche Bewegungsinterpretation, mehrere Einstiegssetups gibt. Die zentralen werde ich in einer seperaten Note erläutern.
+
+Zusätzliche Indikatoren
+-----------------------
+
+Die Strategie benutzt noch drei weitere Indikatoren. Die Indikatoren sind kein notwendiger Bestandteil können aber, bei der Einschätzung der generellen Sitution, durchaus sehr nützlich sein. Wichtig: Die Indikatoren können selbst kein Einstigssignal erzeugen, sie dienen lediglich als eine Art Stimmungsmesser!
+
+Die Rede ist von:
+
+* Kommulativen Volumen Delta (CVD)  
+Dieser gibt das **Market Buy - Market Sell** Delta bezogen auf das gesamte gehandelte Volumen einer Session an.
+
+* Demand Index  
+Dieser zeigt die Nachfrage in einer Kerzenbezogenen Linie, sprich im Kerzenintervall (je nach Chart einstellung unterschiedlich), als auch in einem gleitenden Durchschnitt an. Ist der Index positiv so gibt es mehr Demand als Supply und umgekehrt. Besonders interessant wird es, wenn der ungefilterte/aktuelle Wert, den gleitenden Durchschnitt nach oben oder unten durchbricht. Sprich ob wir im Moment über-/unterdurchschnittlich viel Nachfrage haben.
+
+* Volume Weighted Avarage Price (VWAMP)  
+Der VWAP ist ähnlich zum Demand Index. Im Gegensatz zu den zwei oben genannten Indikatoren, bidet er einen tatsächlichen Support bzw. Ressistance Preis. Akzeptieren wir die Preise unterhalb des VWAPs sind wir tendeziell eher Short umgekehrt für Long. Das Prinzip passt sehr gut zum Analyseplan verglichen mit Punkt 1!
+
+Zusammenfassung
+---------------
+
+Die Strategie beantwortet alle wichtigen Fragen für einen _Retailer_.  
+Wohin möchte ich handeln? (Analyseplan)  
+Wo möchte ich einsteigen? (Levels mit **VP/MP**)  
+Wann möchte ich einsteigen? (Kerzen/Orderflow)  
+
+Aber nicht nur "Wo möchte ich einsteigen?" sondern auch "Wo möchte ich aussteigen?" wird durch das **VP/MP** festgelegt.  
+Diese ermöglichen nämlich auch die Einschätzung, wo es wahrscheinlich wird, dass der Preis einen größeren Pullback macht oder sich sogar die _Dynamik_ nachhaltig ändert.
