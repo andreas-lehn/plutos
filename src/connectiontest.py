@@ -1,4 +1,5 @@
 import json
+
 import requests
 import websocket
 
@@ -95,7 +96,7 @@ def on_error(ws, error):
     print(f"Fehler: {error}")
 
 def on_close(ws, close_status_code, close_msg):
-    print(f"!!! VERBINDUNG GESCHLOSSEN !!!")
+    print("!!! VERBINDUNG GESCHLOSSEN !!!")
     print(f"Status Code: {close_status_code}")
     print(f"Grund vom Server: {close_msg}")
 

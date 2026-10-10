@@ -4,14 +4,18 @@ Verantwortlich für die Verarbeitung, Kapselung und den Aufbau von
 Marktdatenstrukturen (Volumenbalken, Histogramme) aus einem Tick-Datenstrom.
 """
 
-import sys
-import csv
 import ast
-import pandas as pd
-import databento as db
+import csv
+import sys
+from collections.abc import Iterable, Iterator
 from pathlib import Path
+from typing import Protocol
+
+import pandas as pd
 from pydantic import BaseModel
-from typing import List, Dict, Iterator, Tuple, Protocol, Iterable
+
+import databento as db
+
 
 class Histogram:
     """ histogram of prices """
@@ -95,11 +99,11 @@ class Histogram:
             return self.merge(other)
         return NotImplemented
 
-    def _eval(base: int, histo: List[int]) -> (int, int):
+    def _eval(base: int, histo: list[int]) -> (int, int):
         """ computes volume and price volu"""
         return volume, price_volume
 
-    def _histo_value(low: int, histo: List[int], i) -> int:
+    def _histo_value(low: int, histo: list[int], i) -> int:
         return 0 if (i < low) or i > (low + len(histo) - 1) else histo[i - low]
 
     def _validate_int(value, text: str) -> int:
@@ -117,7 +121,7 @@ class Sample(BaseModel):
     high: int
     low: int
     close: int
-    histo: List[int]
+    histo: list[int]
     
     def from_dbn(filename: str, start: int = 0, duration: int = sys.maxsize) -> []:
         samples = []
@@ -166,14 +170,14 @@ class SampleBuilder:
 
     def __init__(self):
         self.timestamp_offset: int = 0
-        self.histo: Dict[int, int] = {}
+        self.histo: dict[int, int] = {}
         self.open: int = None
         self.high: int = 0
         self.low: int = sys.maxsize
         self.close: int = None
         self.timestamp: int = None
 
-    def on_trade(self, record: db.DBNRecord) -> Dict:
+    def on_trade(self, record: db.DBNRecord) -> dict:
         """ process a databento trade record """
         
         price = record.price // 250_000_000
@@ -241,7 +245,7 @@ class Bar(BaseModel):
     close: int
     volume: int
     price_volume: int
-    histo: List[int]
+    histo: list[int]
 
     def volume_at_price(self, price: int) -> int:
         if price < self.low or price > self.high:
@@ -249,21 +253,21 @@ class Bar(BaseModel):
         return self.histo[price - self.low]
 
 
-    def _eval_histo(base: int, histo: List[int]) -> (int, int):
+    def _eval_histo(base: int, histo: list[int]) -> (int, int):
         volume = 0
         price_volume = 0
-        for i in range(0, len(histo)):
+        for i in range(len(histo)):
             v = histo[i]
             volume += v
             price_volume = (base + i) * v
         return volume, price_volume
 
 
-    def _histo_value(low: int, histo: List[int], i) -> int:
+    def _histo_value(low: int, histo: list[int], i) -> int:
         return 0 if (i < low) or i > (low + len(histo) - 1) else histo[i - low]
 
             
-    def _combine_histo(low1: int, histo1: List[int], low2: int, histo2: int) -> (int, List[int]):
+    def _combine_histo(low1: int, histo1: list[int], low2: int, histo2: int) -> (int, list[int]):
         """ combines to histogram into a single """
         low = min(low1, low2)
         high = max(low1 + len(histo1), low2 + len(histo2))
@@ -302,7 +306,7 @@ class Bar(BaseModel):
         else:
             raise TypeError('Sample or Bar expected')
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         return {
             'open': self.open,
             'high': self.high,
@@ -350,10 +354,10 @@ class BarBuilder:
     
     def __init__(self, bar_size: int):
         self.BAR_SIZE = bar_size 
-        self.bars: List[Bar] = []
+        self.bars: list[Bar] = []
         self._current_bar: Bar = None
         self._current_size = 0
-        self._bar_listeners: List[BarListener] = []
+        self._bar_listeners: list[BarListener] = []
 
 
     def add_listener(self, listener: BarListener):

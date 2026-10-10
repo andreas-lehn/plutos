@@ -4,13 +4,14 @@ enthalt alles was mit dem kaufen und verkaufen zu tun hat.
 """
 
 import random
-import numpy as np
+from collections import deque
+from datetime import datetime
+
 import pandas as pd
 from pydantic import BaseModel
-from typing import List, Dict, Iterator, Tuple, Protocol
-from marketdata import SampleLoader, Bar, BarBuilder
-from datetime import datetime
-from collections import deque
+
+from marketdata import Bar, BarBuilder, SampleLoader
+
 
 class ToDictMixIn:
     def to_dict(self) -> dict:
@@ -81,7 +82,7 @@ class Statistics(ToDictMixIn, BaseModel):
         return self.total_win - self.total_profit
 
     @classmethod
-    def from_trades(cls, trades: List[Trade]):
+    def from_trades(cls, trades: list[Trade]):
         if not trades:
             return None
         
@@ -114,7 +115,7 @@ class Trader:
         self._state: str = 'flat'
         self._stop_loss: int = 0
         self._current_trade = {}
-        self.trades: List[Trade] = []
+        self.trades: list[Trade] = []
 
     def reset(self) -> None:
         self.trades = []

@@ -1,6 +1,8 @@
-import pytest
-from marketdata import Sample
 from pathlib import Path
+
+import pytest
+
+from marketdata import Sample
 
 
 @pytest.fixture

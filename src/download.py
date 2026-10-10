@@ -1,14 +1,16 @@
 import os
+from datetime import UTC, date, datetime, timedelta
+from zoneinfo import ZoneInfo
+
 import databento as db
 from tradovate import active_symbol
-from datetime import datetime, timedelta, timezone, date
-from zoneinfo import ZoneInfo
+
 
 def download_intervall(date: date) -> (datetime, datetime):
     """ takes a date as a sting in isoforma and return the download intervall for databento of a CME session """
     end_date = datetime(date.year, date.month, date.day, 17, 0, tzinfo=ZoneInfo('America/Chicago'))
     start_date = end_date - timedelta(days=1)
-    return (start_date.astimezone(timezone.utc), end_date.astimezone(timezone.utc))
+    return (start_date.astimezone(UTC), end_date.astimezone(UTC))
 
 
 def full_path_name(target_dir: str, file_name: str) -> str:
@@ -31,8 +33,8 @@ def databento_download(prog_name: str, base_symbol: str, date: date, target_dir:
         start=start_date.isoformat(),
         end=end_date.isoformat(),
     )
-    download_start = datetime.fromtimestamp(data.metadata.start // 10**9, timezone.utc)
-    download_end = datetime.fromtimestamp(data.metadata.end // 10**9, timezone.utc)
+    download_start = datetime.fromtimestamp(data.metadata.start // 10**9, UTC)
+    download_end = datetime.fromtimestamp(data.metadata.end // 10**9, UTC)
     print(f'{prog_name}: records downloaded [{download_start.isoformat()}, {download_end.isoformat()}]')
     data.to_file(filename)
 

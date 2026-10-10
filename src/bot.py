@@ -1,9 +1,8 @@
-import asyncio
 import logging
-import random
-from fastapi import FastAPI, Request
-import httpx
 import os
+
+import httpx
+from fastapi import FastAPI, Request
 
 logger = logging.getLogger("uvicorn.error")
 

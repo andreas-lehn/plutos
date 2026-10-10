@@ -5,10 +5,13 @@
 # The results can be used to validate the result of the bot software.
 #
 
-import databento as db
-import pandas as pd
 import argparse
 from pathlib import Path
+
+import pandas as pd
+
+import databento as db
+
 
 def dump_record(record: db.DBNRecord, time_offset: int):
     return {

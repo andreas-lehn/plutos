@@ -1,22 +1,23 @@
 # simulation of the bot based on databento ticks file
 
 import asyncio
-from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
-from typing import List, Dict
 import logging
-from marketdata import SampleBuilder
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, HTTPException
+
 import databento as db
+from marketdata import SampleBuilder
 
 # Logger initialisieren
 logger = logging.getLogger("uvicorn.error")  # Nutzt den Uvicorn-Fehlerlogger für konsistente Ausgabe
 
 # Globale Datenspeicher und Kommunikations-Queue
 sample_queue: asyncio.Queue = asyncio.Queue(10)
-sample_list: List = []
+sample_list: list = []
 
 
-async def on_sample(sample: Dict):
+async def on_sample(sample: dict):
     logger.info(f"sample {sample['timestamp']} written to queue")
     await sample_queue.put(sample)
 
