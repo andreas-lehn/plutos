@@ -6,8 +6,10 @@ Marktdatenstrukturen (Volumenbalken, Histogramme) aus einem Tick-Datenstrom.
 
 import sys
 import csv
+import ast
 import pandas as pd
 import databento as db
+from pathlib import Path
 from pydantic import BaseModel
 from typing import List, Dict, Iterator, Tuple, Protocol, Iterable
 
@@ -116,15 +118,6 @@ class Sample(BaseModel):
     low: int
     close: int
     histo: List[int]
-
-    def volume(self, price: int) -> int:
-        if price < self.low or price > self.high:
-            return 0
-        return self.histo[price - self.low]
-
-    def list_volumes(self):
-        for i in range(self.low, self.high + 1):
-            print(f'{i/4:8.2f} {self.volume(i):4d}')
     
     def from_dbn(filename: str, start: int = 0, duration: int = sys.maxsize) -> []:
         samples = []
@@ -147,58 +140,25 @@ class Sample(BaseModel):
 
         return samples
 
-    
-class SampleListener(Protocol):
 
-    def on_new_sample(self, sample: Sample) -> None:
-        """ recieve a new sample """
-        ...
-
-    def on_end_of_samples(self):
-        """ end of sample stream reached """
-        ...
-
-
-class SampleLoader:
-    """ Liest Samples aus einer CSV-Datei ein und verschickt sie an die Listener """
-
-    def __init__(self):
-        self._listeners = []
-
-    def add_listener(self, listener: SampleListener):
-        """Registriert einen Trader/Bot für die fertigen Balken."""
-        if listener not in self._listeners:
-            self._listeners.append(listener)
-
-    def remove_listener(self, listener: SampleListener):
-        """Entfernt einen registrierten Bar-Listener."""
-        if listener in self._listeners:
-            self._listeners.remove(listener)
-
-    def _notify_new_sample(self, sample: Sample):
-        for listener in self._listeners:
-            listener.on_new_sample(sample)
-
-    def _notify_end_of_samples(self):
-        for listener in self._listeners:
-            listener.on_end_of_samples()
-
-    def load_and_stream(self, csv_path):
-        """ Öffnet die CSV-Datei und streamt sie Zeile für Zeile an die Listener. """        
+    def stream_csv(csv_path: str | Path, callback: callable):
+        """ Öffnet die CSV-Datei und streamt sie Zeile für Zeile. """        
         with open(csv_path, mode='r', newline='') as file:
-            reader = csv.DictReader(file)
+            reader = csv.DictReader(file, fieldnames=['open', 'high', 'low', 'close', 'histo'])
+            next(reader)
             for row in reader:
                 sample = Sample(
-                    timestamp=int(row['timestamp']),
                     open=int(row['open']),
                     high=int(row['high']),
-                    average=int(row['average']),
                     low=int(row['low']),
                     close=int(row['close']),
-                    volume=int(row['volume']),
+                    histo=ast.literal_eval(row['histo']),
                 )
-                self._notify_new_sample(sample)
-            self._notify_end_of_samples()
+                callback(sample)
+            callback(None) # end of file marker
+
+    def stream_dbn(self, filename: str, start: int, duration: int):
+        pass
 
 
 class SampleBuilder:
@@ -207,9 +167,9 @@ class SampleBuilder:
     def __init__(self):
         self.timestamp_offset: int = 0
         self.histo: Dict[int, int] = {}
+        self.open: int = None
         self.high: int = 0
         self.low: int = sys.maxsize
-        self.open: int = None
         self.close: int = None
         self.timestamp: int = None
 
