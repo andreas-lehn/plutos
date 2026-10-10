@@ -4,3 +4,5 @@ pandas
 databento
 yfinance
 numpy
+httpx
+websocket-client

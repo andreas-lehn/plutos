@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from typing import List, Dict
 import logging
-from trades2samples import SampleBuilder
+from marketdata import SampleBuilder
 import databento as db
 
 # Logger initialisieren
@@ -17,7 +17,7 @@ sample_list: List = []
 
 
 async def on_sample(sample: Dict):
-    logger.info(f'sample {sample['timestamp']} written to queue')
+    logger.info(f"sample {sample['timestamp']} written to queue")
     await sample_queue.put(sample)
 
 
