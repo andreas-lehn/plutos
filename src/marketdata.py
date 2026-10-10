@@ -450,7 +450,7 @@ if __name__ == "__main__":
         # we generate bars from samples stored in file
         if bar_builder is None:
             print(f'{parser.prog}: barsize must be specified when .csv file is given as input', file=sys.stderr)
-            exit(1)
+            sys.exit(1)
         loader = SampleLoader()
         loader.add_listener(bar_builder)
         loader.load_and_stream(args.filename)
@@ -484,7 +484,7 @@ if __name__ == "__main__":
     else:
         # unknown file extension
         print(f"{parser.prog}: error: unknow file extension '{filepath.suffix}' (expected .csv or .dbn)")
-        exit(1)
+        sys.exit(1)
 
     if args.outfile is None:
         print(result.to_csv(index=False))

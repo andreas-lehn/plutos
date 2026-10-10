@@ -64,7 +64,6 @@ def active_symbol(symbol: str, date: date):
     year = date.year
     
     # Definition der Kontraktmonate und deren Kürzel
-    months_map = {3: 'H', 6: 'M', 9: 'U', 12: 'Z'}
     
     # Wir bestimmen die Rollover-Termine für das aktuelle Jahr
     rollovers = {}

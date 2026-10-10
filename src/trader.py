@@ -4,6 +4,7 @@ enthalt alles was mit dem kaufen und verkaufen zu tun hat.
 """
 
 import random
+import sys
 from collections import deque
 from datetime import datetime
 
@@ -122,14 +123,14 @@ class Trader:
         self.state = 'flat'
         self._current_trade = {}
 
-    def stop_loss_long(self, bar: Bar, old_stop_loss: int = None):
+    def stop_loss_long(self, bar: Bar, old_stop_loss: int | None = None):
         """calculate stop loss for long trades"""
         stop_loss = bar.average + round((bar.low - bar.average) * self._stop_loss_factor)
         if old_stop_loss is not None:
             stop_loss = max(stop_loss, old_stop_loss) # only increase stop loss 
         return stop_loss 
 
-    def stop_loss_short(self, bar: Bar, old_stop_loss: int = None):
+    def stop_loss_short(self, bar: Bar, old_stop_loss: int | None = None):
         """calculate stop loss for short trades"""
         stop_loss = bar.average + round((bar.high - bar.average) * self._stop_loss_factor)
         if old_stop_loss is not None:
@@ -340,7 +341,7 @@ if __name__ == "__main__":
         trader = YesterdaysWeather(slope_threshold=args.slope, stop_loss_factor=args.margin)
     else:
         print(f"{parser.prog}: error: unknoen trader '{args.trader}'")
-        exit(1)
+        sys.exit(1)
 
     loader = SampleLoader()
     builder = BarBuilder(args.bar_size)

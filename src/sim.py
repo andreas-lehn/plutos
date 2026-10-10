@@ -25,7 +25,7 @@ def pathname(date: str = DATE, bar: str = BAR_SIZE, symbol: str = SYMBOL) -> str
     return DATA_DIR/filename(date, bar, symbol)
 
 def run(files: str | list[str], filter_constant: float = 0.5, slope_threshold: float = 0.001, margin: float = 1.0) -> list[Trade] | list[Statistics]:
-    if isinstance(files, str) or isinstance(files, Path):
+    if isinstance(files, (str, Path)):
         trader = KentBeckTrader(filter_constant, slope_threshold, margin)
         loader = SampleLoader()
         builder = BarBuilder(60)

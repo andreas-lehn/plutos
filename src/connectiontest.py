@@ -1,4 +1,5 @@
 import json
+import sys
 
 import requests
 import websocket
@@ -26,7 +27,7 @@ response = requests.post(f"{REST_URL}", json=login_payload)
 
 if response.status_code != 200:
     print(f"REST Login fehlgeschlagen! Status: {response.status_code}, Antwort: {response.text}")
-    exit()
+    sys.exit()
 
 data = response.json()
 ACCESS_TOKEN = data["accessToken"]
