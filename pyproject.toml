@@ -1,3 +1,23 @@
+[project]
+name = "Plutos"
+version = "0.1.0"
+description = "High performance trading bot"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "pandas",
+    "databento",
+    "numpy",
+    "httpx",
+    "websocket-client",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-cov",
+]
+
 [tool.pytest.ini_options]
 # Definiert den Suchpfad für deine Source-Dateien (ersetzt das -o pythonpath=src)
 pythonpath = ["src"]

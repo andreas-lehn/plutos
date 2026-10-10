@@ -22,22 +22,19 @@ jobs:
       with:
         python-version: '3.11' # Hier kannst du deine Python-Version eintragen
 
-    # 3. Optionale Abhängigkeiten installieren (falls du z.B. pandas nutzt)
-    - name: Abhängigkeiten installieren
-      run: |
-        python -m pip install --upgrade pip
-        python -m pip install coverage
-        python -m pip pytest
-        python -m pip pytest-cov
-        if [ -f requirements.txt ]; then python -m pip install -r requirements.txt; fi
+    # 3. HIER STARTET DAS SETUP FÜR UV:
+    - name: Setup uv
+      uses: astral-sh/setup-uv@v5
+      with:
+        enable-cache: true # Nutzt Caching, damit es in Sekunden durchläuft
 
-    # 4. Alle Tests genau wie in deiner tasks.json ausführen
-    - name: Plutos unit tests
-      env:
-        PYTHONPATH: ${{ github.workspace }}/src
-      run: |
-        coverage run --source=src -m unittest discover -s tests -p "test_*.py"
-        coverage xml # Erstellt eine 'coverage.xml' Datei, die Codecov lesen kann
+    # 4. Abhängigkeiten direkt aus der pyproject.toml installieren
+    - name: Install dependencies
+      run: uv sync --all-groups
+
+    # 5. Tests mit pytest ausführen
+    - name: Run Tests with coverage
+      run: uv run pytest
 
     # Dieser fertige Baustein lädt den Report vollautomatisch zu Codecov hoch
     - name: Upload report to Codecov
