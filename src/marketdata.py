@@ -123,29 +123,7 @@ class Sample(BaseModel):
     close: int
     histo: list[int]
     
-    def from_dbn(filename: str, start: int = 0, duration: int = sys.maxsize) -> []:
-        samples = []
-        sample_builder = SampleBuilder()
-
-        data = db.DBNStore.from_file(filename)
-        start_timestamp = data.metadata.start + start * 10**9
-        end_timestamp = start_timestamp + duration * 10**9
-        for record in data:
-            if record.ts_event < start_timestamp:
-                continue
-            if record.ts_event > end_timestamp:
-                break
-            sample = sample_builder.on_trade(record)
-            if sample:
-                samples.append(sample)
-
-        if sample_builder.is_sample_available:
-            samples.append(sample_builder.get_sample())
-
-        return samples
-
-
-    def stream_csv(csv_path: str | Path, callback: callable):
+    def from_csv_stream(csv_path: str | Path, callback: callable):
         """ Öffnet die CSV-Datei und streamt sie Zeile für Zeile. """        
         with open(csv_path, mode='r', newline='') as file:
             reader = csv.DictReader(file, fieldnames=['open', 'high', 'low', 'close', 'histo'])
@@ -161,8 +139,28 @@ class Sample(BaseModel):
                 callback(sample)
             callback(None) # end of file marker
 
-    def stream_dbn(self, filename: str, start: int, duration: int):
-        pass
+    def from_dbn(filename: str, start: int = 0, duration: int = sys.maxsize) -> list:
+        samples = []
+        Sample.from_dbn_stream(filename, lambda sample: samples.append(sample), start, duration)
+        return samples
+
+    def from_dbn_stream(filename: str, callback: callable, start: int = 0, duration: int = sys.maxsize):
+        sample_builder = SampleBuilder()
+
+        data = db.DBNStore.from_file(filename)
+        start_timestamp = data.metadata.start + start * 10**9
+        end_timestamp = start_timestamp + duration * 10**9
+        for record in data:
+            if record.ts_event < start_timestamp:
+                continue
+            if record.ts_event > end_timestamp:
+                break
+            sample = sample_builder.on_trade(record)
+            if sample:
+                callback(sample)
+
+        if sample_builder.is_sample_available:
+            callback(sample_builder.get_sample())
 
 
 class SampleBuilder:

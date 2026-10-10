@@ -5,6 +5,30 @@ from zoneinfo import ZoneInfo
 import databento as db
 from tradovate import active_symbol
 
+def download_trades(symbol: str, start: str, end: str):
+    """ downloads trades form Databento
+
+    It downloads the trades for 'symbol' in the intervall (start, end).
+    Start is included, end is not included anymore.
+
+    Args:
+        symbol: the symbol for which the trades should be downloaded MNQZ6
+        start:  start date/time in ISO format
+        end:    end date/time in ISO format
+
+        DATABENTO_API_KEY environment variable must contain the API key
+
+    Return:
+        Data records with trades
+
+    """
+    client = db.Historical() # DATABENTO_API_KEY will be used as default, if none is specified.
+    return client.timeseries.get_range(
+        dataset="GLBX.MDP3",  # CME Globex Datensatz
+        symbols=symbol,
+        schema="trades",  # 'trades' lädt die reinen ausgeführten Ticks (vollständige Trades)
+        start=start,
+        end=end)
 
 def download_intervall(date: date) -> (datetime, datetime):
     """ takes a date as a sting in isoforma and return the download intervall for databento of a CME session """
@@ -25,14 +49,7 @@ def databento_download(prog_name: str, base_symbol: str, date: date, target_dir:
     filename = full_path_name(target_dir, f"{symbol}_{date.isoformat()}_trades.dbn")
     
     print(f"{prog_name}: loading trades of {symbol} [{start_date.isoformat()}, {end_date.isoformat()}]")
-    client = db.Historical() # DATABENTO_API_KEY will be used as default, if none is specified.
-    data = client.timeseries.get_range(
-        dataset="GLBX.MDP3",  # CME Globex Datensatz
-        symbols=symbol,
-        schema="trades",  # 'trades' lädt die reinen ausgeführten Ticks (vollständige Trades)
-        start=start_date.isoformat(),
-        end=end_date.isoformat(),
-    )
+    data = download_trades(symbol, start_date.isoformat(), end_date.isoformat())
     download_start = datetime.fromtimestamp(data.metadata.start // 10**9, UTC)
     download_end = datetime.fromtimestamp(data.metadata.end // 10**9, UTC)
     print(f'{prog_name}: records downloaded [{download_start.isoformat()}, {download_end.isoformat()}]')
