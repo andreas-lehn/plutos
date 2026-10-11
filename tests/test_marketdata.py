@@ -1,5 +1,7 @@
 from pathlib import Path
 from datetime import date, datetime
+from zoneinfo import ZoneInfo
+
 import pytest
 import csv
 
@@ -75,7 +77,7 @@ def test_to_csv(csv_out_in_path):
         Sample(open=104, high=104, low=99,  close=100, histo=[4, 3, 2, 1, 1, 2])
     ]
 
-    marketdata.to_file(csv_out_in_path, out_samples)
+    marketdata.to_file(str(csv_out_in_path), out_samples)
     in_samples = marketdata.from_file(csv_out_in_path)
     assert out_samples == in_samples
 
@@ -91,3 +93,20 @@ def test_from_dbn(dbn_path, dbn_ref_path):
             assert sample.low  == int(ref["low"])
             assert sample.close== int(ref["close"])
             assert sum(sample.histo) == int(ref['volume'])
+
+    samples_20 = marketdata.from_file(str(dbn_path), start=20, duration=11)
+    samples_30 = marketdata.from_file(str(dbn_path), start=30, duration=1)
+    assert samples_20[10] == samples_30[0]
+
+def tests_wrong_file_type():
+    with pytest.raises(ValueError):
+        marketdata.from_file('abc.def')
+
+def test_CME_session():
+    d = date(2026, 10, 1)
+    tz = ZoneInfo('America/Chicago')
+    start = datetime(2026,  9, 30, 17, tzinfo=tz)
+    end   = datetime(2026, 10,  1, 17, tzinfo=tz)
+    (s, e) = marketdata.CME_session(d) 
+    assert s == start
+    assert e == end

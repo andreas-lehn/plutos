@@ -52,8 +52,8 @@ def active_symbol(symbol: str, date: date):
     return symbol_code(symbol, rollover)
 
 
-def download_trades(symbol: str, start: str, end: str):
-    """downloads trades form Databento
+def download_trades(symbol: str, start: str, end: str): # pragma: no cover
+    """ downloads trades form Databento
 
     It downloads the trades for 'symbol' in the intervall (start, end).
     Start is included, end is not included anymore.
@@ -117,7 +117,7 @@ def _stream_dbn_file(file: Path, callback: callable, start: int = 0, duration: i
         callback(sample_builder.get_sample())
 
 
-def stream_file(file: str | Path, callback: callable):
+def stream_file(file: str | Path, callback: callable, start: int = 0, duration: int = SECONDS_OF_DAY):
     """ streams market data from a file """
     if isinstance(file, str):
         file = Path(file)
@@ -125,19 +125,19 @@ def stream_file(file: str | Path, callback: callable):
     if suffix == '.csv':
         _stream_csv_file(file, callback)
     elif suffix == '.dbn':
-        _stream_dbn_file(file, callback)
+        _stream_dbn_file(file, callback, start, duration)
     else:
         raise ValueError(f"from_file(): unknown suffix '{suffix}'. must be 'csv' or 'dbn'")
 
 
-def from_file(file: str | Path) -> list[Sample]:
+def from_file(file: str | Path, start: int = 0, duration: int = SECONDS_OF_DAY) -> list[Sample]:
     """ loads samples from file (.csv | .dbn) """
     samples = []
-    stream_file(file, lambda sample: samples.append(sample))
+    stream_file(file, lambda sample: samples.append(sample), start, duration)
     return samples
 
 
-def stream_live(callback: callable):
+def stream_live(callback: callable): # pragma: no cover
     """ streams live market data """
     pass
 
@@ -159,39 +159,3 @@ def CME_session(date: date) -> (datetime, datetime):
     start_date = end_date - timedelta(days=1)
     return (start_date.astimezone(UTC), end_date.astimezone(UTC))
 
-
-def full_path_name(target_dir: str, file_name: str) -> str:
-    return file_name if target_dir is None else os.path.join(target_dir, file_name)
-
-
-def download_session(prog_name: str, base_symbol: str, date: date, target_dir: str):
-    """load trades of a CME session from databento"""
-
-    symbol = active_symbol(base_symbol, date)
-    start_date, end_date = download_intervall(date)
-    filename = full_path_name(target_dir, f"{symbol}_{date.isoformat()}_trades.dbn")
-
-    print(f"{prog_name}: loading trades of {symbol} [{start_date.isoformat()}, {end_date.isoformat()}]")
-    data = download_trades(symbol, start_date.isoformat(), end_date.isoformat())
-    download_start = datetime.fromtimestamp(data.metadata.start // 10**9, UTC)
-    download_end = datetime.fromtimestamp(data.metadata.end // 10**9, UTC)
-    print(f"{prog_name}: records downloaded [{download_start.isoformat()}, {download_end.isoformat()}]")
-    data.to_file(filename)
-    print(f"{prog_name}: {data.nbytes // 100} records written to {filename}")
-
-
-if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Downloader for trades")
-    parser.add_argument("date", type=str, help="Date in YYYY-MM-DD format")
-    parser.add_argument("-s", "--symbol", type=str, default="mnq", help="base symbol (mnq, nq, es,...)")
-    parser.add_argument("-c", "--change_dir", type=str, help="destination dir")
-    args = parser.parse_args()
-
-    databento_download(
-        prog_name=parser.prog,
-        base_symbol=args.symbol.upper(),
-        date=date.fromisoformat(args.date),
-        target_dir=args.change_dir,
-    )
