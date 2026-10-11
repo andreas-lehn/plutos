@@ -1,5 +1,8 @@
-from datetime import datetime, timezone
+#
+# download script for Databento historical data
+#
 
+from datetime import datetime, timezone
 import marketdata
 
 def download(prog_name: str, product_code: str, start: datetime, end: datetime): #pragma: no cover
