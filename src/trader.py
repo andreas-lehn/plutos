@@ -11,7 +11,7 @@ from datetime import datetime
 import pandas as pd
 from pydantic import BaseModel
 
-from marketdata import Bar, BarBuilder, SampleLoader
+from model import Bar, BarBuilder, SampleLoader
 
 
 class ToDictMixIn:

@@ -5,13 +5,9 @@
             "name": "Debug",
             "type": "debugpy",
             "request": "launch",
-            "program": "${file}",
-            "purpose": ["debug-test"],
+            "module": "pytest",
+            "args": [ "--no-cov", "${file}" ],
             "console": "integratedTerminal",
-            "justMyCode": true,
-            "env": {
-                "PYTHONPATH": "${workspaceFolder}/src"
-            }
         }
     ]
 }

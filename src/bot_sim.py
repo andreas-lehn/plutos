@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 import databento as db
 from fastapi import FastAPI, HTTPException
 
-from marketdata import SampleBuilder
+from model import SampleBuilder
 
 # Logger initialisieren
 logger = logging.getLogger("uvicorn.error")  # Nutzt den Uvicorn-Fehlerlogger für konsistente Ausgabe

@@ -1,6 +1,6 @@
 import unittest
 
-from marketdata import Histogram
+from model import Histogram
 
 # sample data for 28.09.226
 #

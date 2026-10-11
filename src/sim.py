@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from marketdata import BarBuilder, SampleLoader
+from model import BarBuilder, SampleLoader
 from trader import KentBeckTrader, Statistics, Trade
 
 pd.options.display.float_format = "{:.2f}".format
