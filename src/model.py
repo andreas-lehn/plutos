@@ -118,45 +118,6 @@ class Sample(BaseModel):
     close: int
     histo: list[int]
 
-    def from_csv_stream(csv_path: str | Path, callback: callable):
-        """Öffnet die CSV-Datei und streamt sie Zeile für Zeile."""
-        with open(csv_path, mode="r", newline="") as file:
-            reader = csv.DictReader(file, fieldnames=["open", "high", "low", "close", "histo"])
-            next(reader)
-            for row in reader:
-                sample = Sample(
-                    open=int(row["open"]),
-                    high=int(row["high"]),
-                    low=int(row["low"]),
-                    close=int(row["close"]),
-                    histo=ast.literal_eval(row["histo"]),
-                )
-                callback(sample)
-            callback(None)  # end of file marker
-
-    def from_dbn(filename: str, start: int = 0, duration: int = sys.maxsize) -> list:
-        samples = []
-        Sample.from_dbn_stream(filename, lambda sample: samples.append(sample), start, duration)
-        return samples
-
-    def from_dbn_stream(filename: str, callback: callable, start: int = 0, duration: int = sys.maxsize):
-        sample_builder = SampleBuilder()
-
-        data = db.DBNStore.from_file(filename)
-        start_timestamp = data.metadata.start + start * 10**9
-        end_timestamp = start_timestamp + duration * 10**9
-        for record in data:
-            if record.ts_event < start_timestamp:
-                continue
-            if record.ts_event > end_timestamp:
-                break
-            sample = sample_builder.on_trade(record)
-            if sample:
-                callback(sample)
-
-        if sample_builder.is_sample_available:
-            callback(sample_builder.get_sample())
-
 
 class SampleBuilder:
     """builds 1 sec samples from databento trade records"""
@@ -170,23 +131,19 @@ class SampleBuilder:
         self.close: int = None
         self.timestamp: int = None
 
-    def on_trade(self, record: db.DBNRecord) -> dict:
-        """process a databento trade record"""
+    def on_trade(self, timestamp, price, volume) -> dict:
+        """ adds a trade to the current sample and return a sample, if it is ready. None otherwise """
 
-        price = record.price // 250_000_000
-        volume = record.size
-        timestamp = record.ts_event // 1_000_000_000 - self.timestamp_offset
-        return self.update_sample(timestamp, price, volume)
-
-    def update_sample(self, timestamp, price, volume):
         sample = None
         if self.timestamp is None:
             # this is the very first sample
             self.timestamp_offset = timestamp
-            timestamp = 0
             self.timestamp = 0
             self.open = price
-        elif timestamp > self.timestamp:
+
+        timestamp -= self.timestamp_offset
+
+        if timestamp > self.timestamp:
             # sample is ready to be delivered...
             sample = self.get_sample()
             # wir schicken das aktuelle sample erst ab, wenn ein neuer trade da ist.
@@ -216,7 +173,7 @@ class SampleBuilder:
             close=self.close,
             histo=[self.histo.get(i, 0) for i in range(self.low, self.high + 1)],
         )
-        self.volume = {}
+        self.histo = {}
         self.high = 0
         self.low = sys.maxsize
         return sample

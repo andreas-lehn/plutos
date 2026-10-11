@@ -7,12 +7,18 @@ interface to market data
 """
 
 import os
+import csv
+import ast
+
 from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 from pathlib import Path
 
 import databento as db
-from model import Sample
+from model import Sample, SampleBuilder
+
+
+SECONDS_OF_DAY = 86400
 
 
 def symbol_code(product_code: str, date: date) -> str:
@@ -73,26 +79,81 @@ def download_trades(symbol: str, start: str, end: str):
     )
 
 
-def from_file(file: str | Path) -> list[Sample]:
-    """ loads samples from file (.csv | .dbn) """
-    pass
+def _stream_csv_file(file: Path, callback: callable) -> list[Sample]:
+    """ streams samples from file with sample data as cvs """
+    with open(file, mode="r", newline="") as file:
+        reader = csv.DictReader(file)
+        for row in reader:
+            sample = Sample(
+                open=int(row["open"]),
+                high=int(row["high"]),
+                low=int(row["low"]),
+                close=int(row["close"]),
+                histo=ast.literal_eval(row["histo"]),
+            )
+            callback(sample)
 
 
-def stream(callback: callable):
-    """ streams live market data """
-    pass
+def _stream_dbn_file(file: Path, callback: callable, start: int = 0, duration: int = SECONDS_OF_DAY) -> list[Sample]:
+    sample_builder = SampleBuilder()
+
+    data = db.DBNStore.from_file(file)
+    start_timestamp = data.metadata.start + start * 10**9
+    end_timestamp = start_timestamp + duration * 10**9
+    for record in data:
+        if record.ts_event < start_timestamp:
+            continue
+        if record.ts_event > end_timestamp:
+            break
+
+        price = record.price // 250_000_000
+        volume = record.size
+        timestamp = record.ts_event // 1_000_000_000
+        sample = sample_builder.on_trade(timestamp, price, volume)
+        if sample:
+            callback(sample)
+
+    if sample_builder.is_sample_available:
+        callback(sample_builder.get_sample())
 
 
 def stream_file(file: str | Path, callback: callable):
     """ streams market data from a file """
+    if isinstance(file, str):
+        file = Path(file)
+    suffix = file.suffix
+    if suffix == '.csv':
+        _stream_csv_file(file, callback)
+    elif suffix == '.dbn':
+        _stream_dbn_file(file, callback)
+    else:
+        raise ValueError(f"from_file(): unknown suffix '{suffix}'. must be 'csv' or 'dbn'")
+
+
+def from_file(file: str | Path) -> list[Sample]:
+    """ loads samples from file (.csv | .dbn) """
+    samples = []
+    stream_file(file, lambda sample: samples.append(sample))
+    return samples
+
+
+def stream_live(callback: callable):
+    """ streams live market data """
     pass
 
 
 def to_file(file: str | Path, samples):
-    """ stores sample in as .csv file """
-    pass
+    """ stores samples in file as csv """
+    if isinstance(file, str):
+        file = Path(file)
 
-def cme_session(date: date) -> (datetime, datetime):
+    with open(file, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=['open', 'high', 'low', 'close', 'histo'])
+        writer.writeheader()
+        writer.writerows([sample.model_dump() for sample in samples])
+
+
+def CME_session(date: date) -> (datetime, datetime):
     """ calculate start and end time of a CME session based on a given date """
     end_date = datetime(date.year, date.month, date.day, 17, 0, tzinfo=ZoneInfo("America/Chicago"))
     start_date = end_date - timedelta(days=1)
