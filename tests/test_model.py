@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from model import Trade, Sample, SampleBuilder
+from model import Trade, Sample, SampleBuilder, SampleReader, SampleWriter
 
 @pytest.fixture
 def csv_path():
@@ -81,8 +81,9 @@ def test_sample_builder(trade_list_5):
     assert s0.close == 12501
     assert s0.histo == [4, 1, 7, 0, 3]
 
-def _est_from_csv(csv_path):
-    samples = marketdata.from_file(csv_path)
+def test_from_csv(csv_path):
+    reader = SampleReader.from_file(csv_path)
+    samples = [sample for sample in reader]
     assert len(samples) == 9
     assert samples[0].open == 122622
     assert samples[1].high == 122667
@@ -94,7 +95,7 @@ def _est_from_csv(csv_path):
     assert samples[7].high == 122667
     assert samples[8].open == 122662
 
-def _est_to_csv(csv_out_in_path):
+def test_to_csv(csv_out_in_path):
     out_samples = [
         Sample(open=100, high=102, low=99,  close=101, histo=[1, 2, 3, 1]),
         Sample(open=101, high=103, low=100, close=102, histo=[2, 3, 2, 1]),
@@ -102,6 +103,7 @@ def _est_to_csv(csv_out_in_path):
         Sample(open=104, high=104, low=99,  close=100, histo=[4, 3, 2, 1, 1, 2])
     ]
 
-    marketdata.to_file(str(csv_out_in_path), out_samples)
-    in_samples = marketdata.from_file(csv_out_in_path)
-    assert out_samples == in_samples
+    SampleWriter.to_file(str(csv_out_in_path), out_samples)
+    reader = SampleReader.from_file(csv_out_in_path)
+    for out, read in zip(out_samples, reader):
+        assert out == read

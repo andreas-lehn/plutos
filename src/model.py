@@ -6,6 +6,9 @@ contains classes for trades, bars, charts,...
 
 
 import sys
+import csv
+import ast
+
 from collections.abc import Iterable
 from pathlib import Path
 from collections import deque
@@ -14,81 +17,6 @@ import databento as db
 import pandas as pd
 from pydantic import BaseModel
 
-
-#################### Zwischenspeicher ################################
-
-def from_file(file: Path, start: int = 0, duration: int = sys.maxsize, n = sys.maxsize):
-    sample_builder = SampleBuilder()
-
-    data = db.DBNStore.from_file(file)
-    start_timestamp = data.metadata.start + start * 10**9
-    end_timestamp = start_timestamp + duration * 10**9
-    for record in data:
-        if record.ts_event < start_timestamp:
-            continue
-        if record.ts_event > end_timestamp:
-            break
-
-        price = record.price // 250_000_000
-        volume = record.size
-        timestamp = record.ts_event // 1_000_000_000
-        sample = sample_builder.on_trade(timestamp, price, volume)
-        if sample:
-            callback(sample)
-
-    if sample_builder.is_sample_available:
-        callback(sample_builder.get_sample())
-
-
-class SampleReader:
-
-    def __init__self(self, file):
-        self.file = file
-
-    @classmethod
-    def from_file(file: str):
-        return cls(file)
-
-    def __iter__(self):
-        with open(file, mode="r", newline="") as file:
-            reader = csv.DictReader(file)
-            for row in reader:
-                yield Sample(
-                    open=int(row["open"]),
-                    high=int(row["high"]),
-                    low=int(row["low"]),
-                    close=int(row["close"]),
-                    histo=ast.literal_eval(row["histo"]),
-                )
-
-
-def _stream_csv_file(file: Path, callback: callable):
-    """ streams samples from file with sample data as cvs """
-    with open(file, mode="r", newline="") as file:
-        reader = csv.DictReader(file)
-        for row in reader:
-            sample = Sample(
-                open=int(row["open"]),
-                high=int(row["high"]),
-                low=int(row["low"]),
-                close=int(row["close"]),
-                histo=ast.literal_eval(row["histo"]),
-            )
-            callback(sample)
-
-def to_file(file: str | Path, samples):
-    """ stores samples in file as csv """
-    if isinstance(file, str):
-        file = Path(file)
-
-    with open(file, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=['open', 'high', 'low', 'close', 'histo'])
-        writer.writeheader()
-        writer.writerows([sample.model_dump() for sample in samples])
-
-
-
-##########################################################################################
 
 class Trade(BaseModel):
     """ a basic trade at the exchange """
@@ -109,23 +37,44 @@ class Sample(BaseModel):
 
 
 class SampleReader:
+    """ reads samples from a file"""
+
+    def __init__(self, file: str | Path):
+        self.file = file
 
     @classmethod
     def from_file(cls, file: str | Path):
         return cls(file)
 
-    def __init__(self, file: str | Path):
-        pass
+    def __iter__(self):
+        with open(self.file, mode="r", newline="") as file:
+            reader = csv.DictReader(file)
+            for row in reader:
+                yield Sample(
+                    open=int(row["open"]),
+                    high=int(row["high"]),
+                    low=int(row["low"]),
+                    close=int(row["close"]),
+                    histo=ast.literal_eval(row["histo"]),
+                )
+
 
 class SampleWriter:
+    """ writes samples """
 
-    @classmethod
-    def to_file(cls, file: str | Path, Iterable):
-        pass
+    def to_file(file: str | Path, samples):
+        """ writes samples in file as csv """
+        if isinstance(file, str):
+            file = Path(file)
+
+        with open(file, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=['open', 'high', 'low', 'close', 'histo'])
+            writer.writeheader()
+            writer.writerows([sample.model_dump() for sample in samples])
 
 
 class SampleBuilder:
-    """builds 1 sec samples from databento trade records"""
+    """ builds 1 sec samples from trades """
 
     @classmethod
     def from_trades(cls, trades: Iterable, start_offset: int = 0, duration: int = sys.maxsize, n: int = sys.maxsize):
@@ -311,7 +260,7 @@ class Histogram:
 
 
 class Bar(BaseModel):
-    """Kapselt die Daten einer fertigen Kerze"""
+    """ Kapselt die Daten einer fertigen Kerze """
 
     open: int
     close: int
@@ -324,10 +273,6 @@ class Bar(BaseModel):
             open = sample.open,
             close = sample.close,
         )
-
-    @property
-    def is_full():
-        return len == self._size - 1
 
     @property
     def average(self):
