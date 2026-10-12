@@ -129,10 +129,20 @@ class SampleBuilder:
 
     @classmethod
     def from_trades(cls, trades: Iterable, start_offset: int = 0, duration: int = sys.maxsize, n: int = sys.maxsize):
-        """ delivers Samples form trades"""
+        """ delivers Samples form trades
+        
+        trades  source of Trades e.g, marketdata.from_file()
+        start_offset    start offest in seconds: 
+                        the timestamp of the first trade used to build a sample
+                        must be 'start_offset' seconds greater than the timestamp of the first trade received
+        duration        duration in seconds:
+                        the timestamp of the last trade to be used to build a sample
+                        is not longer away as 'duration' from the first trade used to build samples
+        n               amount of samples to be build
+        """
         return SampleBuilder(trades)
 
-    def __init__(self, trades):
+    def __init__(self, trades, start_offset: int = 0, duration: int = sys.maxsize):
         self.trades = trades
         self.timestamp_offset: int = 0
         self.histo: dict[int, int] = {}
@@ -141,42 +151,59 @@ class SampleBuilder:
         self.low: int = sys.maxsize
         self.close: int = None
         self.timestamp: int = None
+        self.start_offset = start_offset
+        self.end_offset = self.start_offset + duration
 
-    def on_trade(self, timestamp, price, volume) -> dict:
-        """ adds a trade to the current sample and return a sample, if it is ready. None otherwise """
+    def __iter__(self):
+        """ iterates of the trades and yields samples """
+        for trade in self.trades:
+            timestamp = trade.timestamp // 10**9 # timestamp is now in seconds
+            price = trade.price
+            volume = trade.volume
 
-        sample = None
-        if self.timestamp is None:
-            # this is the very first sample
-            self.timestamp_offset = timestamp
-            self.timestamp = 0
-            self.open = price
+            if self.timestamp is None:
+                # this is the very first sample
+                self.timestamp_offset = timestamp
+                self.timestamp = 0
 
-        timestamp -= self.timestamp_offset
+            timestamp -= self.timestamp_offset # timestamp is now relative to the start
 
-        if timestamp > self.timestamp:
-            # sample is ready to be delivered...
-            sample = self.get_sample()
-            # wir schicken das aktuelle sample erst ab, wenn ein neuer trade da ist.
-            # damit verpassen wir mindestens einen Trade.
-            # Obwohl wir diesen Trade schon empfangen haben,
-            # verwenden wir ihn in unser darauffolgenden verarbeitung nicht.
-            # Alternative: den Trade, der das verschiecken auslöst,
-            # noch mit in das aktuelle Sample aufnehmen, obwohl es eigentlich zum nächsten gehört.
-            # Dann fließt dieser Trade schon mit ein in die Kauf/Verkauf-Entscheidung.
-            #
-            # Für die Simulation ist das jetzt egal, aber im Live-System muss das so gemacht werden.
-            # Deshalb muss das hier nochmal umgebaut werden.
-            self.timestamp = timestamp
-            self.open = price
+            if timestamp < self.start_offset:
+                continue
+            elif timestamp > self.end_offset:
+                return
 
-        self.histo[price] = volume + self.histo.get(price, 0)
-        self.high = max(self.high, price)
-        self.low = min(self.low, price)
-        self.close = price
-        return sample
+            if self.open is None:
+                # this is the first sample sample of the bar
+                self.open = price
+                self.timestamp = timestamp
 
-    def get_sample(self) -> dict:
+            if timestamp > self.timestamp:
+                # sample is ready to be delivered...
+                yield self._next_sample()
+                # wir schicken das aktuelle sample erst ab, wenn ein neuer trade da ist.
+                # damit verpassen wir einen Trade.
+                # Obwohl wir diesen Trade schon empfangen haben,
+                # verwenden wir ihn in unser darauffolgenden verarbeitung nicht.
+                # Alternative: den Trade, der das verschiecken auslöst,
+                # noch mit in das aktuelle Sample aufnehmen, obwohl es eigentlich zum nächsten gehört.
+                # Dann fließt dieser Trade schon mit ein in die Kauf/Verkauf-Entscheidung.
+                #
+                # Für die Simulation ist das jetzt egal, aber im Live-System muss das so gemacht werden.
+                # Deshalb muss das hier nochmal umgebaut werden.
+                self.timestamp = timestamp
+                self.open = price
+
+            self.histo[price] = volume + self.histo.get(price, 0)
+            self.high = max(self.high, price)
+            self.low = min(self.low, price)
+            self.close = price
+
+        if len(self.histo) > 0:
+            # there is a sample left...
+            yield self._next_sample()
+
+    def _next_sample(self) -> dict:
         sample = Sample(
             low=self.low,
             high=self.high,
@@ -188,10 +215,6 @@ class SampleBuilder:
         self.high = 0
         self.low = sys.maxsize
         return sample
-
-    @property
-    def is_sample_available(self) -> bool:
-        return len(self.histo) > 0
 
 
 class Histogram:
