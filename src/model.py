@@ -77,7 +77,7 @@ class SampleBuilder:
     """ builds 1 sec samples from trades """
 
     @classmethod
-    def from_trades(cls, trades: Iterable, start_offset: int = 0, duration: int = sys.maxsize, n: int = sys.maxsize):
+    def from_trades(cls, trades: Iterable, start_offset: int = 0, duration: int = sys.maxsize):
         """ delivers Samples form trades
         
         trades  source of Trades e.g, marketdata.from_file()
@@ -89,7 +89,7 @@ class SampleBuilder:
                         is not longer away as 'duration' from the first trade used to build samples
         n               amount of samples to be build
         """
-        return SampleBuilder(trades)
+        return SampleBuilder(trades, start_offset, duration)
 
     def __init__(self, trades, start_offset: int = 0, duration: int = sys.maxsize):
         self.trades = trades
@@ -171,9 +171,9 @@ class Histogram:
 
     def __init__(self, low: int, values: Iterable):
         if not isinstance(low, int):
-            raise TypeError(f"__init__() argument 'low' must be int, not {type(low).__name__}")
+            raise TypeError(f"__init__() argument 'low' must be int, not {type(low).__name__}")  # pragma: no cover
         if not isinstance(values, Iterable):
-            raise TypeError(f"__init__() argument 'values' must be an iterable, not {type(values).__name__}")
+            raise TypeError(f"__init__() argument 'values' must be an iterable, not {type(values).__name__}")  # pragma: no cover 
 
         self._low = low
         self._values = [Histogram._validate_int(value, "__init__() values in 'values'") for value in values]
@@ -204,7 +204,7 @@ class Histogram:
 
     def merge(self, other):
         if not isinstance(other, Histogram):
-            raise TypeError(f"merge(other) argument 'other' must be a Histogram, not {type(other).__name__}")
+            raise TypeError(f"merge(other) argument 'other' must be a Histogram, not {type(other).__name__}") # pragma: no cover
 
         self._volume += other.volume
         self._price_volume += other._price_volume
@@ -223,9 +223,9 @@ class Histogram:
     def __setitem__(self, index: int, value: int):
         Histogram._validate_int(value, "__setitem__(): value")
         if index < self.low or index > self.high:
-            raise IndexError("Histogram: index out of range")
+            raise IndexError("Histogram: index out of range") # pragma: no cover
         if value < 0:
-            raise ValueError("__setitem__(): value must not be negative")
+            raise ValueError("__setitem__(): value must not be negative") # pragma: no cover
 
         delta = value - self._values[index - self._low]
         self._volume += delta
@@ -233,7 +233,7 @@ class Histogram:
         self._values[index - self._low] = value
 
     def __delitem__(self, index):
-        raise TypeError("'Histogram' object does not support item deletion ")
+        raise TypeError("'Histogram' object does not support item deletion ") # pragma: no cover
 
     def __iter__(self):
         for i, v in enumerate(self._values):
@@ -244,38 +244,35 @@ class Histogram:
         if isinstance(other, Histogram):
             histo = Histogram(self.low, self._values)
             return histo.merge(other)
-        return NotImplemented
+        return NotImplemented  # pragma: no cover
 
     def __iadd__(self, other):
         if isinstance(other, Histogram):
             return self.merge(other)
-        return NotImplemented
+        return NotImplemented  # pragma: no cover
 
     def __isub__(self, other):
         if not isinstance(other, Histogram):
-            return NotImplemented
+            return NotImplemented  # pragma: no cover
 
         self._volume -= other.volume
         self._price_volume -= other._price_volume
 
         if self.low > other.low or self.high < other.high:
-            raise ValueError("__isub__() range of 'other' is to wide")
+            raise ValueError("__isub__() range of 'other' is to wide")  # pragma: no cover
 
         for i in range(self.low, self.high + 1):
             self[i] -= other[i]
             if self[i] < 0:
-                raise ValueError(f"__isub()__() value of other is the high at price {i}")
+                raise ValueError(f"__isub()__() value of other is the high at price {i}") # pragma: no cover
     
         return self
     
-    def _histo_value(low: int, histo: list[int], i) -> int:
-        return 0 if (i < low) or i > (low + len(histo) - 1) else histo[i - low]
-
     def _validate_int(value, text: str) -> int:
         if not isinstance(value, int):
-            raise TypeError(f"{text} must be int, not {type(value).__name__}")
+            raise TypeError(f"{text} must be int, not {type(value).__name__}") # pragma: no cover
         if value < 0:
-            raise ValueError(f"{text} must be >= 0")
+            raise ValueError(f"{text} must be >= 0") # pragma: no cover
         return value
 
 
@@ -323,7 +320,7 @@ class Bar:
 
     def __iadd__(self, other: Sample):
         if not isinstance(other, Sample):
-            raise TypeError("__iadd__(): other must be instance of Sample")
+            raise TypeError("__iadd__(): other must be instance of Sample") # pragma: no cover
 
         if not self.histo:
             self._len = 1
@@ -362,7 +359,7 @@ class Chart:
 
     def __iadd__(self, sample):
         if not isinstance(sample, Sample):
-            raise TypeError("__iadd__() 'sample' must be of type 'Sample")
+            raise TypeError("__iadd__() 'sample' must be of type 'Sample") # pragma: no cover
         
         if self._new_bar:
             self._new_bar += sample

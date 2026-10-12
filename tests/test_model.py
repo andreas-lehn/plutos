@@ -44,7 +44,7 @@ def trade_list_5():
 
     
 def test_sample_builder_streaming(trade_list_40):
-    builder = SampleBuilder(trade_list_40)
+    builder = SampleBuilder.from_trades(trade_list_40)
     samples = [sample for sample in builder]
     assert len(samples) == 8
     assert samples[0].open  == 122243
@@ -55,14 +55,14 @@ def test_sample_builder_streaming(trade_list_40):
     assert samples[7].close == 122282
 
 def test_sample_builder_start_duration(trade_list_40):
-    builder = SampleBuilder(trade_list_40, start_offset=2, duration=2)
+    builder = SampleBuilder.from_trades(trade_list_40, start_offset=2, duration=2)
     samples = [sample for sample in builder]
     assert len(samples) == 2
     assert samples[0].close == 122257
     assert samples[1].open  == 122258    
     
 def test_sample_builder(trade_list_5):
-    builder = SampleBuilder(trade_list_5)
+    builder = SampleBuilder.from_trades(trade_list_5)
     samples = [ s for s in builder ]
     assert len(samples) == 1
     s0 = samples[0]
@@ -117,6 +117,7 @@ def test_bar(some_samples):
     assert len(bar) == 1
     assert bar.open == s0.open
     assert bar.high == s0.high
+    assert bar.average == 101
     assert bar.low  == s0.low
     assert bar.close == s0.close
     assert bar[101] == 3
