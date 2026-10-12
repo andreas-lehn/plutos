@@ -32,3 +32,9 @@ pythonpath = ["src"]
 
 # Packt deine Coverage-Befehle und die ausführliche Anzeige (-v) direkt in den Standard-Lauf
 addopts = "-v --cov=src --cov-report=term-missing --cov-report=xml"
+
+[tool.coverage.report]
+exclude_also = [
+    # Schließt Zeilen aus, die genau diesen Text enthalten
+     "if __name__ == .__main__.:",
+]
