@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from model import Trade, Sample, SampleBuilder, SampleReader, SampleWriter
+from model import Trade, Sample, SampleBuilder, SampleReader, SampleWriter, Bar, Chart
 
 @pytest.fixture
 def csv_path():
@@ -81,7 +81,7 @@ def test_sample_builder(trade_list_5):
     assert s0.close == 12501
     assert s0.histo == [4, 1, 7, 0, 3]
 
-def test_from_csv(csv_path):
+def test_sample_reader(csv_path):
     reader = SampleReader.from_file(csv_path)
     samples = [sample for sample in reader]
     assert len(samples) == 9
@@ -95,15 +95,49 @@ def test_from_csv(csv_path):
     assert samples[7].high == 122667
     assert samples[8].open == 122662
 
-def test_to_csv(csv_out_in_path):
-    out_samples = [
-        Sample(open=100, high=102, low=99,  close=101, histo=[1, 2, 3, 1]),
-        Sample(open=101, high=103, low=100, close=102, histo=[2, 3, 2, 1]),
-        Sample(open=102, high=104, low=102, close=104, histo=[1, 2, 4]),
-        Sample(open=104, high=104, low=99,  close=100, histo=[4, 3, 2, 1, 1, 2])
-    ]
+@pytest.fixture
+def some_samples():
+    return [
+        Sample(open=100, low=99,  high=102, close=101, histo=[1, 2, 3, 1]),
+        Sample(open=101, low=100, high=103, close=102, histo=[   2, 3, 2, 1]),
+        Sample(open=102, low=102, high=104, close=104, histo=[         1, 2, 4]),
+        Sample(open=104, low=99,  high=104, close=100, histo=[4, 3, 2, 1, 1, 2]),
+    ]                                                      # [4, 7, 8, 5, 4, 6]  
 
-    SampleWriter.to_file(str(csv_out_in_path), out_samples)
+def test_sample_writer(some_samples, csv_out_in_path):
+
+    SampleWriter.to_file(str(csv_out_in_path), some_samples)
     reader = SampleReader.from_file(csv_out_in_path)
-    for out, read in zip(out_samples, reader):
+    for out, read in zip(some_samples, reader):
         assert out == read
+
+def test_bar(some_samples):
+    s0 = some_samples[0]
+    bar = Bar.from_sample(s0)
+    assert len(bar) == 1
+    assert bar.open == s0.open
+    assert bar.high == s0.high
+    assert bar.low  == s0.low
+    assert bar.close == s0.close
+    assert bar[101] == 3
+    assert bar[102] == 1
+    assert bar.volume == 7
+
+    bar += some_samples[1]
+    assert len(bar) == 2
+    assert bar.close == 102
+    assert bar.low  == 99
+    assert bar.high == 103
+    assert bar.volume == 15
+    assert bar[99]  == 1
+    assert bar[100] == 4
+
+    bar += some_samples[2]
+    bar += some_samples[3]
+    assert len(bar) == 4
+    assert bar.open == 100
+    assert bar.low  == 99
+    assert bar.high == 104
+    assert bar.close == 100
+    assert bar[101] == 8
+    assert bar[102] == 5

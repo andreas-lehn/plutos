@@ -259,20 +259,20 @@ class Histogram:
         return value
 
 
-class Bar(BaseModel):
+class Bar:
     """ Kapselt die Daten einer fertigen Kerze """
 
-    open: int
-    close: int
+    def __init__(self):
+        self._len = 0
+        self.histo = None
+        self.open = None,
+        self.close = None,
 
-    def __init__(self, size: int, sample: Sample):
-        self._size = size
-        self._len = 1
-        self.histo = Histogram(sample.low, sample.histo)
-        super().__init__(
-            open = sample.open,
-            close = sample.close,
-        )
+    @classmethod
+    def from_sample(cls, sample):
+        bar = cls()
+        bar += sample
+        return bar
 
     @property
     def average(self):
@@ -281,7 +281,7 @@ class Bar(BaseModel):
     @property
     def volume(self) -> int:
         return self.histo.volume
-
+    
     @property
     def low(self) -> int:
         return self.histo.low
@@ -297,24 +297,33 @@ class Bar(BaseModel):
             "average": self.average,
             "low": self.low,
             "close": self.close,
+            "len": self._len,
             "histo": list(self.histo),
         }
 
     def __iadd__(self, other: Sample):
-        if self.is_full:
-            raise ValueError(f"__iadd__() bar is full")
         if not isinstance(other, Sample):
-            raise TypeError(f"__iadd__() argument 'other' must be a Sample, not {type(other).__name__}")
-        
-        self.histo += Histogram(other.low, other.histo)
-        self.close = other.close
-        self._len += 1
+            raise TypeError("__iadd__(): other must be instance of Sample")
+
+        if not self.histo:
+            self._len = 1
+            self.histo = Histogram(other.low, other.histo.copy())
+            self.open = other.open
+            self.close = other.close
+        else:
+            self.histo += Histogram(other.low, other.histo)
+            self.close = other.close
+            self._len += 1
+        return self
 
     def __getitem__(self, index: int) -> int:
         return self.histo[index]
 
     def __iter__(self):
         self.histo.__iter__()
+
+    def __len__(self):
+        return self._len
 
 
 class Chart:
