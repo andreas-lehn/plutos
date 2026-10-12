@@ -5,25 +5,13 @@ from zoneinfo import ZoneInfo
 import pytest
 import csv
 
-from model import Sample
+from model import Trade
 import marketdata
 
-@pytest.fixture
-def csv_path():
-    return Path(__file__).resolve().parent / "test_samples.csv"
-
-@pytest.fixture
-def csv_out_in_path():
-    return Path(__file__).resolve().parent / "test_out_in_samples.csv"
 
 @pytest.fixture
 def dbn_path():
     return Path(__file__).resolve().parent / "test_trades.dbn"
-
-@pytest.fixture
-def dbn_ref_path():
-    return Path(__file__).resolve().parent / "test_trades_samples.csv"
-
 
 def test_symbol_code():
     assert marketdata.symbol_code('mnq', date(2024,  3,  1)) == 'MNQH4'
@@ -56,51 +44,22 @@ def test_active_symbol():
     assert marketdata.active_symbol('nq', date(2026, 12, 13)) == "NQZ6"
     assert marketdata.active_symbol('nq', date(2026, 12, 14)) == "NQH7"
 
-def test_from_csv(csv_path):
-    samples = marketdata.from_file(csv_path)
-    assert len(samples) == 9
-    assert samples[0].open == 122622
-    assert samples[1].high == 122667
-    assert samples[2].low == 122659
-    assert samples[3].close == 122666
-    assert samples[4].close == 122662
-    assert samples[5].low == 122654
-    assert samples[6].histo == [19, 10, 8, 6, 4, 26, 10]
-    assert samples[7].high == 122667
-    assert samples[8].open == 122662
+def test_from_dbn(dbn_path):
+    reader = marketdata.from_file(dbn_path, n = 10)
+    trades = [trade for trade in reader]
+    assert len(trades) == 10
 
-def test_to_csv(csv_out_in_path):
-    out_samples = [
-        Sample(open=100, high=102, low=99,  close=101, histo=[1, 2, 3, 1]),
-        Sample(open=101, high=103, low=100, close=102, histo=[2, 3, 2, 1]),
-        Sample(open=102, high=104, low=102, close=104, histo=[1, 2, 4]),
-        Sample(open=104, high=104, low=99,  close=100, histo=[4, 3, 2, 1, 1, 2])
-    ]
+    start_offset = 5 * 10**9 # 5 sec offset
+    offset_trades = [trade for trade in marketdata.from_file(dbn_path, start=start_offset, duration=1)]
+    start_timestamp = trades[0].timestamp + start_offset
+    for trade in offset_trades:
+        assert trade[0].timestamp == start_timestamp
 
-    marketdata.to_file(str(csv_out_in_path), out_samples)
-    in_samples = marketdata.from_file(csv_out_in_path)
-    assert out_samples == in_samples
+    no_trades = [trade for trade in marketdata.from_file(dbn_path, start=start_offset, duration=0)]
+    assert len(no_trades) == 0
 
-def test_from_dbn(dbn_path, dbn_ref_path):
-    samples = marketdata.from_file(dbn_path)
-    assert len(samples) == 60
-
-    with open(dbn_ref_path, mode="r", newline="") as file:
-        reader = csv.DictReader(file)
-        for sample, ref in zip(samples, [r for r in reader]):
-            assert sample.open == int(ref["open"])
-            assert sample.high == int(ref["high"])
-            assert sample.low  == int(ref["low"])
-            assert sample.close== int(ref["close"])
-            assert sum(sample.histo) == int(ref['volume'])
-
-    samples_20 = marketdata.from_file(str(dbn_path), start=20, duration=11)
-    samples_30 = marketdata.from_file(str(dbn_path), start=30, duration=1)
-    assert samples_20[10] == samples_30[0]
-
-def tests_wrong_file_type():
-    with pytest.raises(ValueError):
-        marketdata.from_file('abc.def')
+    no_trades = [trade for trade in marketdata.from_file(dbn_path, start=start_offset, n=0)]
+    assert len(no_trades) == 0
 
 def test_CME_session():
     d = date(2026, 10, 1)

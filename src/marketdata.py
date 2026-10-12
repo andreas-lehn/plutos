@@ -9,13 +9,14 @@ interface to market data
 import os
 import csv
 import ast
+import sys
 
 from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 from pathlib import Path
 
 import databento as db
-from model import Sample, SampleBuilder
+from model import Trade, Sample, SampleBuilder
 
 
 SECONDS_OF_DAY = 86400
@@ -78,79 +79,44 @@ def download_trades(symbol: str, start: str, end: str): # pragma: no cover
         end=end,
     )
 
+class TradesReader:
+    """ reads trades from dbn file """
 
-def _stream_csv_file(file: Path, callback: callable) -> list[Sample]:
-    """ streams samples from file with sample data as cvs """
-    with open(file, mode="r", newline="") as file:
-        reader = csv.DictReader(file)
-        for row in reader:
-            sample = Sample(
-                open=int(row["open"]),
-                high=int(row["high"]),
-                low=int(row["low"]),
-                close=int(row["close"]),
-                histo=ast.literal_eval(row["histo"]),
-            )
-            callback(sample)
+    def __init__(self, file: str | Path, start: int = 0, duration: int = sys.maxsize, n = sys.maxsize):
+        self.file = file
+        self.start = start # start time in ns
+        self.duration = duration # duration in ns
+        self.n = n  # amount of trades that should be readed
+        self.i = 0  # amount of trades already read
 
+    def __iter__(self):
+        data = db.DBNStore.from_file(self.file)
+        start_timestamp = data.metadata.start + self.start
+        end_timestamp = start_timestamp + self.duration
+        for record in data:
+            if self.i == self.n:
+                break
+            if record.ts_event < start_timestamp:
+                continue
+            if record.ts_event > end_timestamp:
+                break
 
-def _stream_dbn_file(file: Path, callback: callable, start: int = 0, duration: int = SECONDS_OF_DAY) -> list[Sample]:
-    sample_builder = SampleBuilder()
+            price = record.price // 250_000_000
+            volume = record.size
+            timestamp = record.ts_event
+            yield Trade(
+                timestamp=timestamp,
+                price=price,
+                volume=volume,
+                )
+            self.i += 1
 
-    data = db.DBNStore.from_file(file)
-    start_timestamp = data.metadata.start + start * 10**9
-    end_timestamp = start_timestamp + duration * 10**9
-    for record in data:
-        if record.ts_event < start_timestamp:
-            continue
-        if record.ts_event > end_timestamp:
-            break
+def from_file(file: str | Path, start: int = 0, duration: int = sys.maxsize, n = sys.maxsize):
+    return TradesReader(file, start, duration, n)
 
-        price = record.price // 250_000_000
-        volume = record.size
-        timestamp = record.ts_event // 1_000_000_000
-        sample = sample_builder.on_trade(timestamp, price, volume)
-        if sample:
-            callback(sample)
-
-    if sample_builder.is_sample_available:
-        callback(sample_builder.get_sample())
-
-
-def stream_file(file: str | Path, callback: callable, start: int = 0, duration: int = SECONDS_OF_DAY):
-    """ streams market data from a file """
-    if isinstance(file, str):
-        file = Path(file)
-    suffix = file.suffix
-    if suffix == '.csv':
-        _stream_csv_file(file, callback)
-    elif suffix == '.dbn':
-        _stream_dbn_file(file, callback, start, duration)
-    else:
-        raise ValueError(f"from_file(): unknown suffix '{suffix}'. must be 'csv' or 'dbn'")
-
-
-def from_file(file: str | Path, start: int = 0, duration: int = SECONDS_OF_DAY) -> list[Sample]:
-    """ loads samples from file (.csv | .dbn) """
-    samples = []
-    stream_file(file, lambda sample: samples.append(sample), start, duration)
-    return samples
-
-
-def stream_live(callback: callable): # pragma: no cover
+def from_live_stream(): # pragma: no cover
     """ streams live market data """
     pass
-
-
-def to_file(file: str | Path, samples):
-    """ stores samples in file as csv """
-    if isinstance(file, str):
-        file = Path(file)
-
-    with open(file, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=['open', 'high', 'low', 'close', 'histo'])
-        writer.writeheader()
-        writer.writerows([sample.model_dump() for sample in samples])
 
 
 def CME_session(date: date) -> (datetime, datetime):
