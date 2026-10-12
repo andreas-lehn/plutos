@@ -183,6 +183,9 @@ class Histogram:
             self._volume += v
             self._price_volume += (self._low + p) * v
 
+    def copy(self):
+        return Histogram(self._low, self._values)
+    
     @property
     def low(self):
         return self._low
@@ -248,6 +251,23 @@ class Histogram:
             return self.merge(other)
         return NotImplemented
 
+    def __isub__(self, other):
+        if not isinstance(other, Histogram):
+            return NotImplemented
+
+        self._volume -= other.volume
+        self._price_volume -= other._price_volume
+
+        if self.low > other.low or self.high < other.high:
+            raise ValueError("__isub__() range of 'other' is to wide")
+
+        for i in range(self.low, self.high + 1):
+            self[i] -= other[i]
+            if self[i] < 0:
+                raise ValueError(f"__isub()__() value of other is the high at price {i}")
+    
+        return self
+    
     def _histo_value(low: int, histo: list[int], i) -> int:
         return 0 if (i < low) or i > (low + len(histo) - 1) else histo[i - low]
 
@@ -327,7 +347,7 @@ class Bar:
 
 
 class Chart:
-    """ a chart contains a sequence of Bars all with the same size 
+    """ a chart contains a sequence of Bars all with the same length 
     
     A chart has a limited size.
     New bars cause old bars to disappear.
@@ -335,35 +355,39 @@ class Chart:
     """
 
     def __init__(self, size: int, bar_size: int):
-        self._queue = deque(size)
+        self.bars = deque(maxlen=size)
         self._bar_size = bar_size
         self._new_bar = None
-        self.histo = None
-
-    def __len__(self): 
-        len(self.queue)
+        self._histo = None
 
     def __iadd__(self, sample):
+        if not isinstance(sample, Sample):
+            raise TypeError("__iadd__() 'sample' must be of type 'Sample")
+        
         if self._new_bar:
             self._new_bar += sample
         else:
-            self._new_bar = Bar(self._bar_size, sample)
+            self._new_bar = Bar.from_sample(sample)
         
-        if self._new_bar.is_full:
+        if len(self._new_bar) >= self._bar_size:
             self._commit_bar()
 
+        return self
 
     def __getitem__(self, index: int) -> int:
-        return self._queue[index]
+        return self._histo[index]
 
     def __iter__(self):
         self._histo.__iter__()
 
     def _commit_bar(self):
-        if len(self._queue) == self._queue.maxlen:
-            self.histo -= self._queue[-1].histo
-        self._queue.appendleft(self._new_bar)
-        self.histo += self._new_bar.histo
+        if len(self.bars) == self.bars.maxlen:
+            self._histo -= self.bars[-1].histo
+        self.bars.appendleft(self._new_bar)
+        if self._histo:
+            self._histo += self._new_bar.histo
+        else:
+            self._histo = self._new_bar.histo.copy()
         self._new_bar = None
 
 

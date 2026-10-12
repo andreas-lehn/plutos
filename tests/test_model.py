@@ -141,3 +141,14 @@ def test_bar(some_samples):
     assert bar.close == 100
     assert bar[101] == 8
     assert bar[102] == 5
+
+
+def test_chart(csv_path):
+    chart = Chart(2, 3)
+    reader = SampleReader.from_file(csv_path)
+    for sample in reader:
+        chart += sample
+
+    assert len(chart.bars) == 2
+    assert chart[122615] == 0
+    assert chart[122654] == chart.bars[0][122654] + chart.bars[1][122654]
