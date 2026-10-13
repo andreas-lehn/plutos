@@ -334,7 +334,7 @@ class Chart(Sample):
 
     """
 
-    def __init__(self, size: int, bar_size: int):
+    def __init__(self, bar_size: int, size: int = None):
         super().__init__()
         self._bars = deque(maxlen=size)
         self._bar_size = bar_size
@@ -368,3 +368,34 @@ class Chart(Sample):
         self._new_bar = None
         self.open = self._bars[-1].open
         self.close = self._bars[0].close
+
+
+class MarketModel:
+    """ MarketModell contains charts and feeds them """
+
+    def __init__(self):
+        self.charts = []
+
+    def feed_with_trades(self, trades: Iterable[Trade]):
+        builder = SampleBuilder(trades)
+        for sample in builder:
+            for chart in self.charts:
+                chart += sample
+
+    @classmethod
+    def default_model(cls):
+        """ default model contain a short, mid, retail and long term chart
+        
+         * short term chart is 12s
+         * mid term chart is 36s
+         * retail chart is 60s 
+         * long term chart is 720s (12 min)
+
+        all charts are unlimited
+        """
+        model = cls()
+        model.charts.append(Chart(bar_size=12))
+        model.charts.append(Chart(bar_size=36))
+        model.charts.append(Chart(bar_size=60))
+        model.charts.append(Chart(bar_size=720))
+        return model

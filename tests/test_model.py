@@ -4,7 +4,8 @@ from zoneinfo import ZoneInfo
 import sys
 import pytest
 
-from model import Trade, Sample, SampleBuilder, SampleReader, SampleWriter, Bar, Chart
+from model import Trade, Sample, SampleBuilder, SampleReader, SampleWriter, Bar, Chart, MarketModel
+import marketdata
 
 @pytest.fixture
 def csv_path():
@@ -15,8 +16,8 @@ def csv_out_in_path():
     return Path(__file__).resolve().parent / "test_out_in_samples.csv"
 
 @pytest.fixture
-def dbn_ref_path():
-    return Path(__file__).resolve().parent / "test_trades_samples.csv"
+def dbn_path():
+    return Path(__file__).resolve().parent / "test_trades.dbn"
 
 @pytest.fixture
 def trade_list_40():
@@ -335,7 +336,7 @@ def test_bar_to_dict(some_samples):
 
 
 def test_chart(csv_path):
-    chart = Chart(2, 3)
+    chart = Chart(3, 2)
     reader = SampleReader.from_file(csv_path)
     for sample in reader:
         chart += sample
@@ -346,4 +347,26 @@ def test_chart(csv_path):
 
     for bar in chart:
         assert bar.size == 3
-    
+
+def test_market_model(dbn_path):
+    reader = marketdata.from_file(dbn_path, n=10)
+    trades = [trade for trade in reader]
+
+    class Feeder:
+        def __init__(self, trades, duration: int = 720):
+            self.trades = trades
+            self.duration = duration
+
+        def __iter__(self):
+            for time_offset in range(0, self.duration):
+                for trade in trades:
+                    trade.timestamp = time_offset * 10**9
+                    yield trade
+
+    model = MarketModel.default_model()
+    model.feed_with_trades(Feeder(trades))
+
+    assert len(model.charts[0]) == 720 // 12
+    assert len(model.charts[1]) == 720 // 36
+    assert len(model.charts[2]) == 720 // 60
+    assert len(model.charts[3]) == 1
