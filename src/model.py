@@ -8,6 +8,7 @@ contains classes for trades, bars, charts,...
 import sys
 import csv
 import ast
+from array import array
 
 from collections.abc import Iterable
 from pathlib import Path
@@ -26,15 +27,162 @@ class Trade(BaseModel):
     volume: int
 
 
-class Sample(BaseModel):
+class Sample():
     """Kapselt die Daten eines Samples"""
 
-    open: int
-    high: int
-    low: int
-    close: int
-    histo: list[int]
+    VOLUMES_BLOCK_SIZE = 32
 
+    def __init__(self):
+        self.open = None
+        self.low = sys.maxsize
+        self.high = 0
+        self.close = None
+        self.volumes = Sample.VolumeProxy(self)
+        self._volumes = Sample._new_blocks(3)
+        self._base_price = None
+        self._volume = 0
+        self._price_x_volume = 0
+
+    @property
+    def average(self):
+        return round(self._price_x_volume / self._volume)
+
+    @property
+    def volume(self):
+        return self._volume
+
+    def to_dict(self) -> dict:
+        return {
+            "open": self.open,
+            "high": self.high,
+            "low": self.low,
+            "close": self.close,
+            "volumes": [self.volumes[price] for price in range(self.low, self.high + 1)],
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        sample = cls()
+        sample.low = data['low']
+        for i, vol in enumerate(data['volumes']):
+            price = sample.low + i
+            sample.volumes[price] = vol
+        sample.open = data['open']
+        sample.close = data['close']
+        return sample
+
+    def copy(self):
+        return Sample.from_dict(self.to_dict())
+
+    def _resize(self, price):
+        if price < self._base_price:
+            delta = self._base_price - price
+            blocks_needed = delta // Sample.VOLUMES_BLOCK_SIZE + 1
+            self._volumes = Sample._new_blocks(blocks_needed) + self._volumes
+            self._base_price -= blocks_needed * Sample.VOLUMES_BLOCK_SIZE
+        elif price >= self._block_max:
+            delta = price - self._base_price + len(self._volumes)
+            blocks_needed = delta // Sample.VOLUMES_BLOCK_SIZE + 1
+            self._volumes = self._volumes + Sample._new_blocks(blocks_needed)
+
+    def _block_begin(price):
+        return (price // Sample.VOLUMES_BLOCK_SIZE) * Sample.VOLUMES_BLOCK_SIZE
+
+    def _new_blocks(n: int):
+        """ returns n block of volumes array """
+        return array('H', [0] * n * Sample.VOLUMES_BLOCK_SIZE)
+
+    @property
+    def _block_max(self):
+        return self._base_price + len(self._volumes)
+
+    class VolumeProxy:
+        def __init__(self, sample):
+            self.sample = sample
+
+        def __getitem__(self, price):
+            if self.sample._base_price is None or price < self.sample._base_price or price >= self.sample._block_max:
+                return 0
+            return self.sample._volumes[price - self.sample._base_price]
+
+        def __setitem__(self, price, volume):
+            if volume < self[price]:
+                raise ValueError("__set_item__(): 'volume' is below current volume of price. volume can only be increased")
+
+            sample = self.sample
+
+            if sample._base_price is None:
+                sample._base_price = Sample._block_begin(price) - Sample.VOLUMES_BLOCK_SIZE
+                sample._volumes[price - sample._base_price] = volume
+                sample._volume = volume
+                sample._price_x_volume = price * volume
+                sample.open = price
+                sample.close = price
+                sample.high = price
+                sample.low = price
+            else:
+                if price < sample._base_price or price >= sample._block_max:
+                    sample._resize(price)
+
+                sample._update(price, volume)
+                sample.high  = max(sample.high, price)
+                sample.low   = min(sample.low, price)
+                sample.close = price
+
+        def __iter__(self):
+            for price in range(self.sample.low, self.sample.high + 1):
+                volume = self[price]
+                if volume > 0:
+                    yield (price, volume)
+
+    def _update(self, price, volume):
+        """ updates the volume of price and all dependant variables """
+        delta_volume = volume - self.volumes[price]
+        self._volumes[price - self._base_price] = volume
+        self._volume += delta_volume
+        self._price_x_volume += delta_volume * price
+
+    def __iadd__(self, other):
+        if not isinstance(other, Sample):
+            raise TypeError("__iadd__() 'other' must be an instance of Sample") # pragma: no cover
+
+        is_first = self.volume == 0
+        for price, volume in other.volumes:
+            self.volumes[price] += volume
+
+        if is_first:
+            self.open = other.open
+        self.close = other.close
+        return self
+
+    def __isub__(self, other):
+        if not isinstance(other, Sample):
+            raise TypeError("__isub__() 'other' must be an instance of Sample")
+
+        for price, vol in other.volumes:
+            old_volume = self.volumes[price]
+            if vol > old_volume:
+                raise ValueError('__isub__(): volume to high to be subtracted')
+            self._update(price, old_volume - vol)
+
+        if self.volume == 0:
+            # we are empty! Bring it back to init state
+            self.open = None
+            self.low = sys.maxsize
+            self.high = 0
+            self.close = None
+            return self
+
+        while self.volumes[self.low] == 0:
+            # low was deleted. search new low...
+            self.low += 1
+
+        while self.volumes[self.high] == 0:
+            # high was deleted. search new high..
+            self.high -= 1
+
+        return self
+            
 
 class SampleReader:
     """ reads samples from a file"""
@@ -50,13 +198,13 @@ class SampleReader:
         with open(self.file, mode="r", newline="") as file:
             reader = csv.DictReader(file)
             for row in reader:
-                yield Sample(
-                    open=int(row["open"]),
-                    high=int(row["high"]),
-                    low=int(row["low"]),
-                    close=int(row["close"]),
-                    histo=ast.literal_eval(row["histo"]),
-                )
+                yield Sample.from_dict({
+                    'open': int(row["open"]),
+                    'high': int(row["high"]),
+                    'low':  int(row["low"]),
+                    'close': int(row["close"]),
+                    'volumes': ast.literal_eval(row["volumes"]),
+                })
 
 
 class SampleWriter:
@@ -68,9 +216,9 @@ class SampleWriter:
             file = Path(file)
 
         with open(file, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=['open', 'high', 'low', 'close', 'histo'])
+            writer = csv.DictWriter(f, fieldnames=['open', 'high', 'low', 'close', 'volumes'])
             writer.writeheader()
-            writer.writerows([sample.model_dump() for sample in samples])
+            writer.writerows([sample.to_dict() for sample in samples])
 
 
 class SampleBuilder:
@@ -93,23 +241,17 @@ class SampleBuilder:
 
     def __init__(self, trades, start_offset: int = 0, duration: int = sys.maxsize):
         self.trades = trades
-        self.timestamp_offset: int = 0
-        self.histo: dict[int, int] = {}
-        self.open: int = None
-        self.high: int = 0
-        self.low: int = sys.maxsize
-        self.close: int = None
-        self.timestamp: int = None
         self.start_offset = start_offset
         self.end_offset = self.start_offset + duration
+
+        self.timestamp_offset: int = 0
+        self.timestamp: int = None
+        self.sample = None
 
     def __iter__(self):
         """ iterates of the trades and yields samples """
         for trade in self.trades:
             timestamp = trade.timestamp // 10**9 # timestamp is now in seconds
-            price = trade.price
-            volume = trade.volume
-
             if self.timestamp is None:
                 # this is the very first sample
                 self.timestamp_offset = timestamp
@@ -122,14 +264,14 @@ class SampleBuilder:
             elif timestamp > self.end_offset:
                 return
 
-            if self.open is None:
+            if self.sample is None:
                 # this is the first sample sample of the bar
-                self.open = price
+                self.sample = Sample()
                 self.timestamp = timestamp
 
             if timestamp > self.timestamp:
                 # sample is ready to be delivered...
-                yield self._next_sample()
+                yield self.sample
                 # wir schicken das aktuelle sample erst ab, wenn ein neuer trade da ist.
                 # damit verpassen wir einen Trade.
                 # Obwohl wir diesen Trade schon empfangen haben,
@@ -141,210 +283,51 @@ class SampleBuilder:
                 # Für die Simulation ist das jetzt egal, aber im Live-System muss das so gemacht werden.
                 # Deshalb muss das hier nochmal umgebaut werden.
                 self.timestamp = timestamp
-                self.open = price
+                self.sample = Sample()
 
-            self.histo[price] = volume + self.histo.get(price, 0)
-            self.high = max(self.high, price)
-            self.low = min(self.low, price)
-            self.close = price
+            self.sample.volumes[trade.price] += trade.volume
 
-        if len(self.histo) > 0:
+        if self.sample.volume > 0:
             # there is a sample left...
-            yield self._next_sample()
+            yield self.sample
 
-    def _next_sample(self) -> dict:
-        sample = Sample(
-            low=self.low,
-            high=self.high,
-            open=self.open,
-            close=self.close,
-            histo=[self.histo.get(i, 0) for i in range(self.low, self.high + 1)],
-        )
-        self.histo = {}
-        self.high = 0
-        self.low = sys.maxsize
-        return sample
+        # prepare to start again
+        self.timestamp_offset: int = 0
+        self.timestamp: int = None
+        self.sample = None
 
 
-class Histogram:
-    """histogram of prices"""
-
-    def __init__(self, low: int, values: Iterable):
-        if not isinstance(low, int):
-            raise TypeError(f"__init__() argument 'low' must be int, not {type(low).__name__}")  # pragma: no cover
-        if not isinstance(values, Iterable):
-            raise TypeError(f"__init__() argument 'values' must be an iterable, not {type(values).__name__}")  # pragma: no cover 
-
-        self._low = low
-        self._values = [Histogram._validate_int(value, "__init__() values in 'values'") for value in values]
-        self._volume = 0
-        self._price_volume = 0
-        for p, v in enumerate(self._values):
-            self._volume += v
-            self._price_volume += (self._low + p) * v
-
-    def copy(self):
-        return Histogram(self._low, self._values)
-    
-    @property
-    def low(self):
-        return self._low
-
-    @property
-    def high(self):
-        return self._low + len(self._values) - 1
-
-    @property
-    def volume(self):
-        return self._volume
-
-    @property
-    def average(self):
-        return round(self._price_volume / self.volume)
-
-    def merge(self, other):
-        if not isinstance(other, Histogram):
-            raise TypeError(f"merge(other) argument 'other' must be a Histogram, not {type(other).__name__}") # pragma: no cover
-
-        self._volume += other.volume
-        self._price_volume += other._price_volume
-
-        low = min(self.low, other.low)
-        high = max(self.high, other.high)
-        self._values = [self[i] + other[i] for i in range(low, high + 1)]
-        self._low = low
-        return self
-
-    def __getitem__(self, index: int) -> int:
-        if index < self.low or index > self.high:
-            return 0
-        return self._values[index - self._low]
-
-    def __setitem__(self, index: int, value: int):
-        Histogram._validate_int(value, "__setitem__(): value")
-        if index < self.low or index > self.high:
-            raise IndexError("Histogram: index out of range") # pragma: no cover
-        if value < 0:
-            raise ValueError("__setitem__(): value must not be negative") # pragma: no cover
-
-        delta = value - self._values[index - self._low]
-        self._volume += delta
-        self._price_volume += index * delta
-        self._values[index - self._low] = value
-
-    def __delitem__(self, index):
-        raise TypeError("'Histogram' object does not support item deletion ") # pragma: no cover
-
-    def __iter__(self):
-        for i, v in enumerate(self._values):
-            if v > 0:
-                yield i + self._low, v
-
-    def __add__(self, other):
-        if isinstance(other, Histogram):
-            histo = Histogram(self.low, self._values)
-            return histo.merge(other)
-        return NotImplemented  # pragma: no cover
-
-    def __iadd__(self, other):
-        if isinstance(other, Histogram):
-            return self.merge(other)
-        return NotImplemented  # pragma: no cover
-
-    def __isub__(self, other):
-        if not isinstance(other, Histogram):
-            return NotImplemented  # pragma: no cover
-
-        self._volume -= other.volume
-        self._price_volume -= other._price_volume
-
-        if self.low > other.low or self.high < other.high:
-            raise ValueError("__isub__() range of 'other' is to wide")  # pragma: no cover
-
-        for i in range(self.low, self.high + 1):
-            self[i] -= other[i]
-            if self[i] < 0:
-                raise ValueError(f"__isub()__() value of other is the high at price {i}") # pragma: no cover
-    
-        return self
-    
-    def _validate_int(value, text: str) -> int:
-        if not isinstance(value, int):
-            raise TypeError(f"{text} must be int, not {type(value).__name__}") # pragma: no cover
-        if value < 0:
-            raise ValueError(f"{text} must be >= 0") # pragma: no cover
-        return value
-
-
-class Bar:
-    """ Kapselt die Daten einer fertigen Kerze """
+class Bar(Sample):
+    """ accumulates multipe samples """
 
     def __init__(self):
-        self._len = 0
-        self.histo = None
-        self.open = None,
-        self.close = None,
+        super().__init__()
+        self._size = 0
 
-    @classmethod
-    def from_sample(cls, sample):
-        bar = cls()
-        bar += sample
-        return bar
-
-    @property
-    def average(self):
-        return self.histo.average
-
-    @property
-    def volume(self) -> int:
-        return self.histo.volume
-    
-    @property
-    def low(self) -> int:
-        return self.histo.low
-
-    @property
-    def high(self) -> int:
-        return self.histo.high
-     
     def to_dict(self) -> dict:
-        return {
-            "open": self.open,
-            "high": self.high,
-            "average": self.average,
-            "low": self.low,
-            "close": self.close,
-            "len": self._len,
-            "histo": list(self.histo),
-        }
+        d = super().to_dict()
+        d['size'] = self._size
+        return d
 
     def __iadd__(self, other: Sample):
-        if not isinstance(other, Sample):
-            raise TypeError("__iadd__(): other must be instance of Sample") # pragma: no cover
-
-        if not self.histo:
-            self._len = 1
-            self.histo = Histogram(other.low, other.histo.copy())
-            self.open = other.open
-            self.close = other.close
-        else:
-            self.histo += Histogram(other.low, other.histo)
-            self.close = other.close
-            self._len += 1
+        super().__iadd__(other)
+        self._size += 1
         return self
 
-    def __getitem__(self, index: int) -> int:
-        return self.histo[index]
+    @property
+    def size(self):
+        return self._size
 
-    def __iter__(self):
-        self.histo.__iter__()
+    @classmethod
+    def from_samples(cls, samples: Iterable):
+        bar = Bar()
+        for sample in samples:
+            bar += sample
+        return bar
 
-    def __len__(self):
-        return self._len
 
-
-class Chart:
-    """ a chart contains a sequence of Bars all with the same length 
+class Chart(Sample):
+    """ a chart contains a sequence of Bars all with the same size 
     
     A chart has a limited size.
     New bars cause old bars to disappear.
@@ -352,111 +335,36 @@ class Chart:
     """
 
     def __init__(self, size: int, bar_size: int):
-        self.bars = deque(maxlen=size)
+        super().__init__()
+        self._bars = deque(maxlen=size)
         self._bar_size = bar_size
         self._new_bar = None
-        self._histo = None
 
     def __iadd__(self, sample):
-        if not isinstance(sample, Sample):
-            raise TypeError("__iadd__() 'sample' must be of type 'Sample") # pragma: no cover
-        
-        if self._new_bar:
-            self._new_bar += sample
-        else:
-            self._new_bar = Bar.from_sample(sample)
-        
-        if len(self._new_bar) >= self._bar_size:
+        super().__iadd__(sample)
+
+        if not self._new_bar:
+            self._new_bar = Bar()
+        self._new_bar += sample
+
+        if self._new_bar.size >= self._bar_size:
             self._commit_bar()
 
         return self
 
     def __getitem__(self, index: int) -> int:
-        return self._histo[index]
+        return self._bars[index]
 
     def __iter__(self):
-        self._histo.__iter__()
+        return self._bars.__iter__()
 
+    def __len__(self):
+        return len(self._bars)
+    
     def _commit_bar(self):
-        if len(self.bars) == self.bars.maxlen:
-            self._histo -= self.bars[-1].histo
-        self.bars.appendleft(self._new_bar)
-        if self._histo:
-            self._histo += self._new_bar.histo
-        else:
-            self._histo = self._new_bar.histo.copy()
+        if len(self._bars) == self._bars.maxlen:
+            self -= self._bars[-1]
+        self._bars.appendleft(self._new_bar)
         self._new_bar = None
-
-
-if __name__ == "__main__":
-    import argparse
-    from pathlib import Path
-
-    parser = argparse.ArgumentParser(description="creates samples or bar out of sample or databento files.")
-    parser.add_argument("filename", help="name of file with samples (.csv) or databento trade records (.dbn)")
-    parser.add_argument("-s", "--start", type=int, default=0, help="start offest (seconds) from where to begin")
-    parser.add_argument("-d", "--duration", type=int, default=24 * 60 * 60, help="duration (seconds)")
-    parser.add_argument("-b", "--barsize", type=int, help="size of the bars or no bars, if bar size is missing")
-    parser.add_argument("-o", "--outfile", type=str, help="name of file for the output. no output file means stdout")
-    args = parser.parse_args()
-
-    filepath = Path(args.filename)
-    result = None
-    bar_builder = None if args.barsize is None else BarBuilder(args.barsize)
-
-    def process_sample(sample):
-        # if a new sample is available, it is send to the bar builder of taken over in the sample list
-        if sample is None:
-            return
-        if bar_builder is None:
-            samples.append(sample)
-        else:
-            bar_builder.on_new_sample(sample)
-
-    if filepath.suffix == ".csv":
-        # we generate bars from samples stored in file
-        if bar_builder is None:
-            print(
-                f"{parser.prog}: barsize must be specified when .csv file is given as input",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-        loader = SampleLoader()
-        loader.add_listener(bar_builder)
-        loader.load_and_stream(args.filename)
-        result = pd.DataFrame([bar.to_dict() for bar in bar_builder])
-
-    elif filepath.suffix == ".dbn":
-        # we start from the ground up...
-        samples = []
-        sample_builder = SampleBuilder()
-
-        data = db.DBNStore.from_file(args.filename)
-        start_timestamp = data.metadata.start + args.start * 10**9
-        end_timestamp = start_timestamp + args.duration * 10**9
-        for record in data:
-            if record.ts_event < start_timestamp:
-                continue
-            if record.ts_event > end_timestamp:
-                break
-            process_sample(sample_builder.on_trade(record))
-
-        if sample_builder.is_sample_available:
-            # there is an open sample that has to be finished...
-            process_sample(sample_builder.get_sample())
-
-        if bar_builder is None:
-            result = pd.DataFrame([sample.model_dump() for sample in samples])
-        else:
-            bar_builder.on_end_of_samples()
-            result = pd.DataFrame([bar.to_dict() for bar in bar_builder])
-
-    else:
-        # unknown file extension
-        print(f"{parser.prog}: error: unknow file extension '{filepath.suffix}' (expected .csv or .dbn)")
-        sys.exit(1)
-
-    if args.outfile is None:
-        print(result.to_csv(index=False))
-    else:
-        result.to_csv(args.outfile, index=False)
+        self.open = self._bars[-1].open
+        self.close = self._bars[0].close
