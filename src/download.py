@@ -3,7 +3,9 @@
 #
 
 from datetime import datetime, timezone
+
 import marketdata
+
 
 def download(prog_name: str, product_code: str, start: datetime, end: datetime): #pragma: no cover
     symbol = marketdata.active_symbol(args.product_code, end)

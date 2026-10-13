@@ -5,17 +5,14 @@ contains classes for trades, bars, charts,...
 """
 
 
-import sys
-import csv
 import ast
+import csv
+import sys
 from array import array
-
+from collections import deque
 from collections.abc import Iterable
 from pathlib import Path
-from collections import deque
 
-import databento as db
-import pandas as pd
 from pydantic import BaseModel
 
 
@@ -107,7 +104,7 @@ class Sample():
 
         def __setitem__(self, price, volume):
             if volume < self[price]:
-                raise ValueError("__set_item__(): 'volume' is below current volume of price. volume can only be increased")
+                raise ValueError("__set_item__(): 'volume' is smaller than current volume of price level")
 
             sample = self.sample
 

@@ -6,18 +6,14 @@ interface to market data
  * uses Databento as data provider
 """
 
-import os
-import csv
-import ast
 import sys
-
 from datetime import UTC, date, datetime, timedelta
-from zoneinfo import ZoneInfo
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import databento as db
-from model import Trade, Sample, SampleBuilder
 
+from model import Trade
 
 SECONDS_OF_DAY = 86400
 
