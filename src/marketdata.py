@@ -78,18 +78,17 @@ def download_trades(symbol: str, start: str, end: str): # pragma: no cover
 class TradesReader:
     """ reads trades from dbn file """
 
-    def __init__(self, file: str | Path, start: int = 0, duration: int = sys.maxsize, n = sys.maxsize):
-        self.file = file
+    def __init__(self, data: db.DBNStore, start: int = 0, duration: int = sys.maxsize, n = sys.maxsize):
+        self.data = data
         self.start = start # start time in ns
         self.duration = duration # duration in ns
         self.n = n  # amount of trades that should be readed
         self.i = 0  # amount of trades already read
 
     def __iter__(self):
-        data = db.DBNStore.from_file(self.file)
-        start_timestamp = data.metadata.start + self.start
+        start_timestamp = self.data.metadata.start + self.start
         end_timestamp = start_timestamp + self.duration
-        for record in data:
+        for record in self.data:
             if self.i == self.n:
                 break
             if record.ts_event < start_timestamp:
@@ -107,8 +106,22 @@ class TradesReader:
                 )
             self.i += 1
 
+    @classmethod
+    def from_file(cls, file: str | Path, start: int = 0, duration: int = sys.maxsize, n = sys.maxsize):
+        return TradesReader.from_data(db.DBNStore.from_file(file), start, duration, n)
+
+    @classmethod
+    def from_data(cls, data: db.DBNStore, start: int = 0, duration: int = sys.maxsize, n = sys.maxsize):
+        return cls(data, start, duration, n)
+
+
 def from_file(file: str | Path, start: int = 0, duration: int = sys.maxsize, n = sys.maxsize):
-    return TradesReader(file, start, duration, n)
+    return TradesReader.from_file(file, start, duration, n)
+
+
+def data_from_file(file: str | Path) -> db.DBNStore:
+    return db.DBNStore.from_file(file)
+
 
 def from_live_stream(): # pragma: no cover
     """ streams live market data """
