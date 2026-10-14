@@ -2,6 +2,25 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Python: Aktuelle Datei",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "model.py",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "src/model.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "databento/MNQZ6_2026-09-28_trades.dbn"
+            ]
+        },
+        {
             "name": "pytest",
             "type": "debugpy",
             "request": "launch",

@@ -44,7 +44,7 @@ def test_active_symbol():
     assert marketdata.active_symbol('nq', date(2026, 12, 13)) == "NQZ6"
     assert marketdata.active_symbol('nq', date(2026, 12, 14)) == "NQH7"
 
-def test_from_dbn(dbn_path):
+def test_from_file(dbn_path):
     reader = marketdata.from_file(dbn_path, n = 10)
     trades = [trade for trade in reader]
     assert len(trades) == 10
@@ -60,6 +60,12 @@ def test_from_dbn(dbn_path):
 
     no_trades = [trade for trade in marketdata.from_file(dbn_path, start=start_offset, n=0)]
     assert len(no_trades) == 0
+
+def test_data_from_file(dbn_path):
+    data = marketdata.data_from_file(dbn_path)
+    TIMESTAMP_SESSION_START = 1791504000000000000
+    assert data.metadata.start == TIMESTAMP_SESSION_START
+    assert data.metadata.end   >  TIMESTAMP_SESSION_START
 
 def test_CME_session():
     d = date(2026, 10, 1)

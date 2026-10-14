@@ -180,7 +180,7 @@ class Sample():
 
         return self
 
-    def __repr__(self):
+    def __repr__(self): # pragma: no cover
         return (
             'Sample('
                 f'open={self.open},'
@@ -413,6 +413,8 @@ class MarketModel:
 if __name__ == '__main__':
     import argparse
     import marketdata
+    import os
+    from tqdm import tqdm
 
     parser = argparse.ArgumentParser(description="load a file into default market model and put out some statistics")
     parser.add_argument('file', help='name of Databento native file (.dbn)')
@@ -420,9 +422,19 @@ if __name__ == '__main__':
     parser.add_argument('-d', '--duration', type=int, default=marketdata.SECONDS_OF_DAY, help="duration of replay in seconds")
     args = parser.parse_args()
 
+    RECORD_SIZE_BYTES = 48
+    estimated_records = os.path.getsize(args.file) // RECORD_SIZE_BYTES
+
+    reader = marketdata.from_file(args.file, args.start * 10**9, args.duration * 10**9)
     model = MarketModel.default_model()
-    reader = marketdata.from_file(args.file, args.start, args.duration)
-    model.feed_with_trades(reader)
+
+    model.feed_with_trades(tqdm(
+            reader, 
+            total=estimated_records, 
+            desc=f"Processing file {args.file}",
+            bar_format="{desc}: {n} records read [{elapsed}, {rate_fmt}]")
+        )
+    
 
     main_chart = model.charts[2]
     print(f'{parser.prog}: time elapsed: {model.time}')

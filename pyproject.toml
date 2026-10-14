@@ -10,13 +10,14 @@ dependencies = [
     "numpy",
     "httpx",
     "websocket-client",
+    "tqdm",
 ]
 
 [dependency-groups]
 dev = [
     "pytest",
     "pytest-cov",
-    "ruff"
+    "ruff",
 ]
 
 [tool.ruff]
