@@ -389,7 +389,7 @@ def test_market_model(dbn_path):
     model = MarketModel.default_model()
     model.feed_with_trades(Feeder(trades))
 
-    assert len(model.charts[0]) == 720 // 12
+    assert len(model.charts[0]) == 15
     assert len(model.charts[1]) == 720 // 36
     assert len(model.charts[2]) == 720 // 60
     assert len(model.charts[3]) == 1
