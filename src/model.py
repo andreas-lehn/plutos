@@ -377,6 +377,37 @@ class Chart(Sample):
         self.open = self._bars[-1].open
         self.close = self._bars[0].close
 
+    class Exporter:
+        """ liefert eine liste mit jeweils einem dict für jede bar
+        
+        Convention:
+         * Columns starting with an Upper letter contain real price values in float not in integer.
+         * if prices are in integer, columns start with lower letters.
+
+        """
+        def __init__(self, bars: Iterable[Bar], bar_size):
+            self.bars = reversed(bars)
+            self.bar_size = bar_size
+            self.timestamp = 0
+
+        def __iter__(self):
+            for bar in self.bars:
+                yield {
+                    'Timestamp': self.timestamp,
+                    'Open': bar.open/4,
+                    'Low': bar.low/4,
+                    'Average': bar.average/4,
+                    'High': bar.high/4,
+                    'Close': bar.close/4,
+                    'Volume': bar.volume,
+                }
+                self.timestamp += self.bar_size
+            self.timestamp = 0
+
+    def export(self):
+        """ return a chart exporter (generator) """
+        return Chart.Exporter(self._bars, self._bar_size)
+
 
 class MarketModel:
     """ MarketModell contains charts and feeds them """
@@ -404,22 +435,24 @@ class MarketModel:
         all charts are unlimited
         """
         model = cls()
-        model.charts.append(Chart(bar_size=12))
-        model.charts.append(Chart(bar_size=36))
-        model.charts.append(Chart(bar_size=60))
-        model.charts.append(Chart(bar_size=720))
+        model.charts.append(Chart(bar_size=12, size=15))  #  3 min
+        model.charts.append(Chart(bar_size=36, size=60))  # 36 min
+        model.charts.append(Chart(bar_size=60, size=36))  # 36 min
+        model.charts.append(Chart(bar_size=720, size=120))# 24 Std
         return model
 
 if __name__ == '__main__':
     import argparse
     import marketdata
     import os
+    import pandas as pd
     from tqdm import tqdm
 
     parser = argparse.ArgumentParser(description="load a file into default market model and put out some statistics")
     parser.add_argument('file', help='name of Databento native file (.dbn)')
     parser.add_argument('-s', '--start', type=int, default=0, help="start offset in seconds")
     parser.add_argument('-d', '--duration', type=int, default=marketdata.SECONDS_OF_DAY, help="duration of replay in seconds")
+    parser.add_argument('-e', '--export', required=True, choices=['fast', 'main', '1-min', 'day'], help="exports one of these charts")
     args = parser.parse_args()
 
     RECORD_SIZE_BYTES = 48
@@ -435,9 +468,19 @@ if __name__ == '__main__':
             bar_format="{desc}: {n} records read [{elapsed}, {rate_fmt}]")
         )
     
+    chart = None
+    for i, name in enumerate(['fast', 'main', '1-min', 'day']):
+        if name == args.export:
+            chart = model.charts[i]
+            break
 
-    main_chart = model.charts[2]
-    print(f'{parser.prog}: time elapsed: {model.time}')
-    print(f'{parser.prog}: opem price:   {main_chart.open/4}')
-    print(f'{parser.prog}: close price:  {main_chart.close/4}')
-    print(f'{parser.prog}: total volume: {main_chart.volume}')
+    exporter = chart.export()
+    with open(args.export + "_bar_data.csv", "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=['Timestamp', 'Open', 'Low', 'Average', 'High', 'Close', 'Volume'])
+        writer.writeheader()
+        writer.writerows([e for e in exporter])
+
+    with open(args.export + "_volume_profile.csv", "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=['Price', "Volume"])
+        writer.writeheader()
+        writer.writerows([{'Price': p/4, 'Volume': v} for p, v in chart.volumes])

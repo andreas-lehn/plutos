@@ -348,6 +348,29 @@ def test_chart(csv_path):
     for bar in chart:
         assert bar.size == 3
 
+def test_chart_export(csv_path):
+    chart = Chart(2, 2)
+    reader = SampleReader.from_file(csv_path)
+    for sample in reader:
+        chart += sample
+
+    e = [b for b in chart.export()]
+    assert e[0]['Timestamp'] == 0
+    assert e[0]['Open']    == chart[1].open/4
+    assert e[0]['Low']     == chart[1].low/4
+    assert e[0]['Average'] == chart[1].average/4
+    assert e[0]['High']    == chart[1].high/4
+    assert e[0]['Close']   == chart[1].close/4
+    assert e[0]['Volume']  == chart[1].volume
+    assert e[1]['Timestamp'] == 2
+    assert e[1]['Open']    == chart[0].open/4
+    assert e[1]['Low']     == chart[0].low/4
+    assert e[1]['Average'] == chart[0].average/4
+    assert e[1]['High']    == chart[0].high/4
+    assert e[1]['Close']   == chart[0].close/4
+    assert e[1]['Volume']  == chart[0].volume
+
+
 def test_market_model(dbn_path):
     reader = marketdata.from_file(dbn_path, n=10)
     trades = [trade for trade in reader]
@@ -370,3 +393,4 @@ def test_market_model(dbn_path):
     assert len(model.charts[1]) == 720 // 36
     assert len(model.charts[2]) == 720 // 60
     assert len(model.charts[3]) == 1
+
