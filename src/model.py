@@ -179,8 +179,19 @@ class Sample():
             self.high -= 1
 
         return self
-            
 
+    def __repr__(self):
+        return (
+            'Sample('
+                f'open={self.open},'
+                f'low={self.low},'
+                f'avg={self.average},'
+                f'high={self.high},'
+                f'close={self.close},'
+                f'volume={self.volume}'
+            ')'
+        )
+            
 class SampleReader:
     """ reads samples from a file"""
 
@@ -372,10 +383,12 @@ class MarketModel:
 
     def __init__(self):
         self.charts = []
+        self.time = 0
 
     def feed_with_trades(self, trades: Iterable[Trade]):
         builder = SampleBuilder(trades)
         for sample in builder:
+            self.time += 1
             for chart in self.charts:
                 chart += sample
 
@@ -396,3 +409,23 @@ class MarketModel:
         model.charts.append(Chart(bar_size=60))
         model.charts.append(Chart(bar_size=720))
         return model
+
+if __name__ == '__main__':
+    import argparse
+    import marketdata
+
+    parser = argparse.ArgumentParser(description="load a file into default market model and put out some statistics")
+    parser.add_argument('file', help='name of Databento native file (.dbn)')
+    parser.add_argument('-s', '--start', type=int, default=0, help="start offset in seconds")
+    parser.add_argument('-d', '--duration', type=int, default=marketdata.SECONDS_OF_DAY, help="duration of replay in seconds")
+    args = parser.parse_args()
+
+    model = MarketModel.default_model()
+    reader = marketdata.from_file(args.file, args.start, args.duration)
+    model.feed_with_trades(reader)
+
+    main_chart = model.charts[2]
+    print(f'{parser.prog}: time elapsed: {model.time}')
+    print(f'{parser.prog}: opem price:   {main_chart.open/4}')
+    print(f'{parser.prog}: close price:  {main_chart.close/4}')
+    print(f'{parser.prog}: total volume: {main_chart.volume}')
