@@ -78,7 +78,7 @@ class Sample():
 
     def _new_blocks(n: int):
         """ returns n block of volumes array """
-        return array('H', [0] * n * Sample.VOLUMES_BLOCK_SIZE)
+        return array('i', [0] * n * Sample.VOLUMES_BLOCK_SIZE)
 
     @property
     def _block_max(self):
@@ -104,15 +104,12 @@ class Sample():
 
     def update(self, price, volume):
         """ updates the volume of price and all dependant variables """
-        if volume < 0:
-            raise ValueError("_update(): 'volume' must not be negative")
-
         if self._base_price is None:
             self._base_price = price - Sample.VOLUMES_BLOCK_SIZE // 2
         else:
             if price < self._base_price or price >= self._block_max:
                 self._resize(price)
-        
+
         self.high = max(self.high, price)
         self.low  = min(self.low, price)
 

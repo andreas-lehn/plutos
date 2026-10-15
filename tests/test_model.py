@@ -72,13 +72,21 @@ def test_sample():
     sample.volumes[30715] += 3
     assert sample.volume == 13
     assert sample.volumes[30715] == 3
+    assert sample.high == 30715
 
     sample.volumes[30715] += 2
     assert sample.volume == 15
     assert sample.volumes[30715] == 5
 
-    with pytest.raises(ValueError):
-        sample.volumes[30713] = -1
+    sample.volumes[30713] = -1
+    assert sample.low == 30712
+    assert sample.volumes[30713] == -1
+
+    sample.volumes[30711] = -2
+    assert sample.low == 30711
+
+    sample.volumes[30716] = -3
+    assert sample.high == 30716
         
 def test_sample_resize():
     sample = Sample()
@@ -176,15 +184,16 @@ def test_sample_sub():
     assert s0.low == sys.maxsize
 
     # check ValueError
-    with pytest.raises(ValueError):
-        s0 -= s4
+    s0 -= s4
+    assert s0.volumes[101] == -1
 
     # add after emptiness
     s0 += s1
+    assert s0.volumes[101] == -1
     assert s0.volumes[102] == 2
     assert s0.volumes[103] == 1
-    assert s0.volume == 3
-    assert s0.low == 102
+    assert s0.volume == 2
+    assert s0.low == 101
     assert s0.high == 103
 
 def test_sample_type_errors():
