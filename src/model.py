@@ -351,16 +351,22 @@ class Bar():
         return sample
 
     @classmethod
-    def from_samples(cls, samples: Iterable):
+    def from_sample(cls, sample: VolumeProfile):
+        bar = Bar()
+        bar.append(sample)
+        return bar
+    
+    @classmethod
+    def from_samples(cls, samples: Iterable[VolumeProfile]):
         bar = Bar()
         for sample in samples:
             bar.append(sample)
         return bar
-
+    
     def __iter__(self):
         return self._samples.__iter__()
 
-    def __repr__(self):
+    def __repr__(self): # pragma: no cover
         return (
             "Bar("
                 f"open={self.open},"
@@ -374,7 +380,7 @@ class Bar():
         )
 
 
-class Chart(VolumeProfile):
+class Chart():
     """ a chart contains a sequence of Bars all with the same size 
     
     A chart has a limited size.
@@ -382,24 +388,58 @@ class Chart(VolumeProfile):
 
     """
 
-    def __init__(self, bar_size: int, size: int = None):
-        super().__init__()
-        self._bars = deque(maxlen=size)
+    def __init__(self, bar_size: int, maxlen: int = None):
         self._bar_size = bar_size
-        self._new_bar = None
+        self._maxlen = maxlen
+        self._bars = deque()
+        self._bars.append(Bar())
+        self._volumes = VolumeProfile()
 
-    def __iadd__(self, sample):
-        super().__iadd__(sample)
+    @property
+    def open(self) -> int:
+        return self._bars[0].open
 
-        if not self._new_bar:
-            self._new_bar = Bar()
-        self._new_bar += sample
+    @property
+    def close(self) -> int:
+        return self._bars[-1].close
 
-        if self._new_bar.size >= self._bar_size:
-            self._commit_bar()
+    @property
+    def low(self) -> int:
+        return self._volumes.low
 
-        return self
+    @property
+    def high(self) -> int:
+        return self._volumes.high
 
+    @property
+    def average(self) -> int:
+        return self._volumes.average
+
+    @property
+    def volume(self) -> int:
+        return self._volumes.volume
+
+    @property
+    def volumes(self) -> VolumeProfile:
+        return self._volumes
+
+    def append(self, sample):
+        bar = self._bars[-1]
+        if len(bar) >= self._bar_size:
+            #last bar is full, add a new one
+            bar = Bar()
+            self._bars.append(bar)
+            if len(self._bars) > self._maxlen:
+                # chart is full, remove an old one
+                self.popleft()
+        bar.append(sample)
+        self._volumes += sample
+
+    def popleft(self) -> Bar:
+        bar = self._bars.popleft()
+        self._volumes -= bar.volumes
+        return bar
+    
     def __getitem__(self, index: int) -> int:
         return self._bars[index]
 
@@ -409,13 +449,6 @@ class Chart(VolumeProfile):
     def __len__(self):
         return len(self._bars)
     
-    def _commit_bar(self):
-        if len(self._bars) == self._bars.maxlen:
-            self -= self._bars[-1]
-        self._bars.appendleft(self._new_bar)
-        self._new_bar = None
-        self.open = self._bars[-1].open
-        self.close = self._bars[0].close
 
     class Exporter:
         """ liefert eine liste mit jeweils einem dict für jede bar
@@ -461,7 +494,7 @@ class MarketModel:
         for sample in builder:
             self.time += 1
             for chart in self.charts:
-                chart += sample
+                chart.append(sample)
 
     @classmethod
     def default_model(cls):
@@ -475,10 +508,10 @@ class MarketModel:
         all charts are unlimited
         """
         model = cls()
-        model.charts.append(Chart(bar_size=12, size=15))  #  3 min
-        model.charts.append(Chart(bar_size=36, size=60))  # 36 min
-        model.charts.append(Chart(bar_size=60, size=36))  # 36 min
-        model.charts.append(Chart(bar_size=720, size=120))# 24 Std
+        model.charts.append(Chart(bar_size=12, maxlen=15))  #  3 min
+        model.charts.append(Chart(bar_size=36, maxlen=60))  # 36 min
+        model.charts.append(Chart(bar_size=60, maxlen=36))  # 36 min
+        model.charts.append(Chart(bar_size=720, maxlen=120))# 24 Std
         return model
 
 if __name__ == '__main__':

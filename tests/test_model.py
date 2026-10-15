@@ -329,7 +329,7 @@ def test_sample_writer(some_samples, csv_out_in_path):
 
 def test_bar(some_samples):
     s0 = some_samples[0]
-    bar = Bar.from_samples([s0])
+    bar = Bar.from_sample(s0)
     assert len(bar) == 1
     assert bar.open == s0.average
     assert bar.high == s0.high
@@ -365,9 +365,14 @@ def test_bar(some_samples):
     assert bar.open != 101
     assert bar.close == 101
 
+def test_bar_iter(some_samples):
+    bar = Bar.from_samples(some_samples)
+    for b, s in zip(bar, some_samples):
+        assert b.low  == s.low
+        assert b.high == s.high
 
 def test_bar_to_dict(some_samples):
-    bar = Bar.from_samples(some_samples)
+    bar = Bar.from_sample(some_samples[1])
     d = bar.to_dict()
     assert d['len'] == len(bar)
     assert d['open'] == bar.open
@@ -376,28 +381,39 @@ def test_bar_to_dict(some_samples):
     assert d['high'] == bar.high
     assert d['close'] == bar.close
     vol = 0
-    for i, v in enumerate(d['volumes']):
-        vol += bar.volumes[bar.low + i]
-    assert d['volume'] == vol
+    for v in d['volumes']:
+        vol += v
+    assert d['volume'] == bar.volume
 
-def _est_chart(csv_path):
+def test_chart(csv_path):
     chart = Chart(3, 2)
     reader = SampleReader.from_file(csv_path)
+    samples = []
     for sample in reader:
-        chart += sample
+        samples.append(sample)
+        chart.append(sample)
 
-    assert len(chart) == 2
-    assert chart[122615] == 0
-    assert chart[122654] == chart[0][122654] + chart[1][122654]
+    assert len(chart) == 2  
+    assert chart.open == samples[3].average
+    assert chart.low  == 122654
+    assert chart.average == 122662
+    assert chart.high == 122679
+    assert chart.close == samples[8].average
+    vol = 0
+    for sample in samples[3:9]:
+        vol += sample.volume
+    assert chart.volume == vol
+    assert chart.volumes[122615] == 0
+    assert chart.volumes[122654] == chart[0].volumes[122654] + chart[1].volumes[122654]
 
     for bar in chart:
-        assert bar.size == 3
+        assert len(bar) == 3
 
-def _est_chart_export(csv_path):
+def test_chart_export(csv_path):
     chart = Chart(2, 2)
     reader = SampleReader.from_file(csv_path)
     for sample in reader:
-        chart += sample
+        chart.append(sample)
 
     e = [b for b in chart.export()]
     assert e[0]['Timestamp'] == 0
@@ -416,7 +432,7 @@ def _est_chart_export(csv_path):
     assert e[1]['Volume']  == chart[0].volume
 
 
-def _est_market_model(dbn_path):
+def test_market_model(dbn_path):
     reader = marketdata.from_file(dbn_path, n=10)
     trades = [trade for trade in reader]
 
