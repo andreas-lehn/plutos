@@ -27,15 +27,13 @@ class Trade(BaseModel):
 class Sample():
     """Kapselt die Daten eines Samples"""
 
-    VOLUMES_BLOCK_SIZE = 32
+    VOLUMES_BLOCK_SIZE = 64
 
     def __init__(self):
-        self.open = None
         self.low = sys.maxsize
         self.high = 0
-        self.close = None
         self.volumes = Sample.VolumeProxy(self)
-        self._volumes = Sample._new_blocks(3)
+        self._volumes = Sample._new_blocks(1)
         self._base_price = None
         self._volume = 0
         self._price_x_volume = 0
@@ -50,10 +48,8 @@ class Sample():
 
     def to_dict(self) -> dict:
         return {
-            "open": self.open,
-            "high": self.high,
             "low": self.low,
-            "close": self.close,
+            "high": self.high,
             "volumes": [self.volumes[price] for price in range(self.low, self.high + 1)],
         }
 
@@ -64,8 +60,6 @@ class Sample():
         for i, vol in enumerate(data['volumes']):
             price = sample.low + i
             sample.volumes[price] = vol
-        sample.open = data['open']
-        sample.close = data['close']
         return sample
 
     def copy(self):
@@ -81,9 +75,6 @@ class Sample():
             delta = price - self._base_price + len(self._volumes)
             blocks_needed = delta // Sample.VOLUMES_BLOCK_SIZE + 1
             self._volumes = self._volumes + Sample._new_blocks(blocks_needed)
-
-    def _block_begin(price):
-        return (price // Sample.VOLUMES_BLOCK_SIZE) * Sample.VOLUMES_BLOCK_SIZE
 
     def _new_blocks(n: int):
         """ returns n block of volumes array """
@@ -103,28 +94,7 @@ class Sample():
             return self.sample._volumes[price - self.sample._base_price]
 
         def __setitem__(self, price, volume):
-            if volume < self[price]:
-                raise ValueError("__set_item__(): 'volume' is smaller than current volume of price level")
-
-            sample = self.sample
-
-            if sample._base_price is None:
-                sample._base_price = Sample._block_begin(price) - Sample.VOLUMES_BLOCK_SIZE
-                sample._volumes[price - sample._base_price] = volume
-                sample._volume = volume
-                sample._price_x_volume = price * volume
-                sample.open = price
-                sample.close = price
-                sample.high = price
-                sample.low = price
-            else:
-                if price < sample._base_price or price >= sample._block_max:
-                    sample._resize(price)
-
-                sample._update(price, volume)
-                sample.high  = max(sample.high, price)
-                sample.low   = min(sample.low, price)
-                sample.close = price
+            self.sample.update(price, volume)
 
         def __iter__(self):
             for price in range(self.sample.low, self.sample.high + 1):
@@ -132,43 +102,31 @@ class Sample():
                 if volume > 0:
                     yield (price, volume)
 
-    def _update(self, price, volume):
+    def update(self, price, volume):
         """ updates the volume of price and all dependant variables """
+        if volume < 0:
+            raise ValueError("_update(): 'volume' must not be negative")
+
+        if self._base_price is None:
+            self._base_price = price - Sample.VOLUMES_BLOCK_SIZE // 2
+        else:
+            if price < self._base_price or price >= self._block_max:
+                self._resize(price)
+        
+        self.high = max(self.high, price)
+        self.low  = min(self.low, price)
+
         delta_volume = volume - self.volumes[price]
         self._volumes[price - self._base_price] = volume
         self._volume += delta_volume
         self._price_x_volume += delta_volume * price
 
-    def __iadd__(self, other):
-        if not isinstance(other, Sample):
-            raise TypeError("__iadd__() 'other' must be an instance of Sample") # pragma: no cover
-
-        is_first = self.volume == 0
-        for price, volume in other.volumes:
-            self.volumes[price] += volume
-
-        if is_first:
-            self.open = other.open
-        self.close = other.close
-        return self
-
-    def __isub__(self, other):
-        if not isinstance(other, Sample):
-            raise TypeError("__isub__() 'other' must be an instance of Sample")
-
-        for price, vol in other.volumes:
-            old_volume = self.volumes[price]
-            if vol > old_volume:
-                raise ValueError('__isub__(): volume to high to be subtracted')
-            self._update(price, old_volume - vol)
-
+        # check that everthing is still okay..
         if self.volume == 0:
             # we are empty! Bring it back to init state
-            self.open = None
             self.low = sys.maxsize
             self.high = 0
-            self.close = None
-            return self
+            return
 
         while self.volumes[self.low] == 0:
             # low was deleted. search new low...
@@ -178,16 +136,29 @@ class Sample():
             # high was deleted. search new high..
             self.high -= 1
 
+
+    def __iadd__(self, other):
+        if not isinstance(other, Sample):
+            raise TypeError("__iadd__() 'other' must be an instance of Sample") # pragma: no cover
+
+        for price, volume in other.volumes:
+            self.volumes[price] += volume
+        return self
+
+    def __isub__(self, other):
+        if not isinstance(other, Sample):
+            raise TypeError("__isub__() 'other' must be an instance of Sample")
+
+        for price, volume in other.volumes:
+            self.volumes[price] -= volume
         return self
 
     def __repr__(self): # pragma: no cover
         return (
             'Sample('
-                f'open={self.open},'
                 f'low={self.low},'
                 f'avg={self.average},'
                 f'high={self.high},'
-                f'close={self.close},'
                 f'volume={self.volume}'
             ')'
         )
@@ -207,10 +178,8 @@ class SampleReader:
             reader = csv.DictReader(file)
             for row in reader:
                 yield Sample.from_dict({
-                    'open': int(row["open"]),
                     'high': int(row["high"]),
                     'low':  int(row["low"]),
-                    'close': int(row["close"]),
                     'volumes': ast.literal_eval(row["volumes"]),
                 })
 
@@ -224,7 +193,7 @@ class SampleWriter:
             file = Path(file)
 
         with open(file, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=['open', 'high', 'low', 'close', 'volumes'])
+            writer = csv.DictWriter(f, fieldnames=['low', 'high', 'volumes'])
             writer.writeheader()
             writer.writerows([sample.to_dict() for sample in samples])
 
@@ -310,16 +279,23 @@ class Bar(Sample):
 
     def __init__(self):
         super().__init__()
+        self.open = None
+        self.close = None
         self._size = 0
 
     def to_dict(self) -> dict:
         d = super().to_dict()
+        d['open'] = self.open
+        d['close'] = self.close
         d['size'] = self._size
         return d
 
     def __iadd__(self, other: Sample):
         super().__iadd__(other)
+        if self.open == None:
+            self.open = other.average
         self._size += 1
+        self.close = other.average
         return self
 
     @property

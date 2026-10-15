@@ -47,19 +47,15 @@ def trade_list_5():
 def test_sample():
     sample = Sample()
     sample.volumes[30712] = 2
-    assert sample.open == 30712
     assert sample.low  == 30712
     assert sample.high == 30712
-    assert sample.close == 30712
     assert sample.average == 30712
     assert sample.volumes[30712] == 2
     assert sample.volume == 2
 
     sample.volumes[30714] = 3
-    assert sample.open == 30712
     assert sample.low == 30712
     assert sample.high == 30714
-    assert sample.close == 30714
     assert sample.average == 30713
     assert sample.volume == 5
     assert sample.volumes[30712] == 2
@@ -67,10 +63,8 @@ def test_sample():
     assert sample.volumes[30714] == 3
 
     sample.volumes[30713] = 5
-    assert sample.open == 30712
     assert sample.low == 30712
     assert sample.high == 30714
-    assert sample.close == 30713
     assert sample.average == 30713
     assert sample.volume == 10
     assert sample.volumes[30713] == 5
@@ -84,7 +78,7 @@ def test_sample():
     assert sample.volumes[30715] == 5
 
     with pytest.raises(ValueError):
-        sample.volumes[30713] = 4
+        sample.volumes[30713] = -1
         
 def test_sample_resize():
     sample = Sample()
@@ -180,8 +174,6 @@ def test_sample_sub():
     assert s0.volume == 0
     assert s0.high == 0
     assert s0.low == sys.maxsize
-    assert s0.open == None
-    assert s0.close == None
 
     # check ValueError
     with pytest.raises(ValueError):
@@ -194,8 +186,6 @@ def test_sample_sub():
     assert s0.volume == 3
     assert s0.low == 102
     assert s0.high == 103
-    assert s0.open == 102
-    assert s0.close == 103
 
 def test_sample_type_errors():
     s = Sample()
@@ -213,19 +203,19 @@ def test_sample_builder_streaming(trade_list_40):
     builder = SampleBuilder.from_trades(trade_list_40)
     samples = [sample for sample in builder]
     assert len(samples) == 8
-    assert samples[0].open  == 122243
-    assert samples[0].close == 122247
-    assert samples[1].open  == 122248
-    assert samples[1].close == 122252
-    assert samples[2].open  == 122253
-    assert samples[7].close == 122282
+    assert samples[0].low  == 122243
+    assert samples[0].high == 122247
+    assert samples[1].low  == 122248
+    assert samples[1].high == 122252
+    assert samples[2].low  == 122253
+    assert samples[7].high == 122282
 
 def test_sample_builder_start_duration(trade_list_40):
     builder = SampleBuilder.from_trades(trade_list_40, start_offset=2, duration=2)
     samples = [sample for sample in builder]
     assert len(samples) == 2
-    assert samples[0].close == 122257
-    assert samples[1].open  == 122258    
+    assert samples[0].high == 122257
+    assert samples[1].low  == 122258    
     
 def test_sample_builder_reread(trade_list_40):
     builder = SampleBuilder.from_trades(trade_list_40)
@@ -236,44 +226,38 @@ def test_sample_builder_reread(trade_list_40):
     samples = [ s for s in builder ]
     assert len(samples) == 8
     s0 = samples[0]
-    assert samples[0].open  == 122243
-    assert samples[0].close == 122247
-    assert samples[1].open  == 122248
-    assert samples[1].close == 122252
-    assert samples[2].open  == 122253
-    assert samples[7].close == 122282
+    assert samples[0].low  == 122243
+    assert samples[0].high == 122247
+    assert samples[1].low  == 122248
+    assert samples[1].high == 122252
+    assert samples[2].low  == 122253
+    assert samples[7].high == 122282
 
 def test_sample_reader(csv_path):
     reader = SampleReader.from_file(csv_path)
     samples = [sample for sample in reader]
     assert len(samples) == 9
-    assert samples[0].open == 122622
     assert samples[1].high == 122667
     assert samples[2].low == 122659
-    assert samples[3].close == 122666
-    assert samples[4].close == 122662
     assert samples[5].low == 122654
     for i, p in enumerate([19, 10, 8, 6, 4, 26, 10]):
         assert samples[6].volumes[samples[6].low + i] == p
     assert samples[7].high == 122667
-    assert samples[8].open == 122662
 
 @pytest.fixture
 def some_samples():
     return [
-        Sample.from_dict({'open': 100, 'low': 99,  'high': 102, 'close': 101, 'volumes': [1, 2, 3, 1]}),
-        Sample.from_dict({'open': 101, 'low': 100, 'high': 103, 'close': 102, 'volumes': [   2, 3, 2, 1]}),
-        Sample.from_dict({'open': 102, 'low': 102, 'high': 104, 'close': 104, 'volumes': [         1, 2, 4]}),
-        Sample.from_dict({'open': 104, 'low': 99,  'high': 104, 'close': 100, 'volumes': [4, 3, 2, 1, 1, 2]}),
-    ]                                                                                  # [4, 7, 8, 5, 4, 6]  
+        Sample.from_dict({'low': 99,  'high': 102, 'volumes': [1, 2, 3, 1]}),
+        Sample.from_dict({'low': 100, 'high': 103, 'volumes': [   2, 3, 2, 1]}),
+        Sample.from_dict({'low': 102, 'high': 104, 'volumes': [         1, 2, 4]}),
+        Sample.from_dict({'low': 99,  'high': 104, 'volumes': [4, 3, 2, 1, 1, 2]}),
+    ]                                                       # [4, 7, 8, 5, 4, 6]  
 
 def test_sample_copy(some_samples):
     s1 = some_samples[1]
     c  = s1.copy()
-    assert c.open == s1.open
     assert c.low  == s1.low
     assert c.high == s1.high
-    assert c.close == s1.close
     assert c.average == s1.average
     assert c.volume == s1.volume
     for vc, vs in zip(c.volumes, s1.volumes):
@@ -294,18 +278,18 @@ def test_bar(some_samples):
     s0 = some_samples[0]
     bar = Bar.from_samples([s0])
     assert bar.size == 1
-    assert bar.open == s0.open
+    assert bar.open == s0.average
     assert bar.high == s0.high
     assert bar.average == 101
     assert bar.low  == s0.low
-    assert bar.close == s0.close
+    assert bar.close == s0.average
     assert bar.volumes[101] == 3
     assert bar.volumes[102] == 1
     assert bar.volume == 7
 
     bar += some_samples[1]
     assert bar.size == 2
-    assert bar.close == 102
+    assert bar.close == 101
     assert bar.low  == 99
     assert bar.high == 103
     assert bar.volume == 15
@@ -315,10 +299,10 @@ def test_bar(some_samples):
     bar += some_samples[2]
     bar += some_samples[3]
     assert bar.size == 4
-    assert bar.open == 100
+    assert bar.open == 101
     assert bar.low  == 99
     assert bar.high == 104
-    assert bar.close == 100
+    assert bar.close == 101
     assert bar.volumes[101] == 8
     assert bar.volumes[102] == 5
 
