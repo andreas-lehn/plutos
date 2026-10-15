@@ -40,7 +40,7 @@ class Sample():
 
     @property
     def average(self):
-        return round(self._price_x_volume / self._volume)
+        return round(self._price_x_volume / self._volume) if self.volume != 0 else 0
 
     @property
     def volume(self):
@@ -59,8 +59,9 @@ class Sample():
     def tangent(self, n: int):
         result = Sample()
         for i in range(self.low, self.high + 1):
-            result[i] = self.volumes(i + n) - self.volumes(i - n)
-            
+            result.volumes[i] = self.volumes[i + n] - self.volumes[i - n]
+        return result
+
     def to_dict(self) -> dict:
         return {
             "low": self.low,
@@ -133,16 +134,14 @@ class Sample():
         self._volume += delta_volume
         self._price_x_volume += delta_volume * price
 
-        # check that everthing is still okay..
-        if self.volume == 0:
-            # we are empty! Bring it back to init state
-            self.low = sys.maxsize
-            self.high = 0
-            return
-
         while self.volumes[self.low] == 0:
             # low was deleted. search new low...
             self.low += 1
+            if self.low > self.high:
+                # we are empty! Bring it back to init state
+                self.low = sys.maxsize
+                self.high = 0
+                return
 
         while self.volumes[self.high] == 0:
             # high was deleted. search new high..

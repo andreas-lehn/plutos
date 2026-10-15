@@ -199,7 +199,12 @@ def test_sample_sub():
     assert s0.low == 101
     assert s0.high == 103
 
-def test_sample_convolute():
+@pytest.fixture
+def sample_square():
+    """ 
+        price:   100 101 102 103 104 105 106 107 108 109 110
+        sample:    0   1   4   9  16  25  16   9   4   1   0
+    """
     sample = Sample()
     price = 101
     for i in range(1, 6):
@@ -208,15 +213,14 @@ def test_sample_convolute():
     for i in range(4, 0, -1):
         sample.volumes[price] = i*i
         price += 1
+    return sample
 
-    assert sample.low == 101
-    assert sample.high == 109
-    assert [sample.volumes[p] for p in range(sample.low, sample.high + 1)] == [1, 4, 9, 16, 25, 16, 9, 4, 1]
-
+def test_sample_convolute(sample_square):
+    sample = sample_square
     # price:   100 101 102 103 104 105 106 107 108 109 110
     # sample:    0   1   4   9  16  25  16   9   4   1   0
     # conv_1:    0   5  14  29  50  57  50  29  14   5   0 
-    # conv_2:    0  14  27  55  60  75  60  55  27  14   0
+    # conv_2:    0  14  27  55  70  75  70  55  27  14   0
 
     conv_1 = sample.convolute(1)
     assert conv_1.low  == 101
@@ -224,8 +228,17 @@ def test_sample_convolute():
     assert [conv_1.volumes[p] for p in range(conv_1.low, conv_1.high + 1)] == [2, 5, 10, 17, 19, 17, 10, 5, 2]
 
     conv_2 = sample.convolute(2)
-    #assert [conv_2.volumes[p] for p in range(conv_2.low, conv_2.high + 1)] == [1, 2, 3, 4, 4, 4, 3, 2, 1]
-    
+    assert [conv_2.volumes[p] for p in range(conv_2.low, conv_2.high + 1)] == [3, 6, 11, 14, 15, 14, 11, 6, 3]
+
+def test_sample_tangent(sample_square):
+    sample = sample_square
+    # price:   100 101 102 103 104 105 106 107 108 109 110
+    # sample:    0   1   4   9  16  25  16   9   4   1   0
+    # tangent:   0   4   8  12  16   0 -16 -12  -8  -4   0 
+    tangent = sample.tangent(1)
+    assert tangent.low  == 101
+    assert tangent.high == 109
+    assert [tangent.volumes[p] for p in range(tangent.low, tangent.high + 1)] == [4, 8, 12, 16, 0, -16, -12, -8, -4]
 
 def test_sample_type_errors():
     s = Sample()
