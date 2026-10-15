@@ -8,6 +8,7 @@ contains classes for trades, bars, charts,...
 import ast
 import csv
 import sys
+import math
 from array import array
 from collections import deque
 from collections.abc import Iterable
@@ -53,7 +54,7 @@ class VolumeProfile():
     def volume(self):
         return self._volume
 
-    def convolute(self, n: int):
+    def convolute(self, n: int) -> int:
         result = VolumeProfile()
         for i in range(self.low, self.high +1):
             # Einmal über alles
@@ -63,12 +64,12 @@ class VolumeProfile():
             result[i] = round(v / (2 * n + 1))
         return result
 
-    def tangent(self, n: int):
-        result = VolumeProfile()
-        for i in range(self.low, self.high + 1):
-            result[i] = self[i + n] - self[i - n]
-        return result
+    def tangent(self, price: int, n: int = 1) -> int:
+        return round((self[price + n] - self[price - n]) / (2 * n))
 
+    def range(self) -> int:
+        return self.high - self.low
+    
     def to_dict(self) -> dict:
         return {
             "low": self.low,
@@ -149,7 +150,6 @@ class VolumeProfile():
         while self[self._high] == 0:
             # high was deleted. search new high..
             self._high -= 1
-
 
     def __iadd__(self, other):
         if not isinstance(other, VolumeProfile):
@@ -325,6 +325,17 @@ class Bar():
     @property
     def volumes(self) -> VolumeProfile:
         return self._volumes
+
+    @property
+    def range(self) -> int:
+        return self.high - self.low
+
+    @property
+    def delta(self) -> int:
+        return self.close - self.open
+
+    def tangent(self, price: int, n: int = 1) -> int:
+        return self.volumes.tangent(price, n) # pragma: no cover
     
     def __len__(self):
         return len(self._samples)
@@ -414,6 +425,19 @@ class Chart():
     @property
     def average(self) -> int:
         return self._volumes.average
+
+    def average_range(self, n: int = 5) -> int:
+        sum_range = 0
+        for i in range(-1, -n-1, -1):
+            sum_range += self._bars[i].range
+        return round(sum_range / n)
+
+    def filter_range(self, n: int = 5) -> int:
+        FILTER_FACTOR_AVERAGE_RANGE = 0.25
+        filter_range = math.floor(self.average_range(n) * FILTER_FACTOR_AVERAGE_RANGE)
+        if filter_range // 2 == filter_range / 2:
+            filter_range += 1
+        return filter_range
 
     @property
     def volume(self) -> int:
@@ -555,6 +579,8 @@ if __name__ == '__main__':
         writer.writerows([e for e in exporter])
 
     with open(args.export + "_volume_profile.csv", "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=['Price', "Volume"])
+        writer = csv.DictWriter(f, fieldnames=['Price', "Volume", 'FilteredVolume'])
         writer.writeheader()
-        writer.writerows([{'Price': p/4, 'Volume': v} for p, v in chart])
+        filtered_volumes = chart.volumes.convolute(chart.filter_range())
+        for p, v in chart.volumes:
+            writer.writerow({'Price': p/4, 'Volume': v, 'FilteredVolume': filtered_volumes[p]})

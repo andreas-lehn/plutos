@@ -234,11 +234,13 @@ def test_VolumeProfile_tangent(sample_square):
     sample = sample_square
     # price:   100 101 102 103 104 105 106 107 108 109 110
     # sample:    0   1   4   9  16  25  16   9   4   1   0
-    # tangent:   0   4   8  12  16   0 -16 -12  -8  -4   0 
-    tangent = sample.tangent(1)
-    assert tangent.low  == 101
-    assert tangent.high == 109
-    assert [tangent[p] for p in range(tangent.low, tangent.high + 1)] == [4, 8, 12, 16, 0, -16, -12, -8, -4]
+    assert sample.tangent(101, 1) == 2
+    assert sample.tangent(102, 2) == 4
+    assert sample.tangent(105, 3) == 0
+    assert sample.tangent(106, 2) == -3
+
+def test_VolumeProfile_range(sample_square):
+    assert sample_square.range() == 8
 
 def test_VolumeProfile_type_errors():
     s = VolumeProfile()
@@ -339,6 +341,8 @@ def test_bar(some_samples):
     assert bar.volumes[101] == 3
     assert bar.volumes[102] == 1
     assert bar.volume == 7
+    assert bar.range == s0.high - s0.low
+
 
     bar.append(some_samples[1])
     assert len(bar) == 2
@@ -348,6 +352,7 @@ def test_bar(some_samples):
     assert bar.volume == 15
     assert bar.volumes[99]  == 1
     assert bar.volumes[100] == 4
+    assert bar.delta == some_samples[1].average - s0.average
 
     bar.append(some_samples[2])
     bar.append(some_samples[3])
@@ -408,6 +413,11 @@ def test_chart(csv_path):
 
     for bar in chart:
         assert len(bar) == 3
+
+    r0 = chart[0].range
+    r1 = chart[1].range
+    assert chart.average_range(2) == round((r0 + r1) / 2)
+    assert chart.filter_range(2) == 5
 
 def test_chart_export(csv_path):
     chart = Chart(2, 2)
