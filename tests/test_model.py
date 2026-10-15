@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 import sys
 import pytest
 
-from model import Trade, Sample, SampleBuilder, SampleReader, SampleWriter, Bar, Chart, MarketModel
+from model import Trade, VolumeProfile, SampleBuilder, SampleReader, SampleWriter, Bar, Chart, MarketModel
 import marketdata
 
 @pytest.fixture
@@ -44,8 +44,8 @@ def trade_list_5():
     return trades
 
 
-def test_sample():
-    sample = Sample()
+def test_VolumeProfile():
+    sample = VolumeProfile()
     sample.volumes[30712] = 2
     assert sample.low  == 30712
     assert sample.high == 30712
@@ -91,34 +91,34 @@ def test_sample():
     sample.volumes[30716] = 0
     assert sample.high == 30715
         
-def test_sample_resize():
-    sample = Sample()
+def test_VolumeProfile_resize():
+    sample = VolumeProfile()
 
     price = 1234
     sample.volumes[price] = 1
     assert sample.volumes[price] == 1
 
     base_price = sample._base_price
-    price_below = base_price - 2 * Sample.VOLUMES_BLOCK_SIZE - 1
+    price_below = base_price - 2 * VolumeProfile.VOLUMES_BLOCK_SIZE - 1
     sample.volumes[price_below] = 2
     assert sample.volumes[price] == 1
     assert sample.volumes[price_below] == 2
 
     max_price = sample._block_max
-    price_above = max_price + 2 * Sample.VOLUMES_BLOCK_SIZE + 1
+    price_above = max_price + 2 * VolumeProfile.VOLUMES_BLOCK_SIZE + 1
     sample.volumes[price_above] = 3
 
     assert sample.volumes[price] == 1
     assert sample.volumes[price_below] == 2
     assert sample.volumes[price_above] == 3 
 
-def test_sample_add():
-    s0 = Sample()
+def test_VolumeProfile_add():
+    s0 = VolumeProfile()
     s0.volumes[100] = 1
     s0.volumes[102] = 2
     s0.volumes[103] = 3
 
-    s1 = Sample()
+    s1 = VolumeProfile()
     s1.volumes[101] = 2
     s1.volumes[102] = 3
     s1.volumes[103] = 1
@@ -134,14 +134,14 @@ def test_sample_add():
     assert s1.volumes[102] == 3
     assert s1.volumes[103] == 1
 
-def test_sample_sub():
-    s0 = Sample()
+def test_VolumeProfile_sub():
+    s0 = VolumeProfile()
     s0.volumes[100] = 1
     s0.volumes[101] = 1
     s0.volumes[102] = 2
     s0.volumes[103] = 3
 
-    s1 = Sample()
+    s1 = VolumeProfile()
     s1.volumes[102] = 2
     s1.volumes[103] = 1
 
@@ -157,7 +157,7 @@ def test_sample_sub():
     assert s1.volumes[103] == 1
 
     # delete low
-    s2 = Sample()
+    s2 = VolumeProfile()
     s2.volumes[100] = 1
     s0 -= s2
     assert s0.volumes[100] == 0
@@ -168,7 +168,7 @@ def test_sample_sub():
     assert s0.low == 101
 
     # delete high
-    s3 = Sample()
+    s3 = VolumeProfile()
     s3.volumes[103] = 2
     s0 -= s3
     assert s0.volumes[101] == 1
@@ -178,7 +178,7 @@ def test_sample_sub():
     assert s0.high == 101
 
     # delete all
-    s4 = Sample()
+    s4 = VolumeProfile()
     s4.volumes[101] = 1
     s0 -= s4
     assert s0.volumes[101] == 0
@@ -205,7 +205,7 @@ def sample_square():
         price:   100 101 102 103 104 105 106 107 108 109 110
         sample:    0   1   4   9  16  25  16   9   4   1   0
     """
-    sample = Sample()
+    sample = VolumeProfile()
     price = 101
     for i in range(1, 6):
         sample.volumes[price] = i*i
@@ -215,7 +215,7 @@ def sample_square():
         price += 1
     return sample
 
-def test_sample_convolute(sample_square):
+def test_VolumeProfile_convolute(sample_square):
     sample = sample_square
     # price:   100 101 102 103 104 105 106 107 108 109 110
     # sample:    0   1   4   9  16  25  16   9   4   1   0
@@ -230,7 +230,7 @@ def test_sample_convolute(sample_square):
     conv_2 = sample.convolute(2)
     assert [conv_2.volumes[p] for p in range(conv_2.low, conv_2.high + 1)] == [3, 6, 11, 14, 15, 14, 11, 6, 3]
 
-def test_sample_tangent(sample_square):
+def test_VolumeProfile_tangent(sample_square):
     sample = sample_square
     # price:   100 101 102 103 104 105 106 107 108 109 110
     # sample:    0   1   4   9  16  25  16   9   4   1   0
@@ -240,8 +240,8 @@ def test_sample_tangent(sample_square):
     assert tangent.high == 109
     assert [tangent.volumes[p] for p in range(tangent.low, tangent.high + 1)] == [4, 8, 12, 16, 0, -16, -12, -8, -4]
 
-def test_sample_type_errors():
-    s = Sample()
+def test_VolumeProfile_type_errors():
+    s = VolumeProfile()
     s.volumes[102] = 2
     s.volumes[103] = 1
 
@@ -300,10 +300,10 @@ def test_sample_reader(csv_path):
 @pytest.fixture
 def some_samples():
     return [
-        Sample.from_dict({'low': 99,  'high': 102, 'volumes': [1, 2, 3, 1]}),
-        Sample.from_dict({'low': 100, 'high': 103, 'volumes': [   2, 3, 2, 1]}),
-        Sample.from_dict({'low': 102, 'high': 104, 'volumes': [         1, 2, 4]}),
-        Sample.from_dict({'low': 99,  'high': 104, 'volumes': [4, 3, 2, 1, 1, 2]}),
+        VolumeProfile.from_dict({'low': 99,  'high': 102, 'volumes': [1, 2, 3, 1]}),
+        VolumeProfile.from_dict({'low': 100, 'high': 103, 'volumes': [   2, 3, 2, 1]}),
+        VolumeProfile.from_dict({'low': 102, 'high': 104, 'volumes': [         1, 2, 4]}),
+        VolumeProfile.from_dict({'low': 99,  'high': 104, 'volumes': [4, 3, 2, 1, 1, 2]}),
     ]                                                       # [4, 7, 8, 5, 4, 6]  
 
 def test_sample_copy(some_samples):

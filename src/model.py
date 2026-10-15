@@ -24,16 +24,16 @@ class Trade(BaseModel):
     volume: int
 
 
-class Sample():
-    """Kapselt die Daten eines Samples"""
+class VolumeProfile():
+    """ Volume profiel maps volumes to prices """
 
     VOLUMES_BLOCK_SIZE = 64
 
     def __init__(self):
         self.low = sys.maxsize
         self.high = 0
-        self.volumes = Sample.VolumeProxy(self)
-        self._volumes = Sample._new_blocks(1)
+        self.volumes = VolumeProfile.VolumeProxy(self)
+        self._volumes = VolumeProfile._new_blocks(1)
         self._base_price = None
         self._volume = 0
         self._price_x_volume = 0
@@ -47,7 +47,7 @@ class Sample():
         return self._volume
 
     def convolute(self, n: int):
-        result = Sample()
+        result = VolumeProfile()
         for i in range(self.low, self.high +1):
             # Einmal über alles
             v = 0
@@ -57,7 +57,7 @@ class Sample():
         return result
 
     def tangent(self, n: int):
-        result = Sample()
+        result = VolumeProfile()
         for i in range(self.low, self.high + 1):
             result.volumes[i] = self.volumes[i + n] - self.volumes[i - n]
         return result
@@ -79,22 +79,22 @@ class Sample():
         return sample
 
     def copy(self):
-        return Sample.from_dict(self.to_dict())
+        return VolumeProfile.from_dict(self.to_dict())
 
     def _resize(self, price):
         if price < self._base_price:
             delta = self._base_price - price
-            blocks_needed = delta // Sample.VOLUMES_BLOCK_SIZE + 1
-            self._volumes = Sample._new_blocks(blocks_needed) + self._volumes
-            self._base_price -= blocks_needed * Sample.VOLUMES_BLOCK_SIZE
+            blocks_needed = delta // VolumeProfile.VOLUMES_BLOCK_SIZE + 1
+            self._volumes = VolumeProfile._new_blocks(blocks_needed) + self._volumes
+            self._base_price -= blocks_needed * VolumeProfile.VOLUMES_BLOCK_SIZE
         elif price >= self._block_max:
             delta = price - self._base_price + len(self._volumes)
-            blocks_needed = delta // Sample.VOLUMES_BLOCK_SIZE + 1
-            self._volumes = self._volumes + Sample._new_blocks(blocks_needed)
+            blocks_needed = delta // VolumeProfile.VOLUMES_BLOCK_SIZE + 1
+            self._volumes = self._volumes + VolumeProfile._new_blocks(blocks_needed)
 
     def _new_blocks(n: int):
         """ returns n block of volumes array """
-        return array('i', [0] * n * Sample.VOLUMES_BLOCK_SIZE)
+        return array('i', [0] * n * VolumeProfile.VOLUMES_BLOCK_SIZE)
 
     @property
     def _block_max(self):
@@ -121,7 +121,7 @@ class Sample():
     def update(self, price, volume):
         """ updates the volume of price and all dependant variables """
         if self._base_price is None:
-            self._base_price = price - Sample.VOLUMES_BLOCK_SIZE // 2
+            self._base_price = price - VolumeProfile.VOLUMES_BLOCK_SIZE // 2
         else:
             if price < self._base_price or price >= self._block_max:
                 self._resize(price)
@@ -149,16 +149,16 @@ class Sample():
 
 
     def __iadd__(self, other):
-        if not isinstance(other, Sample):
-            raise TypeError("__iadd__() 'other' must be an instance of Sample") # pragma: no cover
+        if not isinstance(other, VolumeProfile):
+            raise TypeError("__iadd__() 'other' must be an instance of VolumeProfile") # pragma: no cover
 
         for price, volume in other.volumes:
             self.volumes[price] += volume
         return self
 
     def __isub__(self, other):
-        if not isinstance(other, Sample):
-            raise TypeError("__isub__() 'other' must be an instance of Sample")
+        if not isinstance(other, VolumeProfile):
+            raise TypeError("__isub__() 'other' must be an instance of VolumeProfile")
 
         for price, volume in other.volumes:
             self.volumes[price] -= volume
@@ -166,7 +166,7 @@ class Sample():
 
     def __repr__(self): # pragma: no cover
         return (
-            'Sample('
+            'VolumeProfile('
                 f'low={self.low},'
                 f'avg={self.average},'
                 f'high={self.high},'
@@ -188,7 +188,7 @@ class SampleReader:
         with open(self.file, mode="r", newline="") as file:
             reader = csv.DictReader(file)
             for row in reader:
-                yield Sample.from_dict({
+                yield VolumeProfile.from_dict({
                     'high': int(row["high"]),
                     'low':  int(row["low"]),
                     'volumes': ast.literal_eval(row["volumes"]),
@@ -254,7 +254,7 @@ class SampleBuilder:
 
             if self.sample is None:
                 # this is the first sample sample of the bar
-                self.sample = Sample()
+                self.sample = VolumeProfile()
                 self.timestamp = timestamp
 
             if timestamp > self.timestamp:
@@ -271,7 +271,7 @@ class SampleBuilder:
                 # Für die Simulation ist das jetzt egal, aber im Live-System muss das so gemacht werden.
                 # Deshalb muss das hier nochmal umgebaut werden.
                 self.timestamp = timestamp
-                self.sample = Sample()
+                self.sample = VolumeProfile()
 
             self.sample.volumes[trade.price] += trade.volume
 
@@ -285,7 +285,7 @@ class SampleBuilder:
         self.sample = None
 
 
-class Bar(Sample):
+class Bar(VolumeProfile):
     """ accumulates multipe samples """
 
     def __init__(self):
@@ -301,7 +301,7 @@ class Bar(Sample):
         d['size'] = self._size
         return d
 
-    def __iadd__(self, other: Sample):
+    def __iadd__(self, other: VolumeProfile):
         super().__iadd__(other)
         if self.open == None:
             self.open = other.average
@@ -321,7 +321,7 @@ class Bar(Sample):
         return bar
 
 
-class Chart(Sample):
+class Chart(VolumeProfile):
     """ a chart contains a sequence of Bars all with the same size 
     
     A chart has a limited size.
