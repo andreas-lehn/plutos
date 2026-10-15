@@ -87,6 +87,9 @@ def test_sample():
 
     sample.volumes[30716] = -3
     assert sample.high == 30716
+
+    sample.volumes[30716] = 0
+    assert sample.high == 30715
         
 def test_sample_resize():
     sample = Sample()
@@ -195,6 +198,34 @@ def test_sample_sub():
     assert s0.volume == 2
     assert s0.low == 101
     assert s0.high == 103
+
+def test_sample_convolute():
+    sample = Sample()
+    price = 101
+    for i in range(1, 6):
+        sample.volumes[price] = i*i
+        price += 1
+    for i in range(4, 0, -1):
+        sample.volumes[price] = i*i
+        price += 1
+
+    assert sample.low == 101
+    assert sample.high == 109
+    assert [sample.volumes[p] for p in range(sample.low, sample.high + 1)] == [1, 4, 9, 16, 25, 16, 9, 4, 1]
+
+    # price:   100 101 102 103 104 105 106 107 108 109 110
+    # sample:    0   1   4   9  16  25  16   9   4   1   0
+    # conv_1:    0   5  14  29  50  57  50  29  14   5   0 
+    # conv_2:    0  14  27  55  60  75  60  55  27  14   0
+
+    conv_1 = sample.convolute(1)
+    assert conv_1.low  == 101
+    assert conv_1.high == 109
+    assert [conv_1.volumes[p] for p in range(conv_1.low, conv_1.high + 1)] == [2, 5, 10, 17, 19, 17, 10, 5, 2]
+
+    conv_2 = sample.convolute(2)
+    #assert [conv_2.volumes[p] for p in range(conv_2.low, conv_2.high + 1)] == [1, 2, 3, 4, 4, 4, 3, 2, 1]
+    
 
 def test_sample_type_errors():
     s = Sample()

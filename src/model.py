@@ -46,6 +46,21 @@ class Sample():
     def volume(self):
         return self._volume
 
+    def convolute(self, n: int):
+        result = Sample()
+        for i in range(self.low, self.high +1):
+            # Einmal über alles
+            v = 0
+            for j in range(i - n, i + n + 1):
+                v += self.volumes[j]
+            result.volumes[i] = round(v / (2 * n + 1))
+        return result
+
+    def tangent(self, n: int):
+        result = Sample()
+        for i in range(self.low, self.high + 1):
+            result[i] = self.volumes(i + n) - self.volumes(i - n)
+            
     def to_dict(self) -> dict:
         return {
             "low": self.low,
