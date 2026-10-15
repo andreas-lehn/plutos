@@ -212,6 +212,8 @@ class SampleWriter:
 class SampleBuilder:
     """ builds 1 sec samples from trades """
 
+    SAMPLE_RATE_NS = 1 * 10**9 # 1 sec
+
     @classmethod
     def from_trades(cls, trades: Iterable, start_offset: int = 0, duration: int = sys.maxsize):
         """ delivers Samples form trades
@@ -239,7 +241,7 @@ class SampleBuilder:
     def __iter__(self):
         """ iterates of the trades and yields samples """
         for trade in self.trades:
-            timestamp = trade.timestamp // 10**9 # timestamp is now in seconds
+            timestamp = trade.timestamp // SampleBuilder.SAMPLE_RATE_NS # timestamp is now in seconds
             if self.timestamp is None:
                 # this is the very first sample
                 self.timestamp_offset = timestamp
@@ -445,7 +447,8 @@ if __name__ == '__main__':
     RECORD_SIZE_BYTES = 48
     estimated_records = os.path.getsize(args.file) // RECORD_SIZE_BYTES
 
-    reader = marketdata.from_file(args.file, args.start * 10**9, args.duration * 10**9)
+    NANO_SECONDS = 10**9
+    reader = marketdata.from_file(args.file, args.start * NANO_SECONDS, args.duration * NANO_SECONDS)
     model = MarketModel.default_model()
 
     model.feed_with_trades(tqdm(
