@@ -46,155 +46,155 @@ def trade_list_5():
 
 def test_VolumeProfile():
     sample = VolumeProfile()
-    sample.volumes[30712] = 2
+    sample[30712] = 2
     assert sample.low  == 30712
     assert sample.high == 30712
     assert sample.average == 30712
-    assert sample.volumes[30712] == 2
+    assert sample[30712] == 2
     assert sample.volume == 2
 
-    sample.volumes[30714] = 3
+    sample[30714] = 3
     assert sample.low == 30712
     assert sample.high == 30714
     assert sample.average == 30713
     assert sample.volume == 5
-    assert sample.volumes[30712] == 2
-    assert sample.volumes[30713] == 0
-    assert sample.volumes[30714] == 3
+    assert sample[30712] == 2
+    assert sample[30713] == 0
+    assert sample[30714] == 3
 
-    sample.volumes[30713] = 5
+    sample[30713] = 5
     assert sample.low == 30712
     assert sample.high == 30714
     assert sample.average == 30713
     assert sample.volume == 10
-    assert sample.volumes[30713] == 5
+    assert sample[30713] == 5
 
-    sample.volumes[30715] += 3
+    sample[30715] += 3
     assert sample.volume == 13
-    assert sample.volumes[30715] == 3
+    assert sample[30715] == 3
     assert sample.high == 30715
 
-    sample.volumes[30715] += 2
+    sample[30715] += 2
     assert sample.volume == 15
-    assert sample.volumes[30715] == 5
+    assert sample[30715] == 5
 
-    sample.volumes[30713] = -1
+    sample[30713] = -1
     assert sample.low == 30712
-    assert sample.volumes[30713] == -1
+    assert sample[30713] == -1
 
-    sample.volumes[30711] = -2
+    sample[30711] = -2
     assert sample.low == 30711
 
-    sample.volumes[30716] = -3
+    sample[30716] = -3
     assert sample.high == 30716
 
-    sample.volumes[30716] = 0
+    sample[30716] = 0
     assert sample.high == 30715
         
 def test_VolumeProfile_resize():
     sample = VolumeProfile()
 
     price = 1234
-    sample.volumes[price] = 1
-    assert sample.volumes[price] == 1
+    sample[price] = 1
+    assert sample[price] == 1
 
     base_price = sample._base_price
     price_below = base_price - 2 * VolumeProfile.VOLUMES_BLOCK_SIZE - 1
-    sample.volumes[price_below] = 2
-    assert sample.volumes[price] == 1
-    assert sample.volumes[price_below] == 2
+    sample[price_below] = 2
+    assert sample[price] == 1
+    assert sample[price_below] == 2
 
-    max_price = sample._block_max
+    max_price = sample._max_price
     price_above = max_price + 2 * VolumeProfile.VOLUMES_BLOCK_SIZE + 1
-    sample.volumes[price_above] = 3
+    sample[price_above] = 3
 
-    assert sample.volumes[price] == 1
-    assert sample.volumes[price_below] == 2
-    assert sample.volumes[price_above] == 3 
+    assert sample[price] == 1
+    assert sample[price_below] == 2
+    assert sample[price_above] == 3 
 
 def test_VolumeProfile_add():
     s0 = VolumeProfile()
-    s0.volumes[100] = 1
-    s0.volumes[102] = 2
-    s0.volumes[103] = 3
+    s0[100] = 1
+    s0[102] = 2
+    s0[103] = 3
 
     s1 = VolumeProfile()
-    s1.volumes[101] = 2
-    s1.volumes[102] = 3
-    s1.volumes[103] = 1
+    s1[101] = 2
+    s1[102] = 3
+    s1[103] = 1
 
     s0 += s1
-    assert s0.volumes[100] == 1
-    assert s0.volumes[101] == 2
-    assert s0.volumes[102] == 5
-    assert s0.volumes[103] == 4
+    assert s0[100] == 1
+    assert s0[101] == 2
+    assert s0[102] == 5
+    assert s0[103] == 4
 
     # check that s1 is unchanged
-    assert s1.volumes[101] == 2
-    assert s1.volumes[102] == 3
-    assert s1.volumes[103] == 1
+    assert s1[101] == 2
+    assert s1[102] == 3
+    assert s1[103] == 1
 
 def test_VolumeProfile_sub():
     s0 = VolumeProfile()
-    s0.volumes[100] = 1
-    s0.volumes[101] = 1
-    s0.volumes[102] = 2
-    s0.volumes[103] = 3
+    s0[100] = 1
+    s0[101] = 1
+    s0[102] = 2
+    s0[103] = 3
 
     s1 = VolumeProfile()
-    s1.volumes[102] = 2
-    s1.volumes[103] = 1
+    s1[102] = 2
+    s1[103] = 1
 
     s0 -= s1
-    assert s0.volumes[100] == 1
-    assert s0.volumes[101] == 1
-    assert s0.volumes[102] == 0
-    assert s0.volumes[103] == 2
+    assert s0[100] == 1
+    assert s0[101] == 1
+    assert s0[102] == 0
+    assert s0[103] == 2
     assert s0.volume == 4
 
     # check that s1 is unchanged
-    assert s1.volumes[102] == 2
-    assert s1.volumes[103] == 1
+    assert s1[102] == 2
+    assert s1[103] == 1
 
     # delete low
     s2 = VolumeProfile()
-    s2.volumes[100] = 1
+    s2[100] = 1
     s0 -= s2
-    assert s0.volumes[100] == 0
-    assert s0.volumes[101] == 1
-    assert s0.volumes[102] == 0
-    assert s0.volumes[103] == 2
+    assert s0[100] == 0
+    assert s0[101] == 1
+    assert s0[102] == 0
+    assert s0[103] == 2
     assert s0.volume == 3
     assert s0.low == 101
 
     # delete high
     s3 = VolumeProfile()
-    s3.volumes[103] = 2
+    s3[103] = 2
     s0 -= s3
-    assert s0.volumes[101] == 1
-    assert s0.volumes[102] == 0
-    assert s0.volumes[103] == 0
+    assert s0[101] == 1
+    assert s0[102] == 0
+    assert s0[103] == 0
     assert s0.volume == 1
     assert s0.high == 101
 
     # delete all
     s4 = VolumeProfile()
-    s4.volumes[101] = 1
+    s4[101] = 1
     s0 -= s4
-    assert s0.volumes[101] == 0
+    assert s0[101] == 0
     assert s0.volume == 0
     assert s0.high == 0
     assert s0.low == sys.maxsize
 
     # check ValueError
     s0 -= s4
-    assert s0.volumes[101] == -1
+    assert s0[101] == -1
 
     # add after emptiness
     s0 += s1
-    assert s0.volumes[101] == -1
-    assert s0.volumes[102] == 2
-    assert s0.volumes[103] == 1
+    assert s0[101] == -1
+    assert s0[102] == 2
+    assert s0[103] == 1
     assert s0.volume == 2
     assert s0.low == 101
     assert s0.high == 103
@@ -208,10 +208,10 @@ def sample_square():
     sample = VolumeProfile()
     price = 101
     for i in range(1, 6):
-        sample.volumes[price] = i*i
+        sample[price] = i*i
         price += 1
     for i in range(4, 0, -1):
-        sample.volumes[price] = i*i
+        sample[price] = i*i
         price += 1
     return sample
 
@@ -225,10 +225,10 @@ def test_VolumeProfile_convolute(sample_square):
     conv_1 = sample.convolute(1)
     assert conv_1.low  == 101
     assert conv_1.high == 109
-    assert [conv_1.volumes[p] for p in range(conv_1.low, conv_1.high + 1)] == [2, 5, 10, 17, 19, 17, 10, 5, 2]
+    assert [conv_1[p] for p in range(conv_1.low, conv_1.high + 1)] == [2, 5, 10, 17, 19, 17, 10, 5, 2]
 
     conv_2 = sample.convolute(2)
-    assert [conv_2.volumes[p] for p in range(conv_2.low, conv_2.high + 1)] == [3, 6, 11, 14, 15, 14, 11, 6, 3]
+    assert [conv_2[p] for p in range(conv_2.low, conv_2.high + 1)] == [3, 6, 11, 14, 15, 14, 11, 6, 3]
 
 def test_VolumeProfile_tangent(sample_square):
     sample = sample_square
@@ -238,12 +238,12 @@ def test_VolumeProfile_tangent(sample_square):
     tangent = sample.tangent(1)
     assert tangent.low  == 101
     assert tangent.high == 109
-    assert [tangent.volumes[p] for p in range(tangent.low, tangent.high + 1)] == [4, 8, 12, 16, 0, -16, -12, -8, -4]
+    assert [tangent[p] for p in range(tangent.low, tangent.high + 1)] == [4, 8, 12, 16, 0, -16, -12, -8, -4]
 
 def test_VolumeProfile_type_errors():
     s = VolumeProfile()
-    s.volumes[102] = 2
-    s.volumes[103] = 1
+    s[102] = 2
+    s[103] = 1
 
     with pytest.raises(TypeError):
         s += 5
@@ -294,7 +294,7 @@ def test_sample_reader(csv_path):
     assert samples[2].low == 122659
     assert samples[5].low == 122654
     for i, p in enumerate([19, 10, 8, 6, 4, 26, 10]):
-        assert samples[6].volumes[samples[6].low + i] == p
+        assert samples[6][samples[6].low + i] == p
     assert samples[7].high == 122667
 
 @pytest.fixture
@@ -313,12 +313,12 @@ def test_sample_copy(some_samples):
     assert c.high == s1.high
     assert c.average == s1.average
     assert c.volume == s1.volume
-    for vc, vs in zip(c.volumes, s1.volumes):
+    for vc, vs in zip(c, s1):
         assert vc == vs
 
     # ckeck that volumes are independant
-    c.volumes[c.low] += 5
-    assert c.volumes[c.low] != s1.volumes[c.low]
+    c[c.low] += 5
+    assert c[c.low] != s1[c.low]
  
 def test_sample_writer(some_samples, csv_out_in_path):
 
@@ -336,8 +336,8 @@ def test_bar(some_samples):
     assert bar.average == 101
     assert bar.low  == s0.low
     assert bar.close == s0.average
-    assert bar.volumes.volumes[101] == 3
-    assert bar.volumes.volumes[102] == 1
+    assert bar.volumes[101] == 3
+    assert bar.volumes[102] == 1
     assert bar.volume == 7
 
     bar.append(some_samples[1])
@@ -346,8 +346,8 @@ def test_bar(some_samples):
     assert bar.low  == 99
     assert bar.high == 103
     assert bar.volume == 15
-    assert bar.volumes.volumes[99]  == 1
-    assert bar.volumes.volumes[100] == 4
+    assert bar.volumes[99]  == 1
+    assert bar.volumes[100] == 4
 
     bar.append(some_samples[2])
     bar.append(some_samples[3])
@@ -356,11 +356,11 @@ def test_bar(some_samples):
     assert bar.low  == 99
     assert bar.high == 104
     assert bar.close == 101
-    assert bar.volumes.volumes[101] == 8
-    assert bar.volumes.volumes[102] == 5
+    assert bar.volumes[101] == 8
+    assert bar.volumes[102] == 5
 
     sample = bar.popleft()
-    assert bar.volumes.volumes[101] == 8 - sample.volumes[101]
+    assert bar.volumes[101] == 8 - sample[101]
     bar.popleft()
     assert bar.open != 101
     assert bar.close == 101
@@ -377,7 +377,7 @@ def test_bar_to_dict(some_samples):
     assert d['close'] == bar.close
     vol = 0
     for i, v in enumerate(d['volumes']):
-        vol += bar.volumes.volumes[bar.low + i]
+        vol += bar.volumes[bar.low + i]
     assert d['volume'] == vol
 
 def _est_chart(csv_path):
@@ -387,8 +387,8 @@ def _est_chart(csv_path):
         chart += sample
 
     assert len(chart) == 2
-    assert chart.volumes[122615] == 0
-    assert chart.volumes[122654] == chart[0].volumes[122654] + chart[1].volumes[122654]
+    assert chart[122615] == 0
+    assert chart[122654] == chart[0][122654] + chart[1][122654]
 
     for bar in chart:
         assert bar.size == 3

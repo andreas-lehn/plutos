@@ -30,14 +30,21 @@ class VolumeProfile():
     VOLUMES_BLOCK_SIZE = 64
 
     def __init__(self):
-        self.low = sys.maxsize
-        self.high = 0
-        self.volumes = VolumeProfile.VolumeProxy(self)
-        self._volumes = VolumeProfile._new_blocks(1)
+        self._low = sys.maxsize
+        self._high = 0
+        self._volumes = VolumeProfile._alloc_blocks(1)
         self._base_price = None
         self._volume = 0
         self._price_x_volume = 0
 
+    @property
+    def low(self) -> int:
+        return self._low
+
+    @property
+    def high(self) -> int:
+        return self._high
+    
     @property
     def average(self):
         return round(self._price_x_volume / self._volume) if self.volume != 0 else 0
@@ -52,30 +59,30 @@ class VolumeProfile():
             # Einmal über alles
             v = 0
             for j in range(i - n, i + n + 1):
-                v += self.volumes[j]
-            result.volumes[i] = round(v / (2 * n + 1))
+                v += self[j]
+            result[i] = round(v / (2 * n + 1))
         return result
 
     def tangent(self, n: int):
         result = VolumeProfile()
         for i in range(self.low, self.high + 1):
-            result.volumes[i] = self.volumes[i + n] - self.volumes[i - n]
+            result[i] = self[i + n] - self[i - n]
         return result
 
     def to_dict(self) -> dict:
         return {
             "low": self.low,
             "high": self.high,
-            "volumes": [self.volumes[price] for price in range(self.low, self.high + 1)],
+            "volumes": [self[price] for price in range(self.low, self.high + 1)],
         }
 
     @classmethod
     def from_dict(cls, data):
         sample = cls()
-        sample.low = data['low']
+        sample._low = data['low']
         for i, vol in enumerate(data['volumes']):
-            price = sample.low + i
-            sample.volumes[price] = vol
+            price = sample._low + i
+            sample[price] = vol
         return sample
 
     def copy(self):
@@ -85,83 +92,79 @@ class VolumeProfile():
         if price < self._base_price:
             delta = self._base_price - price
             blocks_needed = delta // VolumeProfile.VOLUMES_BLOCK_SIZE + 1
-            self._volumes = VolumeProfile._new_blocks(blocks_needed) + self._volumes
+            self._volumes = VolumeProfile._alloc_blocks(blocks_needed) + self._volumes
             self._base_price -= blocks_needed * VolumeProfile.VOLUMES_BLOCK_SIZE
-        elif price >= self._block_max:
+        elif price >= self._max_price:
             delta = price - self._base_price + len(self._volumes)
             blocks_needed = delta // VolumeProfile.VOLUMES_BLOCK_SIZE + 1
-            self._volumes = self._volumes + VolumeProfile._new_blocks(blocks_needed)
+            self._volumes = self._volumes + VolumeProfile._alloc_blocks(blocks_needed)
 
-    def _new_blocks(n: int):
+    def _alloc_blocks(n: int):
         """ returns n block of volumes array """
         return array('i', [0] * n * VolumeProfile.VOLUMES_BLOCK_SIZE)
 
     @property
-    def _block_max(self):
+    def _max_price(self):
         return self._base_price + len(self._volumes)
 
-    class VolumeProxy:
-        def __init__(self, sample):
-            self.sample = sample
+    def __getitem__(self, price):
+        if self._base_price is None or price < self._base_price or price >= self._max_price:
+            return 0
+        return self._volumes[price - self._base_price]
 
-        def __getitem__(self, price):
-            if self.sample._base_price is None or price < self.sample._base_price or price >= self.sample._block_max:
-                return 0
-            return self.sample._volumes[price - self.sample._base_price]
+    def __setitem__(self, price, volume):
+        self.update(price, volume)
 
-        def __setitem__(self, price, volume):
-            self.sample.update(price, volume)
-
-        def __iter__(self):
-            for price in range(self.sample.low, self.sample.high + 1):
-                volume = self[price]
-                if volume > 0:
-                    yield (price, volume)
+    def __iter__(self):
+        for price in range(self._low, self._high + 1):
+            volume = self[price]
+            if volume > 0:
+                yield (price, volume)
 
     def update(self, price, volume):
         """ updates the volume of price and all dependant variables """
         if self._base_price is None:
             self._base_price = price - VolumeProfile.VOLUMES_BLOCK_SIZE // 2
         else:
-            if price < self._base_price or price >= self._block_max:
+            if price < self._base_price or price >= self._max_price:
                 self._resize(price)
 
-        self.high = max(self.high, price)
-        self.low  = min(self.low, price)
+        self._high = max(self._high, price)
+        self._low  = min(self._low, price)
 
-        delta_volume = volume - self.volumes[price]
+        delta_volume = volume - self[price]
         self._volumes[price - self._base_price] = volume
         self._volume += delta_volume
         self._price_x_volume += delta_volume * price
 
-        while self.volumes[self.low] == 0:
+        while self[self.low] == 0:
             # low was deleted. search new low...
-            self.low += 1
-            if self.low > self.high:
+            self._low += 1
+            if self._low > self._high:
                 # we are empty! Bring it back to init state
-                self.low = sys.maxsize
-                self.high = 0
+                self._low = sys.maxsize
+                self._high = 0
                 return
 
-        while self.volumes[self.high] == 0:
+        while self[self._high] == 0:
             # high was deleted. search new high..
-            self.high -= 1
+            self._high -= 1
 
 
     def __iadd__(self, other):
         if not isinstance(other, VolumeProfile):
             raise TypeError("__iadd__() 'other' must be an instance of VolumeProfile") # pragma: no cover
 
-        for price, volume in other.volumes:
-            self.volumes[price] += volume
+        for price, volume in other:
+            self[price] += volume
         return self
 
     def __isub__(self, other):
         if not isinstance(other, VolumeProfile):
             raise TypeError("__isub__() 'other' must be an instance of VolumeProfile")
 
-        for price, volume in other.volumes:
-            self.volumes[price] -= volume
+        for price, volume in other:
+            self[price] -= volume
         return self
 
     def __repr__(self): # pragma: no cover
@@ -275,7 +278,7 @@ class SampleBuilder:
                 self.timestamp = timestamp
                 self.sample = VolumeProfile()
 
-            self.sample.volumes[trade.price] += trade.volume
+            self.sample[trade.price] += trade.volume
 
         if self.sample.volume > 0:
             # there is a sample left...
@@ -335,7 +338,7 @@ class Bar():
             'close': self.close,
             'volume': self.volume,
             'len': len(self),
-            'volumes': [self.volumes.volumes[p] for p in range (self.low, self.high + 1)]
+            'volumes': [self._volumes[p] for p in range (self.low, self.high + 1)]
         }
 
     def append(self, sample: VolumeProfile):
@@ -521,4 +524,4 @@ if __name__ == '__main__':
     with open(args.export + "_volume_profile.csv", "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=['Price', "Volume"])
         writer.writeheader()
-        writer.writerows([{'Price': p/4, 'Volume': v} for p, v in chart.volumes])
+        writer.writerows([{'Price': p/4, 'Volume': v} for p, v in chart])
