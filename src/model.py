@@ -287,40 +287,88 @@ class SampleBuilder:
         self.sample = None
 
 
-class Bar(VolumeProfile):
+class Bar():
     """ accumulates multipe samples """
 
     def __init__(self):
         super().__init__()
-        self.open = None
-        self.close = None
-        self._size = 0
-
-    def to_dict(self) -> dict:
-        d = super().to_dict()
-        d['open'] = self.open
-        d['close'] = self.close
-        d['size'] = self._size
-        return d
-
-    def __iadd__(self, other: VolumeProfile):
-        super().__iadd__(other)
-        if self.open == None:
-            self.open = other.average
-        self._size += 1
-        self.close = other.average
-        return self
+        self._samples: Iterable[VolumeProfile] = deque()
+        self._volumes: Iterable[int] = VolumeProfile()
 
     @property
-    def size(self):
-        return self._size
+    def open(self) -> int:
+        return self._samples[0].average if len(self._samples) > 0 else None
+
+    @property
+    def low(self) -> int:
+        return self._volumes.low
+
+    @property
+    def average(self) -> int:
+        return self._volumes.average
+
+    @property
+    def high(self) -> int:
+        return self._volumes.high
+
+    @property
+    def close(self) -> int:
+        return self._samples[-1].average if len(self._samples) > 0 else None
+
+    @property
+    def volume(self) -> int:
+        return self._volumes.volume
+
+    @property
+    def volumes(self) -> VolumeProfile:
+        return self._volumes
+    
+    def __len__(self):
+        return len(self._samples)
+    
+    def to_dict(self) -> dict:
+        return {
+            'open': self.open,
+            'low': self.low,
+            'average': self.average,
+            'high': self.high,
+            'close': self.close,
+            'volume': self.volume,
+            'len': len(self),
+            'volumes': [self.volumes.volumes[p] for p in range (self.low, self.high + 1)]
+        }
+
+    def append(self, sample: VolumeProfile):
+        self._samples.append(sample)
+        self._volumes += sample
+
+    def popleft(self) -> VolumeProfile:
+        sample = self._samples.popleft()
+        self._volumes -= sample
+        return sample
 
     @classmethod
     def from_samples(cls, samples: Iterable):
         bar = Bar()
         for sample in samples:
-            bar += sample
+            bar.append(sample)
         return bar
+
+    def __iter__(self):
+        return self._samples.__iter__()
+
+    def __repr__(self):
+        return (
+            "Bar("
+                f"open={self.open},"
+                f"low={self.low},"
+                f"avg={self.average},"
+                f"high={self.high},"
+                f"close={self.close},"
+                f"vol={self.volume},"
+                f"len={len(self)}"
+            ")"
+        )
 
 
 class Chart(VolumeProfile):
