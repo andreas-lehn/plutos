@@ -100,7 +100,7 @@ class TradesReader:
             volume = record.size
             timestamp = record.ts_event
             yield Trade(
-                timestamp=timestamp,
+                timestamp_ns=timestamp,
                 price=price,
                 volume=volume,
                 )

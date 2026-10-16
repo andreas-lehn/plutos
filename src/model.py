@@ -20,7 +20,7 @@ from pydantic import BaseModel
 class Trade(BaseModel):
     """ a basic trade at the exchange """
 
-    timestamp: int # original timestamp in ns
+    timestamp_ns: int # original timestamp in ns
     price: int     # price * 4
     volume: int
 
@@ -244,7 +244,7 @@ class SampleBuilder:
     def __iter__(self):
         """ iterates of the trades and yields samples """
         for trade in self.trades:
-            timestamp = trade.timestamp // SampleBuilder.SAMPLE_RATE_NS # timestamp is now in seconds
+            timestamp = trade.timestamp_ns // SampleBuilder.SAMPLE_RATE_NS # timestamp is now in seconds
             if self.timestamp is None:
                 # this is the very first sample
                 self.timestamp_offset = timestamp

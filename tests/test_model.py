@@ -26,7 +26,7 @@ def trade_list_40():
     price_offset = 122243
     for i in range(0, 40):
         trades.append(Trade(
-            timestamp=timestamp_offset + i * 200 * 10**6, # increment by 200 ms => 5 trades per sample
+            timestamp_ns=timestamp_offset + i * 200 * 10**6, # increment by 200 ms => 5 trades per sample
             price = price_offset + i, # price in sample
             volume = 1 + i % 5,
         ))
@@ -35,11 +35,11 @@ def trade_list_40():
 @pytest.fixture
 def trade_list_5():
     trades = [ 
-        Trade(timestamp=0, price=12500, volume = 1),
-        Trade(timestamp=0, price=12501, volume = 2),
-        Trade(timestamp=0, price=12503, volume = 3),
-        Trade(timestamp=1, price=12499, volume = 4),
-        Trade(timestamp=1, price=12501, volume = 5),
+        Trade(timestamp_ns=0, price=12500, volume = 1),
+        Trade(timestamp_ns=0, price=12501, volume = 2),
+        Trade(timestamp_ns=0, price=12503, volume = 3),
+        Trade(timestamp_ns=1, price=12499, volume = 4),
+        Trade(timestamp_ns=1, price=12501, volume = 5),
     ]
     return trades
 
@@ -427,19 +427,19 @@ def test_chart_export(csv_path):
 
     e = [b for b in chart.export()]
     assert e[0]['Timestamp'] == 0
-    assert e[0]['Open']    == chart[1].open/4
-    assert e[0]['Low']     == chart[1].low/4
-    assert e[0]['Average'] == chart[1].average/4
-    assert e[0]['High']    == chart[1].high/4
-    assert e[0]['Close']   == chart[1].close/4
-    assert e[0]['Volume']  == chart[1].volume
+    assert e[0]['Open']    == chart[0].open/4
+    assert e[0]['Low']     == chart[0].low/4
+    assert e[0]['Average'] == chart[0].average/4
+    assert e[0]['High']    == chart[0].high/4
+    assert e[0]['Close']   == chart[0].close/4
+    assert e[0]['Volume']  == chart[0].volume
     assert e[1]['Timestamp'] == 2
-    assert e[1]['Open']    == chart[0].open/4
-    assert e[1]['Low']     == chart[0].low/4
-    assert e[1]['Average'] == chart[0].average/4
-    assert e[1]['High']    == chart[0].high/4
-    assert e[1]['Close']   == chart[0].close/4
-    assert e[1]['Volume']  == chart[0].volume
+    assert e[1]['Open']    == chart[1].open/4
+    assert e[1]['Low']     == chart[1].low/4
+    assert e[1]['Average'] == chart[1].average/4
+    assert e[1]['High']    == chart[1].high/4
+    assert e[1]['Close']   == chart[1].close/4
+    assert e[1]['Volume']  == chart[1].volume
 
 
 def test_market_model(dbn_path):
@@ -454,7 +454,7 @@ def test_market_model(dbn_path):
         def __iter__(self):
             for time_offset in range(0, self.duration):
                 for trade in trades:
-                    trade.timestamp = time_offset * 10**9
+                    trade.timestamp_ns = time_offset * 10**9
                     yield trade
 
     model = MarketModel.default_model()
