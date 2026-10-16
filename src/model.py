@@ -306,7 +306,8 @@ class SampleBuilder:
             self.sample.volumes[trade.price] += trade.volume
             self.sample.timestamp = max(self.sample.timestamp, trade.timestamp)
 
-        if self.sample.volumes.volume > 0:
+
+        if self.sample and self.sample.volumes.volume > 0:
             # there is a sample left...
             yield self.sample
 
@@ -439,7 +440,7 @@ class Chart():
 
     def __init__(self, bar_size: int, maxlen: int = None):
         self._bar_size = bar_size
-        self._maxlen = maxlen
+        self._maxlen = maxlen if maxlen else sys.maxsize
         self._bars = deque()
         self._bars.append(Bar())
         self._volumes = VolumeProfile()
@@ -553,40 +554,36 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description="load a file into default market model and put out some statistics")
     parser.add_argument('file', help='name of Databento native file (.dbn)')
-    parser.add_argument('-s', '--start', type=int, default=0, help="start offset in seconds")
-    parser.add_argument('-d', '--duration', type=int, default=marketdata.SECONDS_OF_DAY, help="duration of replay in seconds")
-    parser.add_argument('-e', '--export', required=True, choices=['fast', 'main', '1-min', 'day'], help="exports one of these charts")
+    parser.add_argument('-b', '--bar-size', type=int, default=36, help="size of bar in seconds")
+    parser.add_argument('-n', '--num', type=int, help='number of bars')
+    parser.add_argument('-o', '--ohlc-file', type=str, help="name of file for OHLCV data")
+    parser.add_argument('-p', '--profile-file', type=str, help="name of file for volume profile data")
     args = parser.parse_args()
 
-    RECORD_SIZE_BYTES = 48
-    estimated_records = os.path.getsize(args.file) // RECORD_SIZE_BYTES
+    main_chart = Chart(bar_size=args.bar_size)
+    model = MarketModel()
+    model.charts.append(main_chart)
 
     NANO_SECONDS = 10**9
-    reader = marketdata.from_file(args.file, args.start * NANO_SECONDS, args.duration * NANO_SECONDS)
-    model = MarketModel.default_model()
-
+    duration = args.num * args.bar_size if args.num else marketdata.SECONDS_OF_DAY
+    reader = marketdata.from_file(args.file, duration=duration * NANO_SECONDS)
     model.feed_with_trades(tqdm(
             reader, 
-            total=estimated_records, 
             desc=f"Processing file {args.file}",
             bar_format="{desc}: {n} records read [{elapsed}, {rate_fmt}]")
         )
-    
-    chart = None
-    for i, name in enumerate(['fast', 'main', '1-min', 'day']):
-        if name == args.export:
-            chart = model.charts[i]
-            break
 
-    with open(args.export + "_bar_data.csv", "w", newline="", encoding="utf-8") as f:
-        fieldnames = ['timestamp', 'open', 'low', 'average', 'high', 'close', 'volume']
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows([bar.to_filtered_dict(fieldnames) for bar in chart])
+    if args.ohlc_file:    
+        with open(args.ohlc_file, "w", newline="", encoding="utf-8") as f:
+            fieldnames = ['timestamp', 'open', 'low', 'average', 'high', 'close', 'volume']
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows([bar.to_filtered_dict(fieldnames) for bar in main_chart])
 
-    with open(args.export + "_volume_profile.csv", "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=['Price', "Volume", 'FilteredVolume'])
-        writer.writeheader()
-        filtered_volumes = chart.volumes.convolute(chart.filter_range())
-        for p, v in chart.volumes:
-            writer.writerow({'Price': p/4, 'Volume': v, 'FilteredVolume': filtered_volumes[p]})
+    if args.profile_file:
+        with open(args.profile_file, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=['price', "volume", 'smooth_volume'])
+            writer.writeheader()
+            smoothed_volumes = main_chart.volumes.convolute(main_chart.filter_range())
+            for p, v in main_chart.volumes:
+                writer.writerow({'price': p, 'volume': v, 'smooth_volume': smoothed_volumes[p]})
