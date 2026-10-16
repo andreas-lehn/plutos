@@ -483,7 +483,7 @@ class Chart():
 
         """
         def __init__(self, bars: Iterable[Bar], bar_size):
-            self.bars = reversed(bars)
+            self.bars = bars
             self.bar_size = bar_size
             self.timestamp = 0
 
