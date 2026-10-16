@@ -26,7 +26,7 @@ def trade_list_40():
     price_offset = 122243
     for i in range(0, 40):
         trades.append(Trade(
-            timestamp_ns=timestamp_offset + i * 200 * 10**6, # increment by 200 ms => 5 trades per sample
+            timestamp=timestamp_offset + i * 200 * 10**6, # increment by 200 ms => 5 trades per sample
             price = price_offset + i, # price in sample
             volume = 1 + i % 5,
         ))
@@ -35,11 +35,11 @@ def trade_list_40():
 @pytest.fixture
 def trade_list_5():
     trades = [ 
-        Trade(timestamp_ns=0, price=12500, volume = 1),
-        Trade(timestamp_ns=0, price=12501, volume = 2),
-        Trade(timestamp_ns=0, price=12503, volume = 3),
-        Trade(timestamp_ns=1, price=12499, volume = 4),
-        Trade(timestamp_ns=1, price=12501, volume = 5),
+        Trade(timestamp=0, price=12500, volume = 1),
+        Trade(timestamp=0, price=12501, volume = 2),
+        Trade(timestamp=0, price=12503, volume = 3),
+        Trade(timestamp=1, price=12499, volume = 4),
+        Trade(timestamp=1, price=12501, volume = 5),
     ]
     return trades
 
@@ -454,7 +454,7 @@ def test_market_model(dbn_path):
         def __iter__(self):
             for time_offset in range(0, self.duration):
                 for trade in trades:
-                    trade.timestamp_ns = time_offset * 10**9
+                    trade.timestamp = time_offset * 10**9
                     yield trade
 
     model = MarketModel.default_model()

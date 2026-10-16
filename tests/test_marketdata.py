@@ -51,7 +51,7 @@ def test_from_file(dbn_path):
 
     start_offset = 5 * 10**9 # 5 sec offset
     offset_trades = [trade for trade in marketdata.from_file(dbn_path, start=start_offset, duration=1)]
-    start_timestamp = trades[0].timestamp_ns + start_offset
+    start_timestamp = trades[0].timestamp + start_offset
     for trade in offset_trades:
         assert trade[0].timestamp == start_timestamp
 
