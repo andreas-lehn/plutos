@@ -439,20 +439,20 @@ def test_chart_export(csv_path):
         chart.append(sample)
 
     e = [b for b in chart.export()]
-    assert e[0]['Timestamp'] == 0
-    assert e[0]['Open']    == chart[0].open/4
-    assert e[0]['Low']     == chart[0].low/4
-    assert e[0]['Average'] == chart[0].average/4
-    assert e[0]['High']    == chart[0].high/4
-    assert e[0]['Close']   == chart[0].close/4
-    assert e[0]['Volume']  == chart[0].volume
-    assert e[1]['Timestamp'] == 2
-    assert e[1]['Open']    == chart[1].open/4
-    assert e[1]['Low']     == chart[1].low/4
-    assert e[1]['Average'] == chart[1].average/4
-    assert e[1]['High']    == chart[1].high/4
-    assert e[1]['Close']   == chart[1].close/4
-    assert e[1]['Volume']  == chart[1].volume
+    assert e[0]['timestamp'] == 17800000000
+    assert e[0]['open']    == chart[0].open
+    assert e[0]['low']     == chart[0].low
+    assert e[0]['average'] == chart[0].average
+    assert e[0]['high']    == chart[0].high
+    assert e[0]['close']   == chart[0].close
+    assert e[0]['volume']  == chart[0].volume
+    assert e[1]['timestamp'] == 17900000000
+    assert e[1]['open']    == chart[1].open
+    assert e[1]['low']     == chart[1].low
+    assert e[1]['average'] == chart[1].average
+    assert e[1]['high']    == chart[1].high
+    assert e[1]['close']   == chart[1].close
+    assert e[1]['volume']  == chart[1].volume
 
 
 def test_market_model(dbn_path):

@@ -483,8 +483,8 @@ class Chart():
         return self._volumes
 
     def append(self, sample: Sample | VolumeProfile):
-        if isinstance(sample, Sample):
-            sample = sample.volumes
+        if isinstance(sample, VolumeProfile):
+            sample = Sample(volumes=sample)
 
         bar = self._bars[-1]
         if len(bar) >= self._bar_size:
@@ -495,7 +495,7 @@ class Chart():
                 # chart is full, remove an old one
                 self.popleft()
         bar.append(sample)
-        self._volumes += sample
+        self._volumes += sample.volumes
 
     def popleft(self) -> Bar:
         bar = self._bars.popleft()
@@ -523,21 +523,18 @@ class Chart():
         def __init__(self, bars: Iterable[Bar], bar_size):
             self.bars = bars
             self.bar_size = bar_size
-            self.timestamp = 0
 
         def __iter__(self):
             for bar in self.bars:
                 yield {
-                    'Timestamp': self.timestamp,
-                    'Open': bar.open/4,
-                    'Low': bar.low/4,
-                    'Average': bar.average/4,
-                    'High': bar.high/4,
-                    'Close': bar.close/4,
-                    'Volume': bar.volume,
+                    'timestamp': bar.timestamp,
+                    'open': bar.open,
+                    'low': bar.low,
+                    'average': bar.average,
+                    'high': bar.high,
+                    'close': bar.close,
+                    'volume': bar.volume,
                 }
-                self.timestamp += self.bar_size
-            self.timestamp = 0
 
     def export(self):
         """ return a chart exporter (generator) """
