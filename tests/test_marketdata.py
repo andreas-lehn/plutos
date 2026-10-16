@@ -45,6 +45,10 @@ def test_active_symbol():
     assert marketdata.active_symbol('nq', date(2026, 12, 14)) == "NQH7"
 
 def test_from_file(dbn_path):
+    reader = marketdata.from_file(dbn_path)
+    all_trades = [trade for trade in reader]
+    assert len(all_trades) == 1759
+
     reader = marketdata.from_file(dbn_path, n = 10)
     trades = [trade for trade in reader]
     assert len(trades) == 10
@@ -60,6 +64,14 @@ def test_from_file(dbn_path):
 
     no_trades = [trade for trade in marketdata.from_file(dbn_path, start=start_offset, n=0)]
     assert len(no_trades) == 0
+
+    start_offset = marketdata.SECONDS_OF_DAY * 10**9
+    no_trades = [trade for trade in marketdata.from_file(dbn_path, start=start_offset)]
+    assert len(no_trades) == 0
+
+    too_long_trades = [trade for trade in marketdata.from_file(dbn_path, duration=start_offset)]
+    assert len(too_long_trades) == 1759
+
 
 def test_data_from_file(dbn_path):
     data = marketdata.data_from_file(dbn_path)
