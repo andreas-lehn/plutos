@@ -384,6 +384,9 @@ class Bar():
             'volumes': [self._volumes[p] for p in range (self.low, self.high + 1)]
         }
 
+    def to_filtered_dict(self, keys: Iterable[str]) -> dict:
+        return {key: getattr(self, key) for key in keys}
+
     def append(self, sample: Sample | VolumeProfile):
         if isinstance(sample, Sample):
             self._timestamp = sample.timestamp
@@ -482,10 +485,7 @@ class Chart():
     def volumes(self) -> VolumeProfile:
         return self._volumes
 
-    def append(self, sample: Sample | VolumeProfile):
-        if isinstance(sample, VolumeProfile):
-            sample = Sample(volumes=sample)
-
+    def append(self, sample: Sample):
         bar = self._bars[-1]
         if len(bar) >= self._bar_size:
             #last bar is full, add a new one
@@ -511,35 +511,6 @@ class Chart():
     def __len__(self):
         return len(self._bars)
     
-
-    class Exporter:
-        """ liefert eine liste mit jeweils einem dict für jede bar
-        
-        Convention:
-         * Columns starting with an Upper letter contain real price values in float not in integer.
-         * if prices are in integer, columns start with lower letters.
-
-        """
-        def __init__(self, bars: Iterable[Bar], bar_size):
-            self.bars = bars
-            self.bar_size = bar_size
-
-        def __iter__(self):
-            for bar in self.bars:
-                yield {
-                    'timestamp': bar.timestamp,
-                    'open': bar.open,
-                    'low': bar.low,
-                    'average': bar.average,
-                    'high': bar.high,
-                    'close': bar.close,
-                    'volume': bar.volume,
-                }
-
-    def export(self):
-        """ return a chart exporter (generator) """
-        return Chart.Exporter(self._bars, self._bar_size)
-
 
 class MarketModel:
     """ MarketModell contains charts and feeds them """
@@ -607,11 +578,11 @@ if __name__ == '__main__':
             chart = model.charts[i]
             break
 
-    exporter = chart.export()
     with open(args.export + "_bar_data.csv", "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=['Timestamp', 'Open', 'Low', 'Average', 'High', 'Close', 'Volume'])
+        fieldnames = ['timestamp', 'open', 'low', 'average', 'high', 'close', 'volume']
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
-        writer.writerows([e for e in exporter])
+        writer.writerows([bar.to_filtered_dict(fieldnames) for bar in chart])
 
     with open(args.export + "_volume_profile.csv", "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=['Price', "Volume", 'FilteredVolume'])

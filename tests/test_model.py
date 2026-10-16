@@ -402,6 +402,19 @@ def test_bar_to_dict(some_samples):
         vol += v
     assert d['volume'] == bar.volume
 
+def test_bar_filtered_dict(some_samples):
+    bar = Bar.from_sample(some_samples[0])
+    # bar from Sample: Sample(17100000000, VolumeProfile.from_dict({'low': 99,  'high': 102, 'volumes': [1, 2, 3, 1]}))
+    d = bar.to_filtered_dict(['timestamp', 'low', 'volume'])
+    assert d == {'timestamp': 17100000000, 'low': 99, 'volume': 7}
+
+    with pytest.raises(KeyError):
+        d['high']
+
+    bar.signal = 'sell'
+    d = bar.to_filtered_dict(['timestamp', 'signal'])
+    assert d == {'timestamp': 17100000000, 'signal': 'sell'}
+
 def test_chart(csv_path):
     chart = Chart(3, 2)
     reader = SampleReader.from_file(csv_path)
@@ -431,28 +444,6 @@ def test_chart(csv_path):
     assert chart.average_range(2) == round((r0 + r1) / 2)
     assert chart.filter_range(2) == 5
     assert chart.filter_range(1) == 5
-
-def test_chart_export(csv_path):
-    chart = Chart(2, 2)
-    reader = SampleReader.from_file(csv_path)
-    for sample in reader:
-        chart.append(sample)
-
-    e = [b for b in chart.export()]
-    assert e[0]['timestamp'] == 17800000000
-    assert e[0]['open']    == chart[0].open
-    assert e[0]['low']     == chart[0].low
-    assert e[0]['average'] == chart[0].average
-    assert e[0]['high']    == chart[0].high
-    assert e[0]['close']   == chart[0].close
-    assert e[0]['volume']  == chart[0].volume
-    assert e[1]['timestamp'] == 17900000000
-    assert e[1]['open']    == chart[1].open
-    assert e[1]['low']     == chart[1].low
-    assert e[1]['average'] == chart[1].average
-    assert e[1]['high']    == chart[1].high
-    assert e[1]['close']   == chart[1].close
-    assert e[1]['volume']  == chart[1].volume
 
 
 def test_market_model(dbn_path):
