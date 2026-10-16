@@ -176,7 +176,30 @@ class VolumeProfile():
                 f'volume={self.volume}'
             ')'
         )
-            
+
+
+class Sample:
+    """ a Sample associates a volume profile with a timestamp
+    
+    timestamp is the timestamp of the latest trade in the volume profile
+    """
+
+    def __init__(self, timestamp: int = 0, volumes: VolumeProfile = None):
+        self.timestamp = timestamp
+        self.volumes = volumes
+
+    def from_dict(d: dict):
+        return Sample(d['timestamp'], VolumeProfile.from_dict(d))
+
+    def to_dict(self) -> dict:
+        result = self.volumes.to_dict()
+        result['timestamp'] = self.timestamp
+        return result
+
+    def __repr__(self): # pragma: no cover
+        return 'Sample(timestamp:' + self.timestamp + ',' + self.volumes.__repr__ + ')'
+
+
 class SampleReader:
     """ reads samples from a file"""
 
@@ -191,7 +214,8 @@ class SampleReader:
         with open(self.file, mode="r", newline="") as file:
             reader = csv.DictReader(file)
             for row in reader:
-                yield VolumeProfile.from_dict({
+                yield Sample.from_dict({
+                    'timestamp': int(row['timestamp']),
                     'high': int(row["high"]),
                     'low':  int(row["low"]),
                     'volumes': ast.literal_eval(row["volumes"]),
@@ -207,7 +231,7 @@ class SampleWriter:
             file = Path(file)
 
         with open(file, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=['low', 'high', 'volumes'])
+            writer = csv.DictWriter(f, fieldnames=['timestamp', 'low', 'high', 'volumes'])
             writer.writeheader()
             writer.writerows([sample.to_dict() for sample in samples])
 
@@ -215,7 +239,8 @@ class SampleWriter:
 class SampleBuilder:
     """ builds 1 sec samples from trades """
 
-    SAMPLE_RATE_NS = 1 * 10**9 # 1 sec
+    SAMPLE_RATE = 1 * 10**9 # 1 sec
+    """ sample rate in nano seconds """
 
     @classmethod
     def from_trades(cls, trades: Iterable, start_offset: int = 0, duration: int = sys.maxsize):
@@ -244,7 +269,7 @@ class SampleBuilder:
     def __iter__(self):
         """ iterates of the trades and yields samples """
         for trade in self.trades:
-            timestamp = trade.timestamp // SampleBuilder.SAMPLE_RATE_NS # timestamp is now in seconds
+            timestamp = trade.timestamp // SampleBuilder.SAMPLE_RATE # timestamp is now in sample units
             if self.timestamp is None:
                 # this is the very first sample
                 self.timestamp_offset = timestamp
@@ -259,7 +284,7 @@ class SampleBuilder:
 
             if self.sample is None:
                 # this is the first sample sample of the bar
-                self.sample = VolumeProfile()
+                self.sample = Sample(trade.timestamp, VolumeProfile())
                 self.timestamp = timestamp
 
             if timestamp > self.timestamp:
@@ -276,11 +301,12 @@ class SampleBuilder:
                 # Für die Simulation ist das jetzt egal, aber im Live-System muss das so gemacht werden.
                 # Deshalb muss das hier nochmal umgebaut werden.
                 self.timestamp = timestamp
-                self.sample = VolumeProfile()
+                self.sample = Sample(trade.timestamp, VolumeProfile())
 
-            self.sample[trade.price] += trade.volume
+            self.sample.volumes[trade.price] += trade.volume
+            self.sample.timestamp = max(self.sample.timestamp, trade.timestamp)
 
-        if self.sample.volume > 0:
+        if self.sample.volumes.volume > 0:
             # there is a sample left...
             yield self.sample
 
@@ -295,9 +321,14 @@ class Bar():
 
     def __init__(self):
         super().__init__()
+        self._timestamp: int = 0
         self._samples: Iterable[VolumeProfile] = deque()
         self._volumes: Iterable[int] = VolumeProfile()
 
+    @property
+    def timestamp(self) -> int:
+        return self._timestamp
+    
     @property
     def open(self) -> int:
         return self._samples[0].average if len(self._samples) > 0 else None
@@ -342,6 +373,7 @@ class Bar():
     
     def to_dict(self) -> dict:
         return {
+            'timestamp': self.timestamp,
             'open': self.open,
             'low': self.low,
             'average': self.average,
@@ -352,7 +384,10 @@ class Bar():
             'volumes': [self._volumes[p] for p in range (self.low, self.high + 1)]
         }
 
-    def append(self, sample: VolumeProfile):
+    def append(self, sample: Sample | VolumeProfile):
+        if isinstance(sample, Sample):
+            self._timestamp = sample.timestamp
+            sample = sample.volumes
         self._samples.append(sample)
         self._volumes += sample
 
@@ -362,13 +397,13 @@ class Bar():
         return sample
 
     @classmethod
-    def from_sample(cls, sample: VolumeProfile):
+    def from_sample(cls, sample: VolumeProfile | Sample):
         bar = Bar()
         bar.append(sample)
         return bar
     
     @classmethod
-    def from_samples(cls, samples: Iterable[VolumeProfile]):
+    def from_samples(cls, samples: Iterable[VolumeProfile | Sample]):
         bar = Bar()
         for sample in samples:
             bar.append(sample)
@@ -447,7 +482,10 @@ class Chart():
     def volumes(self) -> VolumeProfile:
         return self._volumes
 
-    def append(self, sample):
+    def append(self, sample: Sample | VolumeProfile):
+        if isinstance(sample, Sample):
+            sample = sample.volumes
+
         bar = self._bars[-1]
         if len(bar) >= self._bar_size:
             #last bar is full, add a new one

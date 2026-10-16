@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 import sys
 import pytest
 
-from model import Trade, VolumeProfile, SampleBuilder, SampleReader, SampleWriter, Bar, Chart, MarketModel
+from model import Trade, VolumeProfile, Sample, SampleBuilder, SampleReader, SampleWriter, Bar, Chart, MarketModel
 import marketdata
 
 @pytest.fixture
@@ -256,7 +256,7 @@ def test_VolumeProfile_type_errors():
 
 def test_sample_builder_streaming(trade_list_40):
     builder = SampleBuilder.from_trades(trade_list_40)
-    samples = [sample for sample in builder]
+    samples = [sample.volumes for sample in builder]
     assert len(samples) == 8
     assert samples[0].low  == 122243
     assert samples[0].high == 122247
@@ -267,18 +267,18 @@ def test_sample_builder_streaming(trade_list_40):
 
 def test_sample_builder_start_duration(trade_list_40):
     builder = SampleBuilder.from_trades(trade_list_40, start_offset=2, duration=2)
-    samples = [sample for sample in builder]
+    samples = [sample.volumes for sample in builder]
     assert len(samples) == 2
     assert samples[0].high == 122257
     assert samples[1].low  == 122258    
     
 def test_sample_builder_reread(trade_list_40):
     builder = SampleBuilder.from_trades(trade_list_40)
-    samples = [ s for s in builder ]
+    samples = [s.volumes for s in builder ]
     assert len(samples) == 8
 
     #read is a second time
-    samples = [ s for s in builder ]
+    samples = [s.volumes for s in builder ]
     assert len(samples) == 8
     s0 = samples[0]
     assert samples[0].low  == 122243
@@ -290,7 +290,7 @@ def test_sample_builder_reread(trade_list_40):
 
 def test_sample_reader(csv_path):
     reader = SampleReader.from_file(csv_path)
-    samples = [sample for sample in reader]
+    samples = [sample.volumes for sample in reader]
     assert len(samples) == 9
     assert samples[1].high == 122667
     assert samples[2].low == 122659
@@ -299,17 +299,26 @@ def test_sample_reader(csv_path):
         assert samples[6][samples[6].low + i] == p
     assert samples[7].high == 122667
 
+def test_sample_reader_timestamp(csv_path):
+    reader = SampleReader.from_file(csv_path)
+    FIRST_TIMESTAMP_IN_FILE = 17100000000
+    TIME_INCREMENT = 100000000
+    timestamp = FIRST_TIMESTAMP_IN_FILE
+    for sample in reader:
+        assert timestamp == timestamp
+        timestamp += TIME_INCREMENT
+
 @pytest.fixture
 def some_samples():
     return [
-        VolumeProfile.from_dict({'low': 99,  'high': 102, 'volumes': [1, 2, 3, 1]}),
-        VolumeProfile.from_dict({'low': 100, 'high': 103, 'volumes': [   2, 3, 2, 1]}),
-        VolumeProfile.from_dict({'low': 102, 'high': 104, 'volumes': [         1, 2, 4]}),
-        VolumeProfile.from_dict({'low': 99,  'high': 104, 'volumes': [4, 3, 2, 1, 1, 2]}),
+        Sample(17100000000, VolumeProfile.from_dict({'low': 99,  'high': 102, 'volumes': [1, 2, 3, 1]})),
+        Sample(17600000000, VolumeProfile.from_dict({'low': 100, 'high': 103, 'volumes': [   2, 3, 2, 1]})),
+        Sample(18200000000, VolumeProfile.from_dict({'low': 102, 'high': 104, 'volumes': [         1, 2, 4]})),
+        Sample(18700000000, VolumeProfile.from_dict({'low': 99,  'high': 104, 'volumes': [4, 3, 2, 1, 1, 2]})),
     ]                                                       # [4, 7, 8, 5, 4, 6]  
 
-def test_sample_copy(some_samples):
-    s1 = some_samples[1]
+def test_volume_profile_copy(some_samples):
+    s1 = some_samples[1].volumes
     c  = s1.copy()
     assert c.low  == s1.low
     assert c.high == s1.high
@@ -332,6 +341,9 @@ def test_sample_writer(some_samples, csv_out_in_path):
 def test_bar(some_samples):
     s0 = some_samples[0]
     bar = Bar.from_sample(s0)
+    assert bar.timestamp == s0.timestamp
+
+    s0 = s0.volumes
     assert len(bar) == 1
     assert bar.open == s0.average
     assert bar.high == s0.high
@@ -352,8 +364,8 @@ def test_bar(some_samples):
     assert bar.volume == 15
     assert bar.volumes[99]  == 1
     assert bar.volumes[100] == 4
-    assert bar.delta == some_samples[1].average - s0.average
-
+    assert bar.delta == some_samples[1].volumes.average - s0.average
+    assert bar.timestamp == some_samples[1].timestamp
     bar.append(some_samples[2])
     bar.append(some_samples[3])
     assert len(bar) == 4
@@ -373,8 +385,8 @@ def test_bar(some_samples):
 def test_bar_iter(some_samples):
     bar = Bar.from_samples(some_samples)
     for b, s in zip(bar, some_samples):
-        assert b.low  == s.low
-        assert b.high == s.high
+        assert b.low  == s.volumes.low
+        assert b.high == s.volumes.high
 
 def test_bar_to_dict(some_samples):
     bar = Bar.from_sample(some_samples[1])
@@ -395,7 +407,7 @@ def test_chart(csv_path):
     reader = SampleReader.from_file(csv_path)
     samples = []
     for sample in reader:
-        samples.append(sample)
+        samples.append(sample.volumes)
         chart.append(sample)
 
     assert len(chart) == 2  
@@ -418,6 +430,7 @@ def test_chart(csv_path):
     r1 = chart[1].range
     assert chart.average_range(2) == round((r0 + r1) / 2)
     assert chart.filter_range(2) == 5
+    assert chart.filter_range(1) == 5
 
 def test_chart_export(csv_path):
     chart = Chart(2, 2)
