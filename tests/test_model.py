@@ -445,6 +445,40 @@ def test_chart(csv_path):
     assert chart.filter_range(2) == 5
     assert chart.filter_range(1) == 5
 
+@pytest.fixture
+def trades_10():
+    return [
+        Trade(timestamp=16000000000, price=30540, volume=1),
+        Trade(timestamp=17100000000, price=30520, volume=1),
+        Trade(timestamp=18300000000, price=30510, volume=1),
+        Trade(timestamp=19400000000, price=30530, volume=1),
+        Trade(timestamp=20500000000, price=30520, volume=1),
+        Trade(timestamp=21600000000, price=30540, volume=1),
+        Trade(timestamp=22700000000, price=30530, volume=1),
+        Trade(timestamp=23800000000, price=30550, volume=1),
+        Trade(timestamp=24900000000, price=30540, volume=1),
+        Trade(timestamp=25000000000, price=30560, volume=1),
+        Trade(timestamp=26100000000, price=30550, volume=1),
+        Trade(timestamp=27200000000, price=30530, volume=1),
+    ]
+
+def test_chart_from_samples(trades_10):
+    builder = SampleBuilder(trades_10)
+    chart = Chart.from_samples(builder, bar_size=2)
+    assert len(chart) == 6
+    assert chart[0].open == 30540
+    assert chart[0].close == 30520
+    assert chart[-1].open == 30550
+    assert chart[-1].close == 30530
+    assert chart.open == 30540
+    assert chart.close == 30530
+    assert chart.low == 30510
+    assert chart.high == 30560
+    assert chart.average_range(5) == 20
+    assert chart[2].close == 30540
+    assert chart[5].average == chart[-1].average
+    assert chart.delta(1) == -10
+    assert chart.delta(5) ==  10 
 
 def test_market_model(dbn_path):
     reader = marketdata.from_file(dbn_path, n=10)

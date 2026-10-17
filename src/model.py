@@ -478,6 +478,9 @@ class Chart():
             filter_range += 1
         return filter_range
 
+    def delta(self, n: int = 5) -> int:
+        return self[-1].average - self[-1 - n].average
+    
     @property
     def volume(self) -> int:
         return self._volumes.volume
@@ -485,6 +488,12 @@ class Chart():
     @property
     def volumes(self) -> VolumeProfile:
         return self._volumes
+
+    def from_samples(samples, bar_size, maxlen=None):
+        chart = Chart(bar_size, maxlen)
+        for sample in samples:
+            chart.append(sample)
+        return chart
 
     def append(self, sample: Sample):
         bar = self._bars[-1]
