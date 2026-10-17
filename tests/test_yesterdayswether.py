@@ -116,3 +116,12 @@ def test_on_bar_long(shortterm_too_small):
     assert bar.contracts == 0
     assert bar.stop_loss == 0
 
+def test_short_chart(long_trend):
+    builder = SampleBuilder(long_trend)
+    chart = Chart.from_samples(builder, bar_size = 4)
+
+    yw = YesterdaysWeather(look_back=len(chart))
+    bar = chart[-1]
+    yw.on_bar(bar, chart)
+    assert bar.contracts == 0
+    assert bar.stop_loss == 0

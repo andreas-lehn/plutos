@@ -480,6 +480,25 @@ def test_chart_from_samples(trades_10):
     assert chart.delta(1) == -10
     assert chart.delta(5) ==  10 
 
+def test_chart_callbacks(trades_10):
+    class Callee:
+        called = False
+        def cb(bar, chart):
+            Callee.called = True
+    
+    chart = Chart(4)
+    chart.register_callback(Callee.cb)
+    for sample in SampleBuilder(trades_10):
+        chart.append(sample)
+    assert Callee.called == True
+
+    Callee.called = False
+    chart.unregister_callback(Callee.cb)
+    for sample in SampleBuilder(trades_10):
+        chart.append(sample)
+    assert Callee.called == False
+
+
 def test_market_model(dbn_path):
     reader = marketdata.from_file(dbn_path, n=10)
     trades = [trade for trade in reader]

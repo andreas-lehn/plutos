@@ -385,6 +385,8 @@ class Bar():
             'volumes': [self._volumes[p] for p in range (self.low, self.high + 1)]
         }
 
+    OHLC_FIELDNAMES = ['timestamp', 'open', 'low', 'average', 'high', 'close', 'volume']
+
     def to_filtered_dict(self, keys: Iterable[str]) -> dict:
         return {key: getattr(self, key) for key in keys}
 
@@ -440,10 +442,21 @@ class Chart():
 
     def __init__(self, bar_size: int, maxlen: int = None):
         self._bar_size = bar_size
+        self._current_bar = Bar()
         self._maxlen = maxlen if maxlen else sys.maxsize
         self._bars = deque()
-        self._bars.append(Bar())
         self._volumes = VolumeProfile()
+        self._callbacks = []
+
+    def register_callback(self, callback):
+        self._callbacks.append(callback)
+
+    def unregister_callback(self, callback):
+        self._callbacks.remove(callback)
+
+    def _notify_listeners(self, bar):
+        for cb in self._callbacks:
+            cb(bar, self)
 
     @property
     def open(self) -> int:
@@ -496,22 +509,27 @@ class Chart():
         return chart
 
     def append(self, sample: Sample):
-        bar = self._bars[-1]
-        if len(bar) >= self._bar_size:
-            #last bar is full, add a new one
-            bar = Bar()
-            self._bars.append(bar)
+        self._current_bar.append(sample)
+        self._volumes += sample.volumes
+        if len(self._current_bar) >= self._bar_size:
+            self._bars.append(self._current_bar)
             if len(self._bars) > self._maxlen:
                 # chart is full, remove an old one
-                self.popleft()
-        bar.append(sample)
-        self._volumes += sample.volumes
+                self.popleft()            
+            self._notify_listeners(self._current_bar)
+            self._current_bar = Bar()
 
     def popleft(self) -> Bar:
         bar = self._bars.popleft()
         self._volumes -= bar.volumes
         return bar
-    
+
+    def to_file(self, file: str | Path, fieldnames = Bar.OHLC_FIELDNAMES): # pragma: no cover
+        with open(file, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows([bar.to_filtered_dict(fieldnames) for bar in self])
+
     def __getitem__(self, index: int) -> int:
         return self._bars[index]
 
@@ -554,17 +572,31 @@ class MarketModel:
         model.charts.append(Chart(bar_size=720, maxlen=120))# 24 Std
         return model
 
+    def simulate_file(self, file: str | Path, duration: int = 0): # pragma: no cover
+        """ simulates file for a duration (in seconds) """
+    
+        import marketdata
+        from tqdm import tqdm
+
+        if duration == 0:
+            duration = marketdata.SECONDS_OF_DAY
+
+        NANO_SECONDS = 10**9
+        reader = marketdata.from_file(file, duration=duration * NANO_SECONDS)
+        self.feed_with_trades(tqdm(
+            reader, 
+            desc=f"Processing file {file}",
+            bar_format="{desc}: {n} records read [{elapsed}, {rate_fmt}]")
+        )
+
+
 if __name__ == '__main__':
     import argparse
-    import marketdata
-    import os
-    import pandas as pd
-    from tqdm import tqdm
 
     parser = argparse.ArgumentParser(description="load a file into default market model and put out some statistics")
     parser.add_argument('file', help='name of Databento native file (.dbn)')
     parser.add_argument('-b', '--bar-size', type=int, default=36, help="size of bar in seconds")
-    parser.add_argument('-n', '--num', type=int, help='number of bars')
+    parser.add_argument('-n', '--num', type=int, default=0, help='number of bars')
     parser.add_argument('-o', '--ohlc-file', type=str, help="name of file for OHLCV data")
     parser.add_argument('-p', '--profile-file', type=str, help="name of file for volume profile data")
     args = parser.parse_args()
@@ -572,15 +604,7 @@ if __name__ == '__main__':
     main_chart = Chart(bar_size=args.bar_size)
     model = MarketModel()
     model.charts.append(main_chart)
-
-    NANO_SECONDS = 10**9
-    duration = args.num * args.bar_size if args.num else marketdata.SECONDS_OF_DAY
-    reader = marketdata.from_file(args.file, duration=duration * NANO_SECONDS)
-    model.feed_with_trades(tqdm(
-            reader, 
-            desc=f"Processing file {args.file}",
-            bar_format="{desc}: {n} records read [{elapsed}, {rate_fmt}]")
-        )
+    model.simulate_file(args.file, args.num * args.bar_size)
 
     if args.ohlc_file:    
         with open(args.ohlc_file, "w", newline="", encoding="utf-8") as f:
