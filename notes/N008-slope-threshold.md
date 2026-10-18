@@ -11,19 +11,19 @@ Die Untersuchung basiert auf den Daten von Yahoo Finanze in der Zeit von 2026-09
 Bei den Daten handelt es dich um OLHCV-Kerzen im 1 Minutentakt.
 Die folgende Tabelle zeigt den Einfluss des Parameter:
 
-threshold  total_profit  number_of_trades  win_rate  profit_factor
-  0.00000      15179.50              3376      0.53           4.10
-  0.00001      15179.50              3376      0.53           4.10  
-  0.0001       15185.25              3377      0.53           4.10
-  0.0005       15189.75              3375      0.53           4.10  
-  0.001        15196.75              3374      0.53           4.11
-  0.005        15131.50              3367      0.52           4.08
-  0.01         15094.75              3366      0.52           4.08
-  0.1          14892.25              3277      0.52           3.84
-  1.0          12880.00              2303      0.56           4.43
-  2.0          10159.75              1469      0.59           6.44 
-  5.0           3723.00               393      0.57          11.51
- 10.0.           954.00                64      0.42          11.92
+    threshold  total_profit  number_of_trades  win_rate  profit_factor
+      0.00000      15179.50              3376      0.53           4.10
+      0.00001      15179.50              3376      0.53           4.10  
+      0.0001       15185.25              3377      0.53           4.10
+      0.0005       15189.75              3375      0.53           4.10  
+      0.001        15196.75              3374      0.53           4.11
+      0.005        15131.50              3367      0.52           4.08
+      0.01         15094.75              3366      0.52           4.08
+      0.1          14892.25              3277      0.52           3.84
+      1.0          12880.00              2303      0.56           4.43
+      2.0          10159.75              1469      0.59           6.44 
+      5.0           3723.00               393      0.57          11.51
+     10.0            954.00                64      0.42          11.92
 
 
 Betrachtet man den Gesamtgewinn, dann ist ein slope_threshold von 0.001 offenbar der sweep spot.

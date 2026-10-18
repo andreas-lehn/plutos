@@ -1,83 +1,162 @@
 Ferdinands Tradingstrategie
 ===========================
 
-**Ferdinands** _Tradingstrategie_ ist darauf ausgelegt in jeder Marktphase, sofern dies sinnvoll ist, Handel zu ermöglichen. Wie sich das entscheidet wird noch erläutert.
+_Ferdinands Tradingstrategie_ ist darauf ausgelegt in jeder Marktphase, sofern dies sinnvoll ist, Handel zu ermöglichen.
+Wie sich das entscheidet wird noch erläutert.
 
-Die Marktumgebung wird mithilfe eines "4-Punkte" _Analyseplans_ definiert und eingeschätzt. Konkrete Einstige werden dann an den, aus der Analyse abgeleiteten, _interessanten_ **Preisbereicen** gesucht. Diese werden im späteren Verlauf auch als **Levels** bezeichnet.
+Die Marktumgebung wird mithilfe eines _4-Punkte Analyseplans_ definiert und eingeschätzt.
+Konkrete Einstige werden dann an den, aus der Analyse abgeleiteten, _interessanten_ **Preisbereichen** gesucht.
+Diese werden im späteren Verlauf auch als **Levels** bezeichnet.
 Der genaue _Zeitpunkt_ des Einstiegs wird über den Odrderflow oder sogenannte Setups festgelegt.
+
 
 Was sind Setups?
 ----------------
 
-Setups sind das am häufigsten verwedete Werkzeug im _Retailtrading_. Darunter versteht man einen konkrete Anordnung der Kerzen, also ein Kerzenmuster. Die Qualität solcher Einstiegssignale ist umstritten. Dennoch lassen sich einige dieser _Kerzenmuster_ aus konkreten Ereignissen im Orderbuch ableiten und können als zuverlässiges Signal, im **Zusammenhang** mit der restlichen Analyse, verwedet werden. Im Gegensatz dazu gibt es auch "Fantasie-Setups" wie zum Beispiel das "Inverse Cock Pattern". Auf die Seriösität und den tatsächlichen Bezug zum Markt muss ich nicht weiter eingehen.
+Setups sind das am häufigsten verwedete Werkzeug im _Retailtrading_.
+Darunter versteht man einen konkrete Anordnung der Kerzen, also ein Kerzenmuster.
+Die Qualität solcher Einstiegssignale ist umstritten.
+Dennoch lassen sich einige dieser _Kerzenmuster_ aus konkreten Ereignissen im Orderbuch ableiten
+und können als zuverlässiges Signal, im **Zusammenhang** mit der restlichen Analyse, verwedet werden.
+Im Gegensatz dazu gibt es auch _Fantasie-Setups_ wie zum Beispiel das _Inverse Cock Pattern_.
+Auf die Seriösität und den tatsächlichen Bezug zum Markt muss ich nicht weiter eingehen.
+
 
 Der 4-Punkte-Plan
 -----------------
 
-Dieser Plan soll Klarhiet über die aktuelle Situation schaffen, in welcher sich der Markt aktuell befindet. Alle Punkte werden hierbei bezüglich des **M15-Charts** des Vortages bearbeitet.
+Dieser Plan soll Klarhiet über die aktuelle Situation schaffen, in welcher sich der Markt aktuell befindet.
+Alle Punkte werden hierbei bezüglich des **M15-Charts** des Vortages bearbeitet.
 
 Der Plan beinhaltet folgende Punkte:
-* 1. **Gibt es einen bestätigten Ausbruch über das Vortageshoch/Vortagestief (VTH/VTT)?**  
-Der Markt handelt den fairen Preis. Die Antwort auf diese Frage soll Klarheit schaffen, ob der Wert des Assets während unserer Abwesenheit bereits gestiegen oder gefallen ist. Folglich ober wir kurzfristig eher Long oder Short gerichtet sind.
 
-* 2. **Gibt es einen VTH/VTT Fake?**  
-Ein Fake ist ein Liquiditätsabgriff ohne resultierende Bewegung. Bricht der Markt ein Hoch/Tief und kehrt unmittelbar danach wieder um ist das ein Zeichen, dass er passive Liquidität abhandeln musste bevor er seine eigentliche Bewegung fortsetzen kann. Dies ist häufig in mittel bis längerfristigen _Rangephasen_ üblich. Ein **Fake** des Hochs indiziert also eine Shortbewegung und umgekehrt.
+ 1. **Gibt es einen bestätigten Ausbruch über das Vortageshoch/Vortagestief (VTH/VTT)?**  
+    Der Markt handelt den fairen Preis.
+    Die Antwort auf diese Frage soll Klarheit schaffen,
+    ob der Wert des Assets während unserer Abwesenheit bereits gestiegen oder gefallen ist.
+    Folglich sollten wir kurzfristig eher Long oder Short gerichtet sind.
 
-* 3. **Gibt es eine Verschiebung der _Valuearea (VA)_ und/oder des _VPOCs_?**  
-Die _Valuearea_ ist der **Preisbereich** in welchem 70% des gehandelten Volumens umgesetzt wurde, bezogen auf das Messungsintervalls des Volumenprofils. In unserem Fall ist es das des Vortages verglichen mit dem aktuellen Tag. Der VPOC stellt den Preis da, auf dem die meisten Kontrakte gehandelt worden sind. Sollte keiner der ersten beiden Punkte zutreffen, wird dieser umso esenzieller für eine grobe Einschätzung. Das Zusammenspiel von einem der oberen Punkte mit diesem ist dafür umso stärker.
+ 2. **Gibt es einen VTH/VTT Fake?**  
+    Ein Fake ist ein Liquiditätsabgriff ohne resultierende Bewegung.
+    Bricht der Markt ein Hoch/Tief und kehrt unmittelbar danach wieder um, ist das ein Zeichen,
+    dass er passive Liquidität abhandeln musste bevor er seine eigentliche Bewegung fortsetzen kann.
+    Dies ist häufig in mittel bis längerfristigen _Rangephasen_ üblich.
+    Ein **Fake** des Hochs indiziert also eine Shortbewegung und umgekehrt.
 
-* 4. **Wie ist die aktuelle _Dynamik_?**  
-"The Trend is your Friend", aber wohin geht er? Das klärt dieser Punkt. Er definiert den aktuellen Trend anhand des **M15-Chart**. Fast wichtiger ist jedoch, er definiert auch wann er bricht, ganz stupide durch höhere Hochs und höhere Tiefs. Hierbei wird der Schlusskurs, der zeitbasierten Kerze betrachtet. Somit kann klar gesagt werden, wann ein Trend bricht oder der Markt eine neutrale Struktur aufzeigt.
+ 3. **Gibt es eine Verschiebung der _Value Area (VA)_ und/oder des _VPOCs_?**  
+    Die _Value Area_ ist der **Preisbereich** in welchem 70% des gehandelten Volumens umgesetzt wurde,
+    bezogen auf das Messungsintervalls des Volumenprofils.
+    In unserem Fall ist es das des Vortages verglichen mit dem aktuellen Tag.
+    Der VPOC stellt den Preis da, auf dem die meisten Kontrakte gehandelt worden sind.
+    Sollte keiner der ersten beiden Punkte zutreffen, wird dieser umso esenzieller für eine grobe Einschätzung.
+    Das Zusammenspiel von einem der oberen Punkte mit diesem ist dafür umso stärker.
+
+ 4. **Wie ist die aktuelle _Dynamik_?**  
+    _The Trend is your Friend_, aber wohin geht er? Das klärt dieser Punkt.
+    Er definiert den aktuellen Trend anhand des **M15-Chart**.
+    Fast wichtiger ist jedoch, er definiert auch wann er bricht, ganz stupide durch höhere Hochs und höhere Tiefs.
+    Hierbei wird der Schlusskurs, der zeitbasierten Kerze betrachtet.
+    Somit kann klar gesagt werden, wann ein Trend bricht oder der Markt eine neutrale Struktur aufzeigt.
+
 
 Zusammenspiel und Gewichtung
 ----------------------------
 
-Grundsätzlich gilt für die genannten _Analysepunkte_ eine absteigende Gewichtung. Punkt Nummer 1 ist vergleichbar mit der Wertänderung eines materiellen Gegenstands. Steigt ein Gegenstand im Wert, so ist es unwahrscheinlich, dass er den gewonnenen Wert in kurzer Zeit wieder verliert.
-Die Ausnahme liegt in Punkt 4, generell sollte sich ein **Retailtrader** nicht gegen eine, intakte, _Dynamik_ stellen. Trades nach dem Prinzip der **Trendwende** sind erst nach einem initialen Bruch der _Dynamik_ zu rechtfertigen. 
+Grundsätzlich gilt für die genannten _Analysepunkte_ eine absteigende Gewichtung.
+Punkt Nummer 1 ist vergleichbar mit der Wertänderung eines materiellen Gegenstands.
+Steigt ein Gegenstand im Wert, so ist es unwahrscheinlich, dass er den gewonnenen Wert in kurzer Zeit wieder verliert.
+Die Ausnahme liegt in Punkt 4, generell sollte sich ein **Retailtrader** nicht gegen eine, intakte, _Dynamik_ stellen.
+Trades nach dem Prinzip der **Trendwende** sind erst nach einem initialen Bruch der _Dynamik_ zu rechtfertigen. 
 
-Indizieren die _Analysepukte_ eine eindeutige Richtung, so können ohne Bedenken Trades gesucht werden. Falls es leichte Abweichungen bzw. Widersprüche gibt, kann mit einer verringerten _Size_ gehandelt werden oder es wird auf vollkommene Übereinstimmung gewartet. Gibt es innerhalb der _Analyse eine enorme Divergenz, so darf nicht gehandelt werden bis wieder eine Grundlegende Übereinstimmung vorliegt. Oftmals ist hierbei der wechsel der kurzfristigen _Dynamik_ die kritische Stelle.
+Indizieren die _Analysepukte_ eine eindeutige Richtung, so können ohne Bedenken Trades gesucht werden.
+Falls es leichte Abweichungen bzw. Widersprüche gibt, kann mit einer verringerten _Size_ gehandelt werden
+oder es wird auf vollkommene Übereinstimmung gewartet.
+Gibt es innerhalb der Analyse eine enorme Divergenz, so darf nicht gehandelt werden,
+bis wieder eine Grundlegende Übereinstimmung vorliegt.
+Oftmals ist hierbei der wechsel der kurzfristigen _Dynamik_ die kritische Stelle.
+
 
 Preis-Levels
 ------------
 
-Die interessanten _Preisbereiche_ werden über das **Volumenprofil (VP)** und das **Marketprofile (MP)**, des Vortages, definiert. Das **VP** zeichnet das gehandelte Volumen pro Preis. Im **MP** sind die einzelnen _Auktionen_ zu sehen. An der Börse wird in _Auktionen_ gehandelt, welche jeweils eine halbe Stunde andauern. Hierbei ist jeder _Auktion_ ein Buchstabe zugeordnet, diese sind vertikal angeordnet und zeigen, wo sich der Preis innerhalb dieser _Auktion_ überall aufgehalten hat. Es ist also möglich das **MP** mit einem M30-Chart zu visualisieren. 
+Die interessanten _Preisbereiche_ werden über das **Volumenprofil (VP)** und das **Marketprofile (MP)**, des Vortages, definiert.
+Das **VP** zeichnet das gehandelte Volumen pro Preis. Im **MP** sind die einzelnen _Auktionen_ zu sehen.
+An der Börse wird in _Auktionen_ gehandelt, welche jeweils eine halbe Stunde andauern.
+Hierbei ist jeder _Auktion_ ein Buchstabe zugeordnet, diese sind vertikal angeordnet und zeigen,
+wo sich der Preis innerhalb dieser _Auktion_ überall aufgehalten hat.
+Es ist also möglich das **MP** mit einem M30-Chart zu visualisieren. 
 
-Im **VP** sind _"Berge"_ und _"Kanten"_ ausschlaggebend. Wird der Preis von den Marktteilnehmern als fair betrachtet, werden viele Kontrakte umgesetzt und es entstehen **Volumenberge**. Diese zeigen also eine _Akkumulation_ auf. Das Ende des fairen Preisbereiches ist häufig durch eine starke **Volumenkante** zu erkennen. Ober-/Unterhalb der Akkumulation möchte nicht gehandelt werden, dort ist meist ein extremer Abfall des Volumens, von einem zum nächsten Preis, zu erkennen.  
+Im **VP** sind _"Berge"_ und _"Kanten"_ ausschlaggebend.
+Wird der Preis von den Marktteilnehmern als fair betrachtet, werden viele Kontrakte umgesetzt und es entstehen **Volumenberge**. Diese zeigen also eine _Akkumulation_ auf.
+Das Ende des fairen Preisbereiches ist häufig durch eine starke **Volumenkante** zu erkennen.
+Ober-/Unterhalb der Akkumulation möchte nicht gehandelt werden, dort ist meist ein extremer Abfall des Volumens,
+von einem zum nächsten Preis, zu erkennen.  
 
-**Volumenkanten** stellen also ein _Support-/Ressistancelevel_ dar. Das ist logisch, denn hier besteht deutlich weniger bis gar kein Handelsinteresse. Diese Bereiche eignen sich gut um das _Spielfeld_ "abzustecken", also die Preisbewegung in Etappen zu unterteilen und den Weg des geringsten Widerstandes zu finden. Überschreitet der Preis eine **Volumenkante** und es findet Handel ober-/unterhalb statt, so bewegt er sich in der Regel schnell zum nächsten _fairen_ Preisbereich. Sprich dem nächsten **Volumenberg**.
+**Volumenkanten** stellen also ein _Support-/Ressistancelevel_ dar.
+Das ist logisch, denn hier besteht deutlich weniger bis gar kein Handelsinteresse.
+Diese Bereiche eignen sich gut um das Spielfeld _abzustecken_, also die Preisbewegung in Etappen zu unterteilen
+und den Weg des geringsten Widerstandes zu finden.
+Überschreitet der Preis eine **Volumenkante** und es findet Handel ober-/unterhalb statt,
+so bewegt er sich in der Regel schnell zum nächsten _fairen_ Preisbereich. Sprich: Dem nächsten **Volumenberg**.
+
 
 Konkreter Einstiegszeitpunkt
 ----------------------------
 
-Den exakten Einstiegszeitpunkt ermitteln _Retailtrader_ über sogenannte **Setups**. Diese haben im wesentlichen zwei Varianten. Eine Divergenz der Preisbewegung und des aktuellen Orderflwos und eine Kerzenstruktur, welche aus dem Orderbuchverhalten abgeleitet wurde. 
+Den exakten Einstiegszeitpunkt ermitteln _Retailtrader_ über sogenannte **Setups**.
+Diese haben im wesentlichen zwei Varianten:
+ 
+ * Eine Divergenz der Preisbewegung und des aktuellen Orderflwos und
+ * eine Kerzenstruktur, welche aus dem Orderbuchverhalten abgeleitet wurde. 
 
-Ein bestimmtes Kerzenmuster erkennen kann jeder. Allerdings ist es in den Mainstreamcharts oft sehr undurchsichtig, aufgrund der zeitlichen Variablen. Muster sehen nie so "schön" aus wie in der Theorie und können dadurch gut Einstiege verwehren oder falsche Einstiegssignale erzeugen. Dennoch kann mit Kerzenmustern Profitabilität erreicht werden, wer jedoch den Orderflow lesen kann ist nicht nur präziser in den Einsteiegen, sondern vor allem schneller, als jemand der auf den Schlusskurs einer M5-Kerze wartet. 
+Ein bestimmtes Kerzenmuster erkennen kann jeder.
+Allerdings ist es in den Mainstreamcharts oft sehr undurchsichtig, aufgrund der zeitlichen Variablen.
+Muster sehen nie so _schön_ aus wie in der Theorie und können dadurch gut Einstiege verwehren oder falsche Einstiegssignale erzeugen.
+Dennoch kann mit Kerzenmustern Profitabilität erreicht werden. 
+Wer jedoch den Orderflow lesen kann ist nicht nur präziser in den Einsteiegen,
+sondern vor allem schneller, als jemand der auf den Schlusskurs einer M5-Kerze wartet. 
 
-Welche Setups ich verwende variiert stark. Zumal es für die gleiche Bewegungsinterpretation, mehrere Einstiegssetups gibt. Die zentralen werde ich in einer seperaten Note erläutern.
+Welche Setups ich verwende variiert stark.
+Zumal es für die gleiche Bewegungsinterpretation mehrere Einstiegssetups gibt.
+Die zentralen werde ich in einer seperaten Note erläutern.
+
 
 Zusätzliche Indikatoren
 -----------------------
 
-Die Strategie benutzt noch drei weitere Indikatoren. Die Indikatoren sind kein notwendiger Bestandteil können aber, bei der Einschätzung der generellen Sitution, durchaus sehr nützlich sein. Wichtig: Die Indikatoren können selbst kein Einstigssignal erzeugen, sie dienen lediglich als eine Art Stimmungsmesser!
+Die Strategie benutzt noch drei weitere Indikatoren.
+Die Indikatoren sind kein notwendiger Bestandteil,
+können aber bei der Einschätzung der generellen Sitution, durchaus sehr nützlich sein.
+Wichtig: Die Indikatoren können selbst kein Einstigssignal erzeugen, sie dienen lediglich als eine Art Stimmungsmesser!
 
 Die Rede ist von:
 
-* Kommulativen Volumen Delta (CVD)  
-Dieser gibt das **Market Buy - Market Sell** Delta bezogen auf das gesamte gehandelte Volumen einer Session an.
+ * Kommulativen Volumen Delta (CVD):
+   Dieser gibt das **Market Buy - Market Sell** Delta bezogen auf das gesamte gehandelte Volumen einer Session an.
 
-* Demand Index  
-Dieser zeigt die Nachfrage in einer Kerzenbezogenen Linie, sprich im Kerzenintervall (je nach Chart einstellung unterschiedlich), als auch in einem gleitenden Durchschnitt an. Ist der Index positiv so gibt es mehr Demand als Supply und umgekehrt. Besonders interessant wird es, wenn der ungefilterte/aktuelle Wert, den gleitenden Durchschnitt nach oben oder unten durchbricht. Sprich ob wir im Moment über-/unterdurchschnittlich viel Nachfrage haben.
+ * Demand Index:  
+   Dieser zeigt die Nachfrage in einer Kerzenbezogenen Linie,
+   sprich im Kerzenintervall (je nach Chart einstellung unterschiedlich), als auch in einem gleitenden Durchschnitt an.
+   Ist der Index positiv so gibt es mehr Demand als Supply und umgekehrt.
+   Besonders interessant wird es, wenn der ungefilterte/aktuelle Wert, den gleitenden Durchschnitt nach oben oder unten durchbricht.
+   Sprich: Ob wir im Moment über-/unterdurchschnittlich viel Nachfrage haben.
 
-* Volume Weighted Avarage Price (VWAMP)  
-Der VWAP ist ähnlich zum Demand Index. Im Gegensatz zu den zwei oben genannten Indikatoren, bidet er einen tatsächlichen Support bzw. Ressistance Preis. Akzeptieren wir die Preise unterhalb des VWAPs sind wir tendeziell eher Short umgekehrt für Long. Das Prinzip passt sehr gut zum Analyseplan verglichen mit Punkt 1!
+ * Volume Weighted Avarage Price (VWAMP)  
+   Der VWAP ist ähnlich zum Demand Index.
+   Im Gegensatz zu den zwei oben genannten Indikatoren, bidet er einen tatsächlichen Support bzw. Ressistance Preis.
+   Akzeptieren wir die Preise unterhalb des VWAPs sind wir tendeziell eher Short, umgekehrt für Long.
+   Das Prinzip passt sehr gut zum Analyseplan verglichen mit Punkt 1!
+
 
 Zusammenfassung
 ---------------
 
-Die Strategie beantwortet alle wichtigen Fragen für einen _Retailer_.  
-Wohin möchte ich handeln? (Analyseplan)  
-Wo möchte ich einsteigen? (Levels mit **VP/MP**)  
-Wann möchte ich einsteigen? (Kerzen/Orderflow)  
+Die Strategie beantwortet alle wichtigen Fragen für einen _Retailer_:
 
-Aber nicht nur "Wo möchte ich einsteigen?" sondern auch "Wo möchte ich aussteigen?" wird durch das **VP/MP** festgelegt.  
-Diese ermöglichen nämlich auch die Einschätzung, wo es wahrscheinlich wird, dass der Preis einen größeren Pullback macht oder sich sogar die _Dynamik_ nachhaltig ändert.
+ * Wohin möchte ich handeln? (Analyseplan)  
+ * Wo möchte ich einsteigen? (Levels mit **VP/MP**)  
+ * Wann möchte ich einsteigen? (Kerzen/Orderflow)  
+
+Aber nicht nur _Wo möchte ich einsteigen?_ sondern auch _Wo möchte ich aussteigen?_ wird durch das **VP/MP** festgelegt.  
+Diese ermöglichen nämlich auch die Einschätzung, wo es wahrscheinlich wird,
+dass der Preis einen größeren Pullback macht oder sich sogar die _Dynamik_ nachhaltig ändert.
