@@ -512,7 +512,7 @@ class Chart():
 
          * `ema_9`      exponential moving average with periodicity 9 (short term moving average)
          * `ema_50`     exponential moving average with periodicity 50 (long term moving average)
-         * `direction`  direction, in which the bar is moving expressed as a positiv/negative number showing the velocity [ticks/s]
+         * `direction`  direction, in which the bar is moving expressed as a positiv/negative number showing the strength in ticks
          
         """
         self._current_bar.append(sample)
@@ -530,7 +530,9 @@ class Chart():
         self._volumes -= bar.volumes
         return bar
 
+    @property
     def trend_length(self) -> int:
+        """ length of the trend """
         length = 0
         direction = None
         for bar in reversed(self._bars):
@@ -543,7 +545,9 @@ class Chart():
             average = bar.average
         return length
 
+    @property
     def trend_direction(self) -> int:
+        """ direction of the trend (in ticks)"""
         direction = 0
         if len(self._bars) > 0:
             direction = self._bars[-1].direction
@@ -556,11 +560,11 @@ class Chart():
         """ calculates the exponetial moving average of bar """
         return value * factor + ema * (1 - factor)
 
-    def _direction(bar: Bar, last_bar: Bar, bar_size: int):
+    def _direction(bar: Bar, last_bar: Bar):
         """ calculates the direction of bar """
-        dir = bar.delta // bar_size
+        dir = bar.delta
         if last_bar:
-            dir_last = (bar.average - last_bar.average) // bar_size
+            dir_last = bar.average - last_bar.average
             if dir * dir_last > 0:
                 dir = dir_last
             else:
@@ -573,12 +577,12 @@ class Chart():
         if len(self._bars) == 0:
             bar.ema_9  = self._current_bar.average
             bar.ema_50 = self._current_bar.average
-            bar.direction = bar.delta // self._bar_size
+            bar.direction = bar.delta
         else:
             last_bar = self[-1]
             bar.ema_9  = Chart._exp_moving_avg(bar.average, last_bar.ema_9, Chart.EMA_9_FACTOR)
             bar.ema_50 = Chart._exp_moving_avg(bar.average, last_bar.ema_50, Chart.EMA_50_FACTOR)
-            bar.direction = Chart._direction(bar, last_bar, self._bar_size)
+            bar.direction = Chart._direction(bar, last_bar)
         self._bars.append(bar)
 
     def to_file(self, file: str | Path, fieldnames = Bar.OHLC_FIELDNAMES): # pragma: no cover

@@ -442,28 +442,28 @@ def test_chart(trades_12):
 
     chart.append(samples[0])
     assert len(chart) == 0
-    assert chart.trend_length() == 0
-    assert chart.trend_direction() == 0
+    assert chart.trend_length == 0
+    assert chart.trend_direction == 0
     assert chart.average_range(5) == 0
 
     chart.append(samples[1])
     assert len(chart) == 1
     assert chart.volumes[30520] == 1
     assert chart.volumes[30540] == 1
-    assert chart.trend_length() == 0
-    assert chart.trend_direction() < 0
+    assert chart.trend_length == 0
+    assert chart.trend_direction < 0
     assert chart.average_range(5) == 20
 
     bar_0 = chart[0]
     assert bar_0.ema_9 == bar_0.average
     assert bar_0.ema_50 == bar_0.average
-    assert bar_0.direction == bar_0.delta / 2
+    assert bar_0.direction == bar_0.delta
 
     chart.append(samples[2])
     chart.append(samples[3])
     assert len(chart) == 2  
-    assert chart.trend_length() == 0
-    assert chart.trend_direction() == 0
+    assert chart.trend_length == 0
+    assert chart.trend_direction == 0
     assert chart.average_range(5) == 20
 
     bar_1 = chart[1]
@@ -476,8 +476,8 @@ def test_chart(trades_12):
     assert len(chart) == 3  
     assert chart.volumes[30520] == 2
     assert chart.volumes[30540] == 2
-    assert chart.trend_length() == 1
-    assert chart.trend_direction() == 5
+    assert chart.trend_length == 1
+    assert chart.trend_direction == 10
 
     chart.append(samples[6])
     chart.append(samples[7])
@@ -485,14 +485,117 @@ def test_chart(trades_12):
     chart.append(samples[9])
     assert len(chart) == 5
     assert chart.volumes[30540] == 3
-    assert chart.trend_length() == 3
-    assert chart.trend_direction() == 5
+    assert chart.trend_length == 3
+    assert chart.trend_direction == 10
 
     chart.append(samples[10])
     chart.append(samples[11])
     assert len(chart) == 5
-    assert chart.trend_length() == 0
-    assert chart.trend_direction() == 0
+    assert chart.trend_length == 0
+    assert chart.trend_direction == 0
+
+def test_direction():
+    trades =  [
+        Trade(timestamp=14000000000, price=30500, volume=1),
+        Trade(timestamp=15600000000, price=30501, volume=1), # 20
+        Trade(timestamp=16000000000, price=30501, volume=1),
+        Trade(timestamp=17500000000, price=30501, volume=1), # 30
+        Trade(timestamp=18000000000, price=30501, volume=1),
+        Trade(timestamp=19000000000, price=30503, volume=1), # 60
+        Trade(timestamp=20000000000, price=30502, volume=1),
+        Trade(timestamp=21000000000, price=30504, volume=1), # 64
+        Trade(timestamp=22000000000, price=30505, volume=1),
+        Trade(timestamp=23500000000, price=30503, volume=1), # 80
+        Trade(timestamp=24000000000, price=30504, volume=1),
+        Trade(timestamp=25500000000, price=30506, volume=1), # 100
+        Trade(timestamp=26000000000, price=30500, volume=1), # Ein Trade um as letzte sample abzuschicken..
+    ]
+    builder = SampleBuilder(trades)
+    samples = [s for s in builder]
+    
+    chart = Chart(bar_size=2)
+    chart.append(samples[0])
+    chart.append(samples[1])
+    b_0 = chart[0]
+    assert b_0.direction == 1
+    assert chart.trend_direction == 1
+    assert chart.trend_length == 0
+
+    chart.append(samples[2])
+    chart.append(samples[3])
+    assert chart.trend_direction == 0
+    assert chart.trend_length == 0
+
+    chart.append(samples[4])
+    chart.append(samples[5])
+    assert chart.trend_direction == 1
+    assert chart.trend_length == 2
+
+    chart.append(samples[6])
+    chart.append(samples[7])
+    assert chart.trend_direction == 1
+    assert chart.trend_length == 3
+
+    chart.append(samples[8])
+    chart.append(samples[9])
+    assert chart.trend_direction == 0
+    assert chart.trend_length == 0
+
+    chart.append(samples[10])
+    chart.append(samples[11])
+    assert chart.trend_direction == 1
+    assert chart.trend_length == 5
+
+def test_direction_mirrowed():
+    trades =  [
+        Trade(timestamp=14000000000, price=30600, volume=1),
+        Trade(timestamp=15600000000, price=30599, volume=1), # 20
+        Trade(timestamp=16000000000, price=30599, volume=1),
+        Trade(timestamp=17500000000, price=30599, volume=1), # 30
+        Trade(timestamp=18000000000, price=30599, volume=1),
+        Trade(timestamp=19000000000, price=30597, volume=1), # 60
+        Trade(timestamp=20000000000, price=30598, volume=1),
+        Trade(timestamp=21000000000, price=30596, volume=1), # 64
+        Trade(timestamp=22000000000, price=30595, volume=1),
+        Trade(timestamp=23500000000, price=30597, volume=1), # 80
+        Trade(timestamp=24000000000, price=30596, volume=1),
+        Trade(timestamp=25500000000, price=30594, volume=1), # 100
+        Trade(timestamp=26000000000, price=30600, volume=1), # Ein Trade um as letzte sample abzuschicken..
+    ]
+    builder = SampleBuilder(trades)
+    samples = [s for s in builder]
+    
+    chart = Chart(bar_size=2)
+    chart.append(samples[0])
+    chart.append(samples[1])
+    assert chart.trend_direction == -1
+    assert chart.trend_length == 0
+
+    chart.append(samples[2])
+    chart.append(samples[3])
+    assert chart.trend_direction == 0
+    assert chart.trend_length == 0
+
+    chart.append(samples[4])
+    chart.append(samples[5])
+    assert chart.trend_direction == -1
+    assert chart.trend_length == 2
+
+    chart.append(samples[6])
+    chart.append(samples[7])
+    assert chart.trend_direction == -1
+    assert chart.trend_length == 3
+
+    chart.append(samples[8])
+    chart.append(samples[9])
+    assert chart.trend_direction == 0
+    assert chart.trend_length == 0
+
+    chart.append(samples[10])
+    chart.append(samples[11])
+    assert chart.trend_direction == -1
+    assert chart.trend_length == 5
+    
 
 def test_average_range():
     trades =  [

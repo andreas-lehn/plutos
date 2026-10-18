@@ -55,7 +55,7 @@ def test_on_bar(trades):
 
     bar_5 = chart[5] 
     assert bar_5.stop_loss >  0
-    assert bar_5.contracts * bar_5.stop_loss > -yw.MAX_LOSS
+    assert bar_5.contracts * bar_5.stop_loss >= -yw.MAX_LOSS
     assert (bar_5.contracts - 1) * bar_5.stop_loss < -yw.MAX_LOSS
 
     d = bar_5.to_filtered_dict(yw.FIELDNAMES)
@@ -91,7 +91,7 @@ def test_on_bar_inverted(trades):
 
     bar_6 = chart[6]
     assert bar_6.stop_loss <  0
-    assert bar_6.contracts * -bar_6.stop_loss < yw.MAX_LOSS
+    assert bar_6.contracts * -bar_6.stop_loss <= yw.MAX_LOSS
     assert (bar_6.contracts + 1) * -bar_6.stop_loss > yw.MAX_LOSS
 
     d = bar_6.to_filtered_dict(yw.FIELDNAMES)

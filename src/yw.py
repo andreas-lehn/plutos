@@ -8,11 +8,9 @@ class YesterdaysWeather:
 
     FIELDNAMES = ['contracts', 'stop_loss', 'ema_9', 'ema_50']
 
-    def __init__(self, look_back: int = 9, max_loss: int = 50, stop_loss_factor: float = 1.2):
-        self.LOOK_BACK = look_back
+    def __init__(self, look_back: int = 9, max_loss: int = 50, stop_loss_factor: float = 1.0):
         self.MAX_LOSS = max_loss
         self.STOP_LOSS_FACTOR = stop_loss_factor
-        self.THRESHOLD = 1
 
     def contract_size(self, direction: int, bar: Bar) -> (int, int):
         """ calculates contract size and stop loss of a contract """
@@ -30,7 +28,7 @@ class YesterdaysWeather:
     def on_bar(self, bar: Bar, chart: Chart):
         contracts, stop_loss = 0, 0
 
-        trend = chart.trend_length()
+        trend = chart.trend_length
         if bar.direction > 0:
             # we may go long...
             if trend > 1 and bar.low < bar.ema_9:
