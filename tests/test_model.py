@@ -508,6 +508,7 @@ def test_average_range():
         Trade(timestamp=25000000000, price=30516, volume=1), # 80
         Trade(timestamp=26100000000, price=30540, volume=1),
         Trade(timestamp=27200000000, price=30500, volume=1), # 100
+        Trade(timestamp=28200000000, price=30500, volume=1), # Ein Trade um as letzte sample abzuschicken..
     ]
     builder = SampleBuilder(trades)
     samples = [s for s in builder]
@@ -547,7 +548,7 @@ def test_chart_from_sample(trades_12):
     for bar in chart:
         volume += bar.volume
     assert volume == 12
-    
+
 def test_chart_callbacks(trades_12):
     class Callee:
         called = False
