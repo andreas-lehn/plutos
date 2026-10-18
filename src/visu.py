@@ -63,11 +63,11 @@ if 'ema_50' in df_sticks.columns:
     df_sticks['ema_50'] = df_sticks['ema_50'] / 4
     additional_plots.append(mpf.make_addplot(df_sticks["ema_50"], width=0.6, color='grey', panel=0))
 
-if 'stop_loss' in df_sticks.columns:
-    df_sticks['stop_loss'] = df_sticks['stop_loss'] / 4
-    df_sticks['stop_loss_absolute'] = np.where(df_sticks['stop_loss'] != 0, df_sticks['average'] + df_sticks['stop_loss'], np.nan)
-    if df_sticks['stop_loss_absolute'].notna().any():
-        additional_plots.append(mpf.make_addplot(df_sticks['stop_loss_absolute'], type='scatter', marker='x', markersize=markersize, panel=0))
+#if 'stop_loss' in df_sticks.columns:
+ #   df_sticks['stop_loss'] = df_sticks['stop_loss'] / 4
+  #  df_sticks['stop_loss_absolute'] = np.where(df_sticks['stop_loss'] != 0, df_sticks['average'] + df_sticks['stop_loss'], np.nan)
+   # if df_sticks['stop_loss_absolute'].notna().any():
+    #    additional_plots.append(mpf.make_addplot(df_sticks['stop_loss_absolute'], type='scatter', marker='x', markersize=markersize, panel=0))
 
 # 3. Candlestick-Basisplot erstellen und Achsen abfangen
 fig, axlist = mpf.plot(
