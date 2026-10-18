@@ -22,8 +22,6 @@ df_sticks['low'] = df_sticks['low'] / 4
 df_sticks['average'] = df_sticks['average'] / 4
 df_sticks['high'] = df_sticks['high'] / 4
 df_sticks['close'] = df_sticks['close'] / 4
-df_sticks['avg_ema'] = df_sticks['avg_ema'] / 4
-df_sticks['stop_loss'] = df_sticks['stop_loss'] / 4
 df_sticks['Date'] = pd.to_datetime(df_sticks['timestamp']//10**9, unit='s')
 df_sticks.set_index('Date', inplace=True)
 df_sticks.sort_index(inplace=True)
@@ -44,19 +42,29 @@ if 'average' in df_sticks.columns:
     additional_plots.append(mpf.make_addplot(df_sticks['average'], type='scatter', color='grey', marker='o', markersize=markersize, panel=0))
 
 if 'contracts' in df_sticks.columns:
-    additional_plots.append(mpf.make_addplot(df_sticks['contracts'], type='bar', width=0.5, panel=1))
-    df_sticks["long"]  = np.where(df_sticks["contracts"] > 0, df_sticks["High"] + 1, np.nan)
+    additional_plots.append(mpf.make_addplot(df_sticks['contracts'], type='bar', width=0.5, panel=2))
+    df_sticks["long"]  = np.where(df_sticks["contracts"] > 0, df_sticks["Low"] - 2, np.nan)
     if df_sticks["long"].notna().any():
         additional_plots.append(mpf.make_addplot(df_sticks["long"].values, type="scatter", marker="^", color="white", edgecolors="black", linewidths=0.5, markersize=4*markersize, panel=0))
 
-    df_sticks["short"] = np.where(df_sticks["contracts"] < 0, df_sticks["Low"]  - 1, np.nan)
+    df_sticks["short"] = np.where(df_sticks["contracts"] < 0, df_sticks["High"] + 2, np.nan)
     if df_sticks["short"].notna().any():
         additional_plots.append(mpf.make_addplot(df_sticks["short"], type="scatter", marker="v", color="black", edgecolors="black", linewidths=0.5, markersize=4*markersize, panel=0))
 
-if 'avg_ema' in df_sticks.columns:
-    additional_plots.append(mpf.make_addplot(df_sticks["avg_ema"], color='#1f77b4', panel=0))
+if 'moving_average' in df_sticks.columns:
+    df_sticks['moving_average'] = df_sticks['moving_average'] / 4
+    additional_plots.append(mpf.make_addplot(df_sticks["moving_average"], color='#1f77b4', panel=0))
+
+if 'ema_9' in df_sticks.columns:
+    df_sticks['ema_9'] = df_sticks['ema_9'] / 4
+    additional_plots.append(mpf.make_addplot(df_sticks["ema_9"], width=0.6, color='#1f77b4', panel=0))
+
+if 'ema_50' in df_sticks.columns:
+    df_sticks['ema_50'] = df_sticks['ema_50'] / 4
+    additional_plots.append(mpf.make_addplot(df_sticks["ema_50"], width=0.6, color='grey', panel=0))
 
 if 'stop_loss' in df_sticks.columns:
+    df_sticks['stop_loss'] = df_sticks['stop_loss'] / 4
     df_sticks['stop_loss_absolute'] = np.where(df_sticks['stop_loss'] != 0, df_sticks['average'] + df_sticks['stop_loss'], np.nan)
     if df_sticks['stop_loss_absolute'].notna().any():
         additional_plots.append(mpf.make_addplot(df_sticks['stop_loss_absolute'], type='scatter', marker='x', markersize=markersize, panel=0))
@@ -67,7 +75,7 @@ fig, axlist = mpf.plot(
     type='candle', 
     title=args.file,
     volume=True,
-    volume_panel=2,
+    volume_panel=1,
     panel_ratios=(5,1),
     addplot=additional_plots,
     datetime_format='%H:%M:%S', # Zeigt Stunden:Minuten auf der X-Achse

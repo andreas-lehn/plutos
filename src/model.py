@@ -325,6 +325,8 @@ class Bar():
         self._timestamp: int = 0
         self._samples: Iterable[VolumeProfile] = deque()
         self._volumes: Iterable[int] = VolumeProfile()
+        self.ema_9 = None
+        self.ema_50 = None
 
     @property
     def timestamp(self) -> int:
@@ -493,7 +495,13 @@ class Chart():
 
     def delta(self, n: int = 5) -> int:
         return self[-1].average - self[-1 - n].average
-    
+
+    def moving_average(self, n: int = 5) -> int:
+        sum = 0
+        for i in range(-n - 1, -1):
+            sum += self[i].average
+        return round(sum / n)
+
     @property
     def volume(self) -> int:
         return self._volumes.volume
@@ -512,12 +520,26 @@ class Chart():
         self._current_bar.append(sample)
         self._volumes += sample.volumes
         if len(self._current_bar) >= self._bar_size:
-            self._bars.append(self._current_bar)
+            self._commit_current_bar()
             if len(self._bars) > self._maxlen:
                 # chart is full, remove an old one
                 self.popleft()            
             self._notify_listeners(self._current_bar)
             self._current_bar = Bar()
+
+    EMA_9_FACTOR  = 2 / (9 + 1)
+    EMA_50_FACTOR = 2 / (50 +1)
+
+    def _commit_current_bar(self):
+        bar = self._current_bar
+        if len(self._bars) == 0:
+            bar.ema_9 = self._current_bar.average
+            bar.ema_50 = self._current_bar.average
+        else:
+            last_bar = self[-1]
+            bar.ema_9   = bar.average * Chart.EMA_9_FACTOR     + last_bar.ema_9  * (1 - Chart.EMA_9_FACTOR)
+            bar.ema_50  = bar.average * Chart.EMA_50_FACTOR    + last_bar.ema_50 * (1 - Chart.EMA_50_FACTOR)
+        self._bars.append(bar)
 
     def popleft(self) -> Bar:
         bar = self._bars.popleft()
@@ -529,6 +551,7 @@ class Chart():
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows([bar.to_filtered_dict(fieldnames) for bar in self])
+
 
     def __getitem__(self, index: int) -> int:
         return self._bars[index]
@@ -608,7 +631,7 @@ if __name__ == '__main__':
 
     if args.ohlc_file:    
         with open(args.ohlc_file, "w", newline="", encoding="utf-8") as f:
-            fieldnames = ['timestamp', 'open', 'low', 'average', 'high', 'close', 'volume']
+            fieldnames = ['timestamp', 'open', 'low', 'average', 'high', 'close', 'volume', 'ema_9', 'ema_50']
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows([bar.to_filtered_dict(fieldnames) for bar in main_chart])
