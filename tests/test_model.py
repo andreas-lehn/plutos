@@ -415,38 +415,8 @@ def test_bar_filtered_dict(some_samples):
     d = bar.to_filtered_dict(['timestamp', 'signal'])
     assert d == {'timestamp': 17100000000, 'signal': 'sell'}
 
-def test_chart(csv_path):
-    chart = Chart(3, 2)
-    reader = SampleReader.from_file(csv_path)
-    samples = []
-    for sample in reader:
-        samples.append(sample.volumes)
-        chart.append(sample)
-
-    assert len(chart) == 2  
-    assert chart.open == samples[3].average
-    assert chart.low  == 122654
-    assert chart.average == 122662
-    assert chart.high == 122679
-    assert chart.close == samples[8].average
-    vol = 0
-    for sample in samples[3:9]:
-        vol += sample.volume
-    assert chart.volume == vol
-    assert chart.volumes[122615] == 0
-    assert chart.volumes[122654] == chart[0].volumes[122654] + chart[1].volumes[122654]
-
-    for bar in chart:
-        assert len(bar) == 3
-
-    r0 = chart[0].range
-    r1 = chart[1].range
-    assert chart.average_range(2) == round((r0 + r1) / 2)
-    assert chart.filter_range(2) == 5
-    assert chart.filter_range(1) == 5
-
 @pytest.fixture
-def trades_10():
+def trades_12():
     return [
         Trade(timestamp=16000000000, price=30540, volume=1),
         Trade(timestamp=17100000000, price=30520, volume=1),
@@ -458,29 +428,127 @@ def trades_10():
         Trade(timestamp=23800000000, price=30550, volume=1),
         Trade(timestamp=24900000000, price=30540, volume=1),
         Trade(timestamp=25000000000, price=30560, volume=1),
-        Trade(timestamp=26100000000, price=30550, volume=1),
-        Trade(timestamp=27200000000, price=30530, volume=1),
+        Trade(timestamp=26100000000, price=30530, volume=1),
+        Trade(timestamp=27200000000, price=30550, volume=1),
     ]
 
-def test_chart_from_samples(trades_10):
-    builder = SampleBuilder(trades_10)
-    chart = Chart.from_samples(builder, bar_size=2)
-    assert len(chart) == 6
-    assert chart[0].open == 30540
-    assert chart[0].close == 30520
-    assert chart[-1].open == 30550
-    assert chart[-1].close == 30530
-    assert chart.open == 30540
-    assert chart.close == 30530
-    assert chart.low == 30510
-    assert chart.high == 30560
-    assert chart.average_range(5) == 20
-    assert chart[2].close == 30540
-    assert chart[5].average == chart[-1].average
-    assert chart.delta(1) == -10
-    assert chart.delta(5) ==  10 
+def test_chart(trades_12):
+    chart = Chart(bar_size=2, maxlen=5)
 
-def test_chart_callbacks(trades_10):
+    # convert the trades to samples...
+    builder = SampleBuilder(trades_12)
+    samples = [s for s in builder]
+    assert len(samples) == 12
+
+    chart.append(samples[0])
+    assert len(chart) == 0
+    assert chart.trend_length() == 0
+    assert chart.trend_direction() == 0
+    assert chart.average_range(5) == 0
+
+    chart.append(samples[1])
+    assert len(chart) == 1
+    assert chart.volumes[30520] == 1
+    assert chart.volumes[30540] == 1
+    assert chart.trend_length() == 0
+    assert chart.trend_direction() < 0
+    assert chart.average_range(5) == 20
+
+    bar_0 = chart[0]
+    assert bar_0.ema_9 == bar_0.average
+    assert bar_0.ema_50 == bar_0.average
+    assert bar_0.direction == bar_0.delta / 2
+
+    chart.append(samples[2])
+    chart.append(samples[3])
+    assert len(chart) == 2  
+    assert chart.trend_length() == 0
+    assert chart.trend_direction() == 0
+    assert chart.average_range(5) == 20
+
+    bar_1 = chart[1]
+    assert bar_1.ema_9  == 0.2 * bar_1.average + 0.8 * bar_0.average
+    assert bar_1.ema_50 == Chart.EMA_50_FACTOR * bar_1.average + (1 - Chart.EMA_50_FACTOR) * bar_0.average
+    assert bar_1.direction == 0
+
+    chart.append(samples[4])
+    chart.append(samples[5])
+    assert len(chart) == 3  
+    assert chart.volumes[30520] == 2
+    assert chart.volumes[30540] == 2
+    assert chart.trend_length() == 1
+    assert chart.trend_direction() == 5
+
+    chart.append(samples[6])
+    chart.append(samples[7])
+    chart.append(samples[8])
+    chart.append(samples[9])
+    assert len(chart) == 5
+    assert chart.volumes[30540] == 3
+    assert chart.trend_length() == 3
+    assert chart.trend_direction() == 5
+
+    chart.append(samples[10])
+    chart.append(samples[11])
+    assert len(chart) == 5
+    assert chart.trend_length() == 0
+    assert chart.trend_direction() == 0
+
+def test_average_range():
+    trades =  [
+        Trade(timestamp=16000000000, price=30500, volume=1),
+        Trade(timestamp=17100000000, price=30520, volume=1), # 20
+        Trade(timestamp=18300000000, price=30510, volume=1),
+        Trade(timestamp=19400000000, price=30500, volume=1), # 30
+        Trade(timestamp=20500000000, price=30500, volume=1),
+        Trade(timestamp=21600000000, price=30530, volume=1), # 60
+        Trade(timestamp=22700000000, price=30504, volume=1),
+        Trade(timestamp=23800000000, price=30500, volume=1), # 64
+        Trade(timestamp=24900000000, price=30500, volume=1),
+        Trade(timestamp=25000000000, price=30516, volume=1), # 80
+        Trade(timestamp=26100000000, price=30540, volume=1),
+        Trade(timestamp=27200000000, price=30500, volume=1), # 100
+    ]
+    builder = SampleBuilder(trades)
+    samples = [s for s in builder]
+
+    chart = Chart(bar_size=2, maxlen=5)
+    chart.append(samples[0])
+    chart.append(samples[1])
+    assert chart.average_range(5) == 20
+
+    chart.append(samples[2])
+    chart.append(samples[3])
+    assert chart.average_range(5) == 15
+
+    chart.append(samples[4])
+    chart.append(samples[5])
+    assert chart.average_range(5) == 20
+
+    chart.append(samples[6])
+    chart.append(samples[7])
+    assert chart.average_range(5) == 16
+
+    chart.append(samples[8])
+    chart.append(samples[9])
+
+    assert chart.average_range(5) == 16
+
+    chart.append(samples[10])
+    chart.append(samples[11])
+    assert chart.average_range(5) == 20
+
+def test_chart_from_sample(trades_12):
+    builder = SampleBuilder(trades_12)
+    chart = Chart.from_samples(builder, bar_size=4)
+    assert len(chart) == 3
+
+    volume = 0
+    for bar in chart:
+        volume += bar.volume
+    assert volume == 12
+    
+def test_chart_callbacks(trades_12):
     class Callee:
         called = False
         def cb(bar, chart):
@@ -488,16 +556,15 @@ def test_chart_callbacks(trades_10):
     
     chart = Chart(4)
     chart.register_callback(Callee.cb)
-    for sample in SampleBuilder(trades_10):
+    for sample in SampleBuilder(trades_12):
         chart.append(sample)
     assert Callee.called == True
 
     Callee.called = False
     chart.unregister_callback(Callee.cb)
-    for sample in SampleBuilder(trades_10):
+    for sample in SampleBuilder(trades_12):
         chart.append(sample)
     assert Callee.called == False
-
 
 def test_market_model(dbn_path):
     reader = marketdata.from_file(dbn_path, n=10)

@@ -460,51 +460,35 @@ class Chart():
         for cb in self._callbacks:
             cb(bar, self)
 
-    @property
-    def open(self) -> int:
-        return self._bars[0].open
-
-    @property
-    def close(self) -> int:
-        return self._bars[-1].close
-
-    @property
-    def low(self) -> int:
-        return self._volumes.low
-
-    @property
-    def high(self) -> int:
-        return self._volumes.high
-
-    @property
-    def average(self) -> int:
-        return self._volumes.average
-
     def average_range(self, n: int = 5) -> int:
+        if n == 0:
+            return 0
+        
+        if len(self) < n:
+            return self.average_range(len(self))
+        
         sum_range = 0
-        for i in range(-1, -n-1, -1):
-            sum_range += self._bars[i].range
+        for i, bar in enumerate(reversed(self._bars)):
+            if i == n:
+                break # pragma: no cover
+            sum_range += bar.range
         return round(sum_range / n)
 
-    def filter_range(self, n: int = 5) -> int:
-        FILTER_FACTOR_AVERAGE_RANGE = 0.25
-        filter_range = math.floor(self.average_range(n) * FILTER_FACTOR_AVERAGE_RANGE)
-        if filter_range // 2 == filter_range / 2:
-            filter_range += 1
-        return filter_range
+#    def filter_range(self, n: int = 5) -> int:
+#        FILTER_FACTOR_AVERAGE_RANGE = 0.25
+#        filter_range = math.floor(self.average_range(n) * FILTER_FACTOR_AVERAGE_RANGE)
+#        if filter_range // 2 == filter_range / 2:
+#            filter_range += 1
+#        return filter_range
 
-    def delta(self, n: int = 5) -> int:
-        return self[-1].average - self[-1 - n].average
+#    def delta(self, n: int = 5) -> int:
+#        return self[-1].average - self[-1 - n].average
 
-    def moving_average(self, n: int = 5) -> int:
-        sum = 0
-        for i in range(-n - 1, -1):
-            sum += self[i].average
-        return round(sum / n)
-
-    @property
-    def volume(self) -> int:
-        return self._volumes.volume
+#    def moving_average(self, n: int = 5) -> int:
+#        sum = 0
+#        for i in range(-n - 1, -1):
+#            sum += self[i].average
+#        return round(sum / n)
 
     @property
     def volumes(self) -> VolumeProfile:
@@ -517,6 +501,20 @@ class Chart():
         return chart
 
     def append(self, sample: Sample):
+        """ appends sample to a chart
+        
+        Appending samples to a chart is the way to build up a chart.
+        Dependingn on the bar size new bars will be addded sone times.
+
+        When a bar is added to a chart, some characteristic propertys often used in trading applications
+        are calculated and attached as properties to the bar.
+        These properties are:
+
+         * `ema_9`      exponential moving average with periodicity 9 (short term moving average)
+         * `ema_50`     exponential moving average with periodicity 50 (long term moving average)
+         * `direction`  direction, in which the bar is moving expressed as a positiv/negative number showing the velocity [ticks/s]
+         
+        """
         self._current_bar.append(sample)
         self._volumes += sample.volumes
         if len(self._current_bar) >= self._bar_size:
@@ -527,31 +525,67 @@ class Chart():
             self._notify_listeners(self._current_bar)
             self._current_bar = Bar()
 
-    EMA_9_FACTOR  = 2 / (9 + 1)
-    EMA_50_FACTOR = 2 / (50 +1)
-
-    def _commit_current_bar(self):
-        bar = self._current_bar
-        if len(self._bars) == 0:
-            bar.ema_9 = self._current_bar.average
-            bar.ema_50 = self._current_bar.average
-        else:
-            last_bar = self[-1]
-            bar.ema_9   = bar.average * Chart.EMA_9_FACTOR     + last_bar.ema_9  * (1 - Chart.EMA_9_FACTOR)
-            bar.ema_50  = bar.average * Chart.EMA_50_FACTOR    + last_bar.ema_50 * (1 - Chart.EMA_50_FACTOR)
-        self._bars.append(bar)
-
     def popleft(self) -> Bar:
         bar = self._bars.popleft()
         self._volumes -= bar.volumes
         return bar
+
+    def trend_length(self) -> int:
+        length = 0
+        direction = None
+        for bar in reversed(self._bars):
+            if direction == None:
+                direction = bar.direction
+            elif (average - bar.average) * direction > 0:
+                length += 1
+            else:
+                break
+            average = bar.average
+        return length
+
+    def trend_direction(self) -> int:
+        direction = 0
+        if len(self._bars) > 0:
+            direction = self._bars[-1].direction
+        return direction
+        
+    EMA_9_FACTOR  = 2 / (9 + 1)
+    EMA_50_FACTOR = 2 / (50 +1)
+
+    def _exp_moving_avg(value: float, ema: float, factor: float):
+        """ calculates the exponetial moving average of bar """
+        return value * factor + ema * (1 - factor)
+
+    def _direction(bar: Bar, last_bar: Bar, bar_size: int):
+        """ calculates the direction of bar """
+        dir = bar.delta // bar_size
+        if last_bar:
+            dir_last = (bar.average - last_bar.average) // bar_size
+            if dir * dir_last > 0:
+                dir = dir_last
+            else:
+                dir = 0
+        return dir
+    
+    def _commit_current_bar(self):
+        bar = self._current_bar
+        last_bar = None
+        if len(self._bars) == 0:
+            bar.ema_9  = self._current_bar.average
+            bar.ema_50 = self._current_bar.average
+            bar.direction = bar.delta // self._bar_size
+        else:
+            last_bar = self[-1]
+            bar.ema_9  = Chart._exp_moving_avg(bar.average, last_bar.ema_9, Chart.EMA_9_FACTOR)
+            bar.ema_50 = Chart._exp_moving_avg(bar.average, last_bar.ema_50, Chart.EMA_50_FACTOR)
+            bar.direction = Chart._direction(bar, last_bar, self._bar_size)
+        self._bars.append(bar)
 
     def to_file(self, file: str | Path, fieldnames = Bar.OHLC_FIELDNAMES): # pragma: no cover
         with open(file, "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows([bar.to_filtered_dict(fieldnames) for bar in self])
-
 
     def __getitem__(self, index: int) -> int:
         return self._bars[index]
