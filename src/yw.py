@@ -8,7 +8,7 @@ class YesterdaysWeather:
 
     FIELDNAMES = ['contracts', 'stop_loss', 'ema_9', 'ema_50']
 
-    def __init__(self, look_back: int = 9, max_loss: int = 50, stop_loss_factor: float = 1.0):
+    def __init__(self, max_loss: int = 50, stop_loss_factor: float = 1.0):
         self.MAX_LOSS = max_loss
         self.STOP_LOSS_FACTOR = stop_loss_factor
 
@@ -47,6 +47,18 @@ class YesterdaysWeather:
         bar.contracts = contracts
         bar.stop_loss = stop_loss
 
+    def simulate(file, num_bars: int = None, bar_size: int = 36, max_loss: int = 50, stop_loss_factor: float = 1.0): # pragma: no cover
+        main_chart = Chart(bar_size=bar_size)
+        model = MarketModel()
+        model.charts.append(main_chart)
+        trader = YesterdaysWeather(
+            max_loss=max_loss,
+            stop_loss_factor=stop_loss_factor,
+        )
+        main_chart.register_callback(trader.on_bar)
+        model.simulate_file(file, num_bars * bar_size if num_bars else 24*60*60*10**9)
+        return main_chart
+
 if __name__ == '__main__':
     import argparse
     import sys
@@ -57,18 +69,8 @@ if __name__ == '__main__':
     parser.add_argument('-n', '--num-bars', type=int, default=sys.maxsize, help='number of bars to simulate')
     parser.add_argument('-o', '--out-file', type=str, required=True, help="name of output file")
     parser.add_argument('-m', '--max-loss', type=int, default=50, help="name of file for volume profile data")
-    parser.add_argument('-l', '--look-back', type=int, default=9, help="look back distance")
     parser.add_argument('-s', '--stop-loss-factor', type=float, default=1.2, help="stop loss adjustment factor")
     args = parser.parse_args()
 
-    main_chart = Chart(bar_size=args.bar_size)
-    model = MarketModel()
-    model.charts.append(main_chart)
-    trader = YesterdaysWeather(
-        look_back=args.look_back,
-        max_loss=args.max_loss,
-        stop_loss_factor=args.stop_loss_factor,
-    )
-    main_chart.register_callback(trader.on_bar)
-    model.simulate_file(args.file, args.num_bars * args.bar_size)
+    main_chart = YesterdaysWeather.simulate(args.file, args.num_bars, args.bar_size, args.max_loss, args.stop_loss_factor)
     main_chart.to_file(args.out_file, fieldnames=Bar.OHLC_FIELDNAMES + YesterdaysWeather.FIELDNAMES)
