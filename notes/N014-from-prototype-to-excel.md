@@ -2,7 +2,7 @@ From prototyping to Excel engineering
 ========================================
 
 Die bisherigen Untersuchung und Erkenntnisse sind über das Schreiben eines Prototyps von Plutos entstanden.
-Diese Prototypen versuchten das Verhalten so gut wie möglich auf Basis von aufgezeichneten historischen Daten nachzubilden.
+Diese Prototypen versuchten, das Verhalten so gut wie möglich auf Basis von aufgezeichneten historischen Daten nachzubilden.
 Dabei war die ganze Kette involviert:
 
  * Historische Daten einlesen und verarbeiten

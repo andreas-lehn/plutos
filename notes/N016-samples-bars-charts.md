@@ -6,10 +6,10 @@ Der Preis für einen einzelnen Trade ist dabei wenig aussagekräftig:
 Die Preis schwanken im Mikrosekunden-Bereich hin und her.
 
 Betrachtet man die Kursentwicklung an der CME regelungstechnisch,
-das ist das _Kurssignal_ ein sehr verrauschtes Signal.
+dann ist das _Kurssignal_ ein sehr verrauschtes Signal.
 Deshalb hat Plutos das Konzept des Samples:
 
-Ein Sample fasst alles Trades innerhalb von einer Sekunde zu einer Einheit zusammen.
+Ein Sample fasst alle Trades innerhalb von einer Sekunde zu einer Einheit zusammen.
 Eine Sekunde ist das kürzeste Zeitintervall, mit dem Plutos arbeitet.
 Das Sample stellt eine Abtastung des Signals dar.
 Die vielen Trades innerhalb des Samples sind mit vielen Messungen zu vergleichen,
@@ -29,12 +29,12 @@ Da konzeptionell das Sample keine zeitliche Ausdehnung hat,
 macht für ein Sample ein Öffnung- und Schlusskurs keinen Sinn.
 Diese Kurse wären aufgrund des verrauschten Signals willkürliche Messungen.
 Bei der Kerze sieht das anders aus:
-Die hat Samples als Basis, die eine einigermaßen zuverlässige Aussage
+Die Kerze hat Samples als Basis, die eine einigermaßen zuverlässige Aussage
 über den aktuellen Kurs machen.
 
 Deshalb hat eine Kerze einen Öffnungs- und Schlusskurs.
-Der Öffnungskurs entspricht dem Kurs des ersten Sample.
-Der Schlusskurs entspricht dem Kurs des letzten Samples.
+Der Öffnungskurs entspricht dem (gewichten Durchschnitt-)Kurs des ersten Sample.
+Der Schlusskurs entspricht dem (gewichteten Durchschnitts-)Kurs des letzten Samples.
 
 Ein Chart ist eine Zusammenfassung von Kerzen,
 also Objekten mit einer zeitlichen Ausdehnung.
@@ -52,6 +52,5 @@ Letztendlich sieht ein Chart von außen betrachtet wie eine Bar aus:
 Ein Chart hat einen Öffnung- und Schlusskurs, ebenso wie alle anderen Kurse
 und ein Kursprofil.
 
-Ein Sample ist - wenn man es genau betrachtet - nichts anderes als ein Volumenprofil.
-Sowohl Kerze als auch Chart führen intern ein eigenes Volumenprofil
-Hierfür verwenden sie das Sample.
+Ein Sample ist - wenn man es genau betrachtet - nichts anderes als ein Volumenprofil mit Zeitstempel.
+Sowohl Kerze als auch Chart führen intern ein eigenes Volumenprofil.
