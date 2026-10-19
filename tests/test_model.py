@@ -12,8 +12,8 @@ def csv_path():
     return Path(__file__).resolve().parent / "test_samples.csv"
 
 @pytest.fixture
-def csv_out_in_path():
-    return Path(__file__).resolve().parent / "test_out_in_samples.csv"
+def csv_out_in_path(tmp_path):
+    return tmp_path / "test_out_in_samples.csv"
 
 @pytest.fixture
 def dbn_path():
