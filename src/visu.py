@@ -59,9 +59,9 @@ if 'ema_9' in df_sticks.columns:
     df_sticks['ema_9'] = df_sticks['ema_9'] / 4
     additional_plots.append(mpf.make_addplot(df_sticks["ema_9"], width=0.6, color='#1f77b4', panel=0))
 
-if 'ema_50' in df_sticks.columns:
-    df_sticks['ema_50'] = df_sticks['ema_50'] / 4
-    additional_plots.append(mpf.make_addplot(df_sticks["ema_50"], width=0.6, color='grey', panel=0))
+if 'ema_48' in df_sticks.columns:
+    df_sticks['ema_48'] = df_sticks['ema_48'] / 4
+    additional_plots.append(mpf.make_addplot(df_sticks["ema_48"], width=0.6, color='grey', panel=0))
 
 #if 'stop_loss' in df_sticks.columns:
  #   df_sticks['stop_loss'] = df_sticks['stop_loss'] / 4

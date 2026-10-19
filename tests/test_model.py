@@ -456,7 +456,7 @@ def test_chart(trades_12):
 
     bar_0 = chart[0]
     assert bar_0.ema_9 == bar_0.average
-    assert bar_0.ema_50 == bar_0.average
+    assert bar_0.ema_48 == bar_0.average
     assert bar_0.direction == bar_0.delta
 
     chart.append(samples[2])
@@ -468,7 +468,7 @@ def test_chart(trades_12):
 
     bar_1 = chart[1]
     assert bar_1.ema_9  == 0.2 * bar_1.average + 0.8 * bar_0.average
-    assert bar_1.ema_50 == Chart.EMA_50_FACTOR * bar_1.average + (1 - Chart.EMA_50_FACTOR) * bar_0.average
+    assert bar_1.ema_48 == Chart.EMA_48_FACTOR * bar_1.average + (1 - Chart.EMA_48_FACTOR) * bar_0.average
     assert bar_1.direction == 0
 
     chart.append(samples[4])

@@ -6,7 +6,7 @@ from model import MarketModel, Chart, Bar
 
 class YesterdaysWeather:
 
-    FIELDNAMES = ['contracts', 'stop_loss', 'ema_9', 'ema_50']
+    FIELDNAMES = ['contracts', 'stop_loss', 'ema_9', 'ema_48']
 
     def __init__(self, max_loss: int = 50, stop_loss_factor: float = 1.0):
         self.MAX_LOSS = max_loss

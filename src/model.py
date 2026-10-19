@@ -326,7 +326,7 @@ class Bar():
         self._samples: Iterable[VolumeProfile] = deque()
         self._volumes: Iterable[int] = VolumeProfile()
         self.ema_9 = None
-        self.ema_50 = None
+        self.ema_48 = None
 
     @property
     def timestamp(self) -> int:
@@ -511,7 +511,7 @@ class Chart():
         These properties are:
 
          * `ema_9`      exponential moving average with periodicity 9 (short term moving average)
-         * `ema_50`     exponential moving average with periodicity 50 (long term moving average)
+         * `ema_48`     exponential moving average with periodicity 48 (long term moving average)
          * `direction`  direction, in which the bar is moving expressed as a positiv/negative number showing the strength in ticks
          
         """
@@ -554,7 +554,7 @@ class Chart():
         return direction
         
     EMA_9_FACTOR  = 2 / (9 + 1)
-    EMA_50_FACTOR = 2 / (50 +1)
+    EMA_48_FACTOR = 2 / (48 +1)
 
     def _exp_moving_avg(value: float, ema: float, factor: float):
         """ calculates the exponetial moving average of bar """
@@ -576,12 +576,12 @@ class Chart():
         last_bar = None
         if len(self._bars) == 0:
             bar.ema_9  = self._current_bar.average
-            bar.ema_50 = self._current_bar.average
+            bar.ema_48 = self._current_bar.average
             bar.direction = bar.delta
         else:
             last_bar = self[-1]
             bar.ema_9  = Chart._exp_moving_avg(bar.average, last_bar.ema_9, Chart.EMA_9_FACTOR)
-            bar.ema_50 = Chart._exp_moving_avg(bar.average, last_bar.ema_50, Chart.EMA_50_FACTOR)
+            bar.ema_48 = Chart._exp_moving_avg(bar.average, last_bar.ema_48, Chart.EMA_48_FACTOR)
             bar.direction = Chart._direction(bar, last_bar)
         self._bars.append(bar)
 
@@ -669,7 +669,7 @@ if __name__ == '__main__':
 
     if args.ohlc_file:    
         with open(args.ohlc_file, "w", newline="", encoding="utf-8") as f:
-            fieldnames = ['timestamp', 'open', 'low', 'average', 'high', 'close', 'volume', 'ema_9', 'ema_50']
+            fieldnames = ['timestamp', 'open', 'low', 'average', 'high', 'close', 'volume', 'ema_9', 'ema_48']
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows([bar.to_filtered_dict(fieldnames) for bar in main_chart])
