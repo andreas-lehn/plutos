@@ -594,6 +594,11 @@ class Chart():
     def __getitem__(self, index: int) -> int:
         return self._bars[index]
 
+    def look_back(self, n: int) -> int:
+        if n >= len(self._bars):
+            return self._bars[0]
+        return self._bars[-(n + 1)]
+
     def __iter__(self):
         return self._bars.__iter__()
 

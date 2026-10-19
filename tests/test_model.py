@@ -494,6 +494,13 @@ def test_chart(trades_12):
     assert chart.trend_length == 0
     assert chart.trend_direction == 0
 
+    # len(chart) == 5 => [0, 1, 2, 3, 4]
+    assert chart.look_back(0) is chart[4]
+    assert chart.look_back(1) is chart[3]
+    assert chart.look_back(3) is chart[1]
+    assert chart.look_back(4) is chart[0]
+    assert chart.look_back(5) is chart[0]
+
 def test_direction():
     trades =  [
         Trade(timestamp=14000000000, price=30500, volume=1),
