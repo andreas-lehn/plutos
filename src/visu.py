@@ -90,7 +90,9 @@ ax_overlay.get_xaxis().set_visible(False)
 # 2. ZWEITE CSV: Volumen-Profil (Volumen pro Preis) laden
 if args.profile:
     df_prof = pd.read_csv(args.profile)
+    df_prof['price'] = df_prof['price'] / 4
     max_vol_wert = df_prof['volume'].max()
+
 
     # 4. BREITE DER HORIZONTALEN BALKEN SKALIEREN
     # Wir ermitteln die zeitliche Breite des Charts, damit die Balken nicht zu lang werden

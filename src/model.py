@@ -474,12 +474,12 @@ class Chart():
             sum_range += bar.range
         return round(sum_range / n)
 
-#    def filter_range(self, n: int = 5) -> int:
-#        FILTER_FACTOR_AVERAGE_RANGE = 0.25
-#        filter_range = math.floor(self.average_range(n) * FILTER_FACTOR_AVERAGE_RANGE)
-#        if filter_range // 2 == filter_range / 2:
-#            filter_range += 1
-#        return filter_range
+    def filter_range(self, n: int = 5) -> int:
+        FILTER_FACTOR_AVERAGE_RANGE = 0.25
+        filter_range = math.floor(self.average_range(n) * FILTER_FACTOR_AVERAGE_RANGE)
+        if filter_range // 2 == filter_range / 2:
+            filter_range += 1
+        return filter_range
 
 #    def delta(self, n: int = 5) -> int:
 #        return self[-1].average - self[-1 - n].average
