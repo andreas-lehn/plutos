@@ -12,6 +12,8 @@ dependencies = [
     "httpx",
     "websocket-client",
     "tqdm",
+    "xgboost",
+    scikit-learn,
 ]
 
 [dependency-groups]
