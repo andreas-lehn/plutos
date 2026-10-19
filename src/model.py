@@ -54,7 +54,8 @@ class VolumeProfile():
     def volume(self):
         return self._volume
 
-    def convolute(self, n: int) -> int:
+    def convolute(self, n: int):
+        """ convolutes the profile in range [-n .. n] """
         result = VolumeProfile()
         for i in range(self.low, self.high +1):
             # Einmal über alles
@@ -474,13 +475,6 @@ class Chart():
             sum_range += bar.range
         return round(sum_range / n)
 
-    def filter_range(self, n: int = 5) -> int:
-        FILTER_FACTOR_AVERAGE_RANGE = 0.25
-        filter_range = math.floor(self.average_range(n) * FILTER_FACTOR_AVERAGE_RANGE)
-        if filter_range // 2 == filter_range / 2:
-            filter_range += 1
-        return filter_range
-
 #    def delta(self, n: int = 5) -> int:
 #        return self[-1].average - self[-1 - n].average
 
@@ -683,6 +677,6 @@ if __name__ == '__main__':
         with open(args.profile_file, "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=['price', "volume", 'smooth_volume'])
             writer.writeheader()
-            smoothed_volumes = main_chart.volumes.convolute(main_chart.filter_range())
+            smoothed_volumes = main_chart.volumes.convolute(main_chart.average_range() // 2)
             for p, v in main_chart.volumes:
                 writer.writerow({'price': p, 'volume': v, 'smooth_volume': smoothed_volumes[p]})
