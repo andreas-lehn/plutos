@@ -8,34 +8,35 @@ import marketdata
 
 
 def download(prog_name: str, product_code: str, start: datetime, end: datetime): #pragma: no cover
-    symbol = marketdata.active_symbol(args.product_code, end)
+    symbol = marketdata.active_symbol(product_code, end)
     print(f"{prog_name}: loading trades of {symbol} for intervall [{start.isoformat()}, {end.isoformat()}]")
-    return marketdata.download_trades(symbol, start.isoformat(), end.isoformat())
+    return marketdata.download_trades(symbol, start.isoformat(), end.isoformat()), symbol
 
 def session_cmd(prog_name: str, args): #pragma: no cover
     """load trades of a CME session from databento"""
 
     dt = datetime.fromisoformat(args.date)
     start_date, end_date = marketdata.CME_session(dt)
-    return download(prog_name, args.product_code, start_date, end_date)
+    trades, symbol = download(prog_name, args.product_code, start_date, end_date)
+    return trades, f'{symbol}_{args.date}_trades.dbn'
 
 def trades_cmd(prog_name: str, args):  #pragma: no cover
-    return download(
+    trades, _ = download(
         prog_name, 
         args.product_code,
         start = datetime.fromisoformat(args.start),
         end = datetime.fromisoformat(args.end),
     )
-   
+    return trades, args.file
+
 if __name__ == '__main__':
     import argparse
 
     parser = argparse.ArgumentParser(description="download trades from databento")
-    parser.set_defaults(command=lambda args: parser.print_usage())
+    parser.set_defaults(command=lambda prog_name, args: parser.print_usage())
     subparsers = parser.add_subparsers()
 
     session = subparsers.add_parser('session', description='download a complete CME session')
-    session.add_argument('file', help='name of Databento native file (.dbn)')
     session.add_argument('-p', '--product-code', type=str, default='MNQ', help="product code of future (NQ/MNQ/ES)")
     session.add_argument('-d', '--date', type=str, required=True, help="date of session")
     session.set_defaults(command=session_cmd)
@@ -48,13 +49,13 @@ if __name__ == '__main__':
     trades.set_defaults(command=trades_cmd)
 
     args = parser.parse_args()
-    data = args.command(parser.prog, args)
+    data, filename = args.command(parser.prog, args)
 
     if data:
         download_start = datetime.fromtimestamp(data.metadata.start // 10**9, timezone.utc)
         download_end = datetime.fromtimestamp(data.metadata.end // 10**9, timezone.utc)
         print(f"{parser.prog}: records downloaded: [{download_start.isoformat()}, {download_end.isoformat()}]")
-        data.to_file(args.file)
-        print(f"{parser.prog}: {data.nbytes} bytes written to {args.file}")
+        data.to_file(filename)
+        print(f"{parser.prog}: {data.nbytes} bytes written to {filename}")
     else:
         print(f'{parser.prog}: download failed.')
