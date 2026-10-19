@@ -3,9 +3,9 @@ Savitzky-Golay-Filter for volume profile
 
 Die folgende Abbiltung zeigt das Chart, dass wir aus [N018](N018-yesterdays-weather-revised.md) bereits kennen.
 Es ist ein Ausschnitt vom 01.10.2026.
-Diesmal sind zusätzlich zu den Hochs auch noch die Tiefs eingezeichnet (graue gestrichelte Linie vs. blaue gestrichelte Linie).
+Diesmal ist das Volumenprofil mit den Hochs auch noch die Tiefs zusätzlich eingezeichnet (blaue/graue gestrichelte Linie für Hoch/Tief).
 
-![Original mit Tiefs](N020-figure-1.png)
+![Original mit Tiefs](resources/N020-figure-1.png)
 
 Man sieht sehr schön, wie der Kurs an den Widerstandslinien (den Hochs) verharrt,
 um dann sehr schnell durch die Täler durchzulaufen zum nächsten Hoch.
@@ -22,7 +22,7 @@ Die Konsequenz aus dem besser erhaltenen Signalverlauf ist allerdings,
 dass viel mehr Höhen und Tiefen erkannt werden.
 Die folgende Abbildung zeigt das eindrucksvoll:
 
-![Savgov with original prominence](N020-figure-3.png)
+![Savgov with original prominence](resources/N020-figure-3.png)
 
 Um die Anzahl der Höhen und Tiefen in den Griff zu bekommen,
 bietet `sicpy.find_peaks` den Parameter `prominence`.
@@ -32,7 +32,7 @@ Im Orginal was dieser Parameter auf 10% eingestellt.
 Erhöht man für das Savitzky-Golay-Filter diesen Parameter auf 25%,
 dann erhält man dieselbe Anzahl an Peaks, wie im Orginal.
 
-![Savgov with higher prominence](N020-figure-2.png)
+![Savgov with higher prominence](resources/N020-figure-2.png)
 
 Man sieht jetzt aber auch, dass sich die Positionen der Hochs/Tiefs
 nicht vom Orginal unterscheiden.

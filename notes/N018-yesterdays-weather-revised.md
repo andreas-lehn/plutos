@@ -72,7 +72,7 @@ Vielleicht liefert das schon die Erklärung, weshalb Trendumkehr an diesem Tag s
 und dem Trend folgen viel besser war
 (Trendfolge hatte an diesem Tag 64%!):
 
-![2026-10-01](N018-figure-2.png)
+![2026-10-01](resources/N018-figure-2.png)
 
 Man sieht einen lang anhaltenden starken Abwärtstrend.
 Unser Algo spekuliert immer wieder dagegen und verliert.

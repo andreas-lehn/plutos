@@ -96,7 +96,7 @@ und etwas früher einsteigen.
 Anstatt auf eine bereits etablierten Trend zu warten,
 steigen wir auch ein, wenn eine Bewegung von weit weg vom EMA9 in Richtung EMA9 erfolgt.
 
-![Optimized Trading Algo](N017-figure-3.png)
+![Optimized Trading Algo](resources/N017-figure-3.png)
 
 In der obigen Abbildung sieht man das geänderte Verhalten an der ersten schwarzen Kerze nach 07:41:33:
 Hier wird auf die Trendänderung spekuliert, was in diesem Fall richtig war.
