@@ -130,10 +130,43 @@ def prepare_cmd(prog_name: str, args):  #pragma: no cover
             writer.writeheader()
             writer.writerows(collector.data)
 
+def evaluate_prediction(y_pred, y):
+    bin_edges = [-np.inf, -50, -40, -30, -20, -10, 10, 20, 30, 40, 50, np.inf]
+    labels = ['-50', '-40', '-30', '-20', '-10', '  0', '+10', '+20', '+30', '+40', '+50']
+    zones = pd.cut(y_pred, bins=bin_edges, labels=labels, include_lowest=True)
+    evaluation = []
+    for pred, target in zip(y_pred, y):
+        if abs(pred) < 10:
+            if abs(pred) <= abs(target):
+                evaluation.append('correct')
+            else:
+                evaluation.append('wrong')
+        elif pred * target < 0:
+            evaluation.append('wrong')
+        else:
+            evaluation.append('correct')
+
+    analyse_df = pd.DataFrame({'zone': zones, 'eval': evaluation})
+    crosstab = pd.crosstab(analyse_df['zone'], analyse_df['eval'])
+    for col in ['correct', 'wrong']:
+        if  col not in crosstab.columns:
+            crosstab[col] = 0
+    
+    crosstab['total'] = crosstab.sum(axis=1)
+    percent_tab = crosstab.copy()
+    for col in ['correct', 'wrong']:
+        percent_tab[col] = (crosstab[col] / crosstab['total']).fillna(0) * 100
+
+    return pd.DataFrame({
+        'total': crosstab['total'],
+        'correct (%)': percent_tab['correct'],
+        'wrong (%)': percent_tab['wrong'],
+    })
+
 
 def predict_cmd(prog_name: str, args): # pragma: no cover
     """ predict based on a given model """
-    print (f'{prog_name}: I predict test data...')
+    print (f"{prog_name}: I predict based on model '{args.model}'' ...")
 
     df = load_files(args.files)
     X, y = split_target(df)
@@ -142,18 +175,9 @@ def predict_cmd(prog_name: str, args): # pragma: no cover
     model.load_model(args.model)
     y_pred = model.predict (X)
 
-    mae = mean_absolute_error(y, y_pred)
-    rmse = np.sqrt(mean_squared_error(y, y_pred))
-    r2 = r2_score(y, y_pred)
-    print(f'{prog_name}: test results:')
-    print(f'    mean abs error (MAE): {mae:.4f}')
-    print(f'  quadratic error (RMSE): {rmse:.4f}')
-    print(f'                R2 score: {r2:.4f}')
+    result_df = evaluate_prediction(y_pred, y)
     print()
-
-    importance_gain = model.get_booster().get_score(importance_type='gain')
-    for key, value in importance_gain.items():
-        print(f'   {key:>10}: {value:12.4f}')
+    print(result_df.to_string())
 
 
 if __name__ == '__main__':
@@ -180,3 +204,4 @@ if __name__ == '__main__':
     test.set_defaults(command=predict_cmd)
     args = parser.parse_args()
     args.command(parser.prog, args)
+
