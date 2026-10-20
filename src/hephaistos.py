@@ -29,10 +29,10 @@ class DataCollector:
         self.time = 0
         self.data = []
  
-    @classmethod
-    def from_file(file: Path, bar_size: int = 36):
-        collector = DataCollector(bar_size)
-        return collector.collect_from_file(file)
+    #@classmethod
+    #def from_file(file: Path, bar_size: int = 36):
+    #    collector = DataCollector(bar_size)
+    #    return collector.collect_from_file(file)
 
     def data_set(bar: Bar, chart: Chart):
         data = {}
@@ -69,11 +69,14 @@ class DataCollector:
         if len(self.data) >= offset:
             self.data[-offset]['target'] = bar.average - chart[-offset].average
 
-    def data_path(file: Path):
+    def data_path(file: Path) -> Path:
+        """ generates the path for training data file from a source file (.dbn) """
         name = file.stem
         parts = name.split('_')
         if len(parts) != 3 and parts[2] != 'trades':
-            raise ValueError(f"data_path(): file name ‘{name}' is violating naming convention '<SYM>_<DATE>_trades.dbn'")
+            raise ValueError(
+                f"data_path(): file name ‘{name}' is violating naming convention '<SYMBOL>_<DATE>_trades.dbn'"
+            )
         return Path(f'{parts[0]}_{parts[1]}_hephaistos.csv')
 
 def load_files(files) -> pd.DataFrame:
@@ -90,9 +93,9 @@ def split_target(df: pd.DataFrame, target_col: str = 'target'):
     y = df[target_col]
     return X, y
 
-def train_cmd(prog_name: str, args): #pragma: no cover
-    """ tain the model """
-    print(f'{prog_name}: I am training...')
+def fit_cmd(prog_name: str, args): #pragma: no cover
+    """ fit the model to training data """
+    print(f'{prog_name}: I fit a model to training data...')
 
     df = load_files(args.files)
     X, y = split_target(df)
@@ -109,8 +112,8 @@ def train_cmd(prog_name: str, args): #pragma: no cover
     print(f'{prog_name}: model written to {args.model}')
 
 
-def data_cmd(prog_name: str, args):  #pragma: no cover
-    """ generate training data from historical data """
+def prepare_cmd(prog_name: str, args):  #pragma: no cover
+    """ prepare training data from historical data """
     print(f'{prog_name}: I generate training data...')
     for file in args.files:
         path = Path(file)
@@ -128,9 +131,9 @@ def data_cmd(prog_name: str, args):  #pragma: no cover
             writer.writerows(collector.data)
 
 
-def test_cmd(prog_name: str, args): # pragma: no cover
-    """ test a modell """
-    print (f'{prog_name}: I am testing...')
+def predict_cmd(prog_name: str, args): # pragma: no cover
+    """ predict based on a given model """
+    print (f'{prog_name}: I predict test data...')
 
     df = load_files(args.files)
     X, y = split_target(df)
@@ -161,19 +164,19 @@ if __name__ == '__main__':
     parser.add_argument('-b', '--bar-size', type=int, default=36, help="size of a bar")
     subparsers = parser.add_subparsers()
 
-    train = subparsers.add_parser('train', description='train a model with historical data')
+    train = subparsers.add_parser('fit', description='fit a model from historical data')
     train.add_argument('files', nargs='+', type=str, help='files with training data (.csv')
     train.add_argument('-m', '--model', default='hephaistos.json', help='model file')
-    train.set_defaults(command=train_cmd)
+    train.set_defaults(command=fit_cmd)
 
-    data = subparsers.add_parser('data', description='generate training data out of Databento native files')
+    data = subparsers.add_parser('prepare', description='generate training data out of Databento native files')
     data.add_argument('files', nargs='+', type=str, help='files with historical data in Databento native file (.dbn)')
     data.add_argument('-d', '--dir', type=str, default=None, help="directory where to put the output files")
-    data.set_defaults(command=data_cmd)
+    data.set_defaults(command=prepare_cmd)
 
-    test = subparsers.add_parser('test', description='test a modell on historical data')
-    test.add_argument('files', nargs='+', type=str, help='file with historical data in Databento native file (.dbn)')
+    test = subparsers.add_parser('predict', description='predict historical test data and evaluate results')
+    test.add_argument('files', nargs='+', type=str, help='file with taining data (.csv)')
     test.add_argument('-m', '--model', default='hephaistos.json', help='model file')
-    test.set_defaults(command=test_cmd)
+    test.set_defaults(command=predict_cmd)
     args = parser.parse_args()
     args.command(parser.prog, args)
