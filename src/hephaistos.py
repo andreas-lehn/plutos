@@ -8,6 +8,58 @@ from model import Bar, Chart, MarketModel
 import pandas as pd
 import numpy as np
 import xgboost as xgb
+from model import MarketModel, Chart, Bar
+
+MAX_LOSS = 50
+START_OFFSET = 48 # don't begin trading bevor this offset in seconds since start of the session
+
+class Hephaistos:
+
+    FIELDNAMES = ['contracts', 'stop_loss', 'prediction']
+
+    def __init__(self, model_path: Path, threshold: int):
+        self.model = xgb.XGBRegressor()
+        self.model.load_model(model_path)
+        self.threshold = threshold
+ 
+    def contract_size(direction: int, bar: Bar) -> (int, int):
+        """ calculates contract size and stop loss of a contract """
+        if direction < 0:
+            stop_loss = bar.high - bar.average
+            max_contracts = MAX_LOSS // stop_loss
+            return -max_contracts, stop_loss
+        elif direction > 0:
+            stop_loss = bar.average - bar.low
+            max_contracts = MAX_LOSS // stop_loss
+            return max_contracts, -stop_loss
+        else:
+            return 0, 0 # pragma: no cover
+
+    def on_bar(self, bar: Bar, chart: Chart):
+        contracts, stop_loss, prediction = 0, 0, 0
+
+        if len(chart) > 48:
+            data = DataCollector.data_set(bar, chart)
+            data['time'] = len(chart) - 1
+            df = pd.DataFrame([data])
+            df = df[DataCollector.FIELDNAMES[:-1]]
+            prediction = self.model.predict(df)[0]
+
+            if abs(prediction) > self.threshold:
+                contracts, stop_loss = Hephaistos.contract_size(prediction, bar)
+    
+        bar.contracts = contracts
+        bar.stop_loss = stop_loss
+        bar.prediction = prediction
+
+    def simulate(file, model_path: Path, bar_size: int = 36, num_bars: int = None, threshold: int = 20): # pragma: no cover
+        main_chart = Chart(bar_size)
+        model = MarketModel()
+        model.charts.append(main_chart)
+        trader = Hephaistos(model_path, threshold)
+        main_chart.register_callback(trader.on_bar)
+        model.simulate_file(file, num_bars * bar_size if num_bars else 24*60*60*10**9)
+        return main_chart
 
 
 class DataCollector:
@@ -167,11 +219,19 @@ def predict_cmd(prog_name: str, args): # pragma: no cover
 
     model = xgb.XGBRegressor()
     model.load_model(args.model)
-    y_pred = model.predict (X)
+    y_pred = model.predict(X)
 
     result_df = evaluate_prediction(y_pred, y)
     print()
     print(result_df.to_string())
+
+
+def sim_cmd(prog_name: str, args): # pragma; no cover
+    """ simulate a Databento trades file with Hephaistos """
+    print (f"{prog_name}: I simulate file '{args.file}'")
+    
+    chart = Hephaistos.simulate(args.file, args.model, args.bar_size, args.num_bars, args.threshold)
+    chart.to_file(args.out_file, fieldnames=Bar.OHLC_FIELDNAMES + Hephaistos.FIELDNAMES)
 
 
 if __name__ == '__main__':
@@ -184,7 +244,7 @@ if __name__ == '__main__':
 
     train = subparsers.add_parser('fit', description='fit a model from historical data')
     train.add_argument('files', nargs='+', type=str, help='files with training data (.csv')
-    train.add_argument('-m', '--model', default='hephaistos.json', help='model file')
+    train.add_argument('-m', '--model', type=str, default='hephaistos.json', help='model file')
     train.set_defaults(command=fit_cmd)
 
     data = subparsers.add_parser('prepare', description='generate training data out of Databento native files')
@@ -194,8 +254,18 @@ if __name__ == '__main__':
 
     test = subparsers.add_parser('predict', description='predict historical test data and evaluate results')
     test.add_argument('files', nargs='+', type=str, help='file with taining data (.csv)')
-    test.add_argument('-m', '--model', default='hephaistos.json', help='model file')
+    test.add_argument('-m', '--model', type=str, default='hephaistos.json', help='model file')
     test.set_defaults(command=predict_cmd)
+
+    sim = subparsers.add_parser('sim', description="simulate a Databento trades file")
+    sim.add_argument('file', type=str, help="file (.dbn) to simulate")
+    sim.add_argument('-m', '--model', type=str, default='hephaistos.json', help='model file')
+    sim.add_argument('-t', '--threshold', type=int, default=20, help='threshold to start a trade')
+    sim.add_argument('-n', '--num-bars', type=int, help='number of bars to simulate')
+    sim.add_argument('-o', '--out-file', type=str, required=True, help="name of output file")
+
+    sim.set_defaults(command=sim_cmd)
+
     args = parser.parse_args()
     args.command(parser.prog, args)
 

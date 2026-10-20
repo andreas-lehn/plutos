@@ -51,6 +51,9 @@ if 'contracts' in df_sticks.columns:
     if df_sticks["short"].notna().any():
         additional_plots.append(mpf.make_addplot(df_sticks["short"], type="scatter", marker="v", color="black", edgecolors="black", linewidths=0.5, markersize=4*markersize, panel=0))
 
+if 'prediction' in df_sticks.columns:
+    additional_plots.append(mpf.make_addplot(df_sticks['prediction'], width=0.5, panel=3))
+
 if 'moving_average' in df_sticks.columns:
     df_sticks['moving_average'] = df_sticks['moving_average'] / 4
     additional_plots.append(mpf.make_addplot(df_sticks["moving_average"], color='#1f77b4', panel=0))
