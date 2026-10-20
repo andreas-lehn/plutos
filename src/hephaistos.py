@@ -27,11 +27,6 @@ class DataCollector:
         self.time = 0
         self.data = []
  
-    #@classmethod
-    #def from_file(file: Path, bar_size: int = 36):
-    #    collector = DataCollector(bar_size)
-    #    return collector.collect_from_file(file)
-
     def data_set(bar: Bar, chart: Chart):
         data = {}
         data['low']     = bar.average - bar.low
@@ -71,13 +66,13 @@ class DataCollector:
         """ generates the path for training data file from a source file (.dbn) """
         name = file.stem
         parts = name.split('_')
-        if len(parts) != 3 and parts[2] != 'trades':
+        if len(parts) != 3 or parts[2] != 'trades':
             raise ValueError(
                 f"data_path(): file name ‘{name}' is violating naming convention '<SYMBOL>_<DATE>_trades.dbn'"
             )
         return Path(f'{parts[0]}_{parts[1]}_hephaistos.csv')
 
-def load_files(files) -> pd.DataFrame:
+def load_files(files) -> pd.DataFrame: # pragma: no cover
     frames = []
     for file in files:
         df = pd.read_csv(file)
@@ -85,7 +80,7 @@ def load_files(files) -> pd.DataFrame:
         frames.append(df)
     return pd.concat(frames, axis=0)
 
-def split_target(df: pd.DataFrame, target_col: str = 'target'):
+def split_target(df: pd.DataFrame, target_col: str = 'target'): # pragma: no cover
     feature_cols = [col for col in df.columns if col != target_col]
     X = df[feature_cols]
     y = df[target_col]
@@ -128,10 +123,11 @@ def prepare_cmd(prog_name: str, args):  #pragma: no cover
             writer.writeheader()
             writer.writerows(collector.data)
 
+EVLUATION_BINS = [-np.inf, -50, -40, -30, -20, -10, 10, 20, 30, 40, 50, np.inf]
+EVALUATION_LABELS = ['-50', '-40', '-30', '-20', '-10', '  0', '+10', '+20', '+30', '+40', '+50']
+
 def evaluate_prediction(y_pred, y):
-    bin_edges = [-np.inf, -50, -40, -30, -20, -10, 10, 20, 30, 40, 50, np.inf]
-    labels = ['-50', '-40', '-30', '-20', '-10', '  0', '+10', '+20', '+30', '+40', '+50']
-    zones = pd.cut(y_pred, bins=bin_edges, labels=labels, include_lowest=True)
+    zones = pd.cut(y_pred, bins=EVLUATION_BINS, labels=EVALUATION_LABELS, include_lowest=True)
     evaluation = []
     for pred, target in zip(y_pred, y):
         if abs(pred) < 10:
@@ -139,7 +135,7 @@ def evaluate_prediction(y_pred, y):
                 evaluation.append('correct')
             else:
                 evaluation.append('wrong')
-        elif pred * target < 0:
+        elif pred * target <= 0:
             evaluation.append('wrong')
         else:
             evaluation.append('correct')
