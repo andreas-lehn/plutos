@@ -9,13 +9,16 @@ from scipy.signal import find_peaks
 parser = argparse.ArgumentParser(description="create a chart diagram")
 parser.add_argument('file', help='OHLC data file)')
 parser.add_argument('-p', '--profile', type=str, help="file with volume profile data")
+parser.add_argument('-s', '--start', type=int, default=0, help="start offset (sec) of bar in charts file")
 parser.add_argument('-n', '--num-bars', type=int, help="number of bars to be drawn into chart")
 args = parser.parse_args()
 
 # 1. CSV-Datei einlesen
 df_sticks = pd.read_csv(args.file)
 if args.num_bars:
-    df_sticks = df_sticks.tail(args.num_bars)
+    df_sticks = df_sticks.iloc[args.start:args.start + args.num_bars]
+else:
+    df_sticks = df_sticks.iloc[args.start:]
 
 df_sticks['open'] = df_sticks['open'] / 4
 df_sticks['low'] = df_sticks['low'] / 4
