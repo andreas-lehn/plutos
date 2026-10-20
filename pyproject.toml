@@ -13,7 +13,7 @@ dependencies = [
     "websocket-client",
     "tqdm",
     "xgboost",
-    scikit-learn,
+    "scikit-learn",
 ]
 
 [dependency-groups]
