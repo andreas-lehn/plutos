@@ -1,0 +1,130 @@
+#
+# test_brockersim.py
+#
+
+import pytest
+from typing import Iterable
+from brokersim import BrokerSim
+from model import Trade
+
+@pytest.fixture
+def trades():
+    yield iter([
+        Trade(timestamp=16000000000, price=30501, volume=1),
+        Trade(timestamp=17100000000, price=30502, volume=2),
+        Trade(timestamp=18300000000, price=30503, volume=3),
+        Trade(timestamp=19400000000, price=30504, volume=4),
+        Trade(timestamp=20500000000, price=30505, volume=5),
+        Trade(timestamp=21600000000, price=30506, volume=6),
+        Trade(timestamp=22700000000, price=30507, volume=7),
+        Trade(timestamp=23800000000, price=30508, volume=8),
+        Trade(timestamp=24800000000, price=30509, volume=9),
+        Trade(timestamp=25000000000, price=30506, volume=10),
+        Trade(timestamp=26100000000, price=30505, volume=11),
+        Trade(timestamp=27200000000, price=30504, volume=12),
+        Trade(timestamp=28200000000, price=30503, volume=13),
+        Trade(timestamp=29300000000, price=30502, volume=14),
+        Trade(timestamp=30400000000, price=30501, volume=15),
+        Trade(timestamp=31500000000, price=30500, volume=16),
+    ])
+
+
+def test_forward_to(trades):
+    broker = BrokerSim(trades)
+    assert broker.time == 0
+    assert broker.next_trade.timestamp == 16000000000
+    broker.forward_to(24700000000)
+    assert broker.next_trade.price == 30509
+    broker.forward_to(24800000000)
+    assert broker.time == 24800000000
+    assert broker.next_trade.price == 30506
+    broker.forward_to(24700000000)
+    assert broker.time == 24800000000
+    assert broker.next_trade.price == 30506
+    broker.forward_to(24800000000)
+    assert broker.time == 24800000000
+    assert broker.next_trade.price == 30506
+    broker.forward_to(32000000000)
+    assert broker.next_trade == None
+
+def test_order_long(trades):
+    broker = BrokerSim(trades)
+
+    broker.forward_to(20000000000)
+    assert broker.next_trade.volume == 5
+    ordered_trade = broker.order(3, -2, 3)
+    assert ordered_trade.price == 30505
+    assert ordered_trade.timestamp == 20500000000
+    assert ordered_trade.volume == 3
+    assert broker.stop_loss == 30503
+    assert broker.take_profit == 30508
+    assert broker.contracts == 3
+
+    
+    executed_trade = broker.forward_to(22000000000)
+    assert executed_trade is None
+    executed_trade = broker.forward_to(25000000000)
+    assert executed_trade is not None
+    assert executed_trade.price == 30508
+    assert broker.time == 25000000000
+    assert broker.stop_loss is None
+    assert broker.take_profit is None
+
+    ordered_trade = broker.order(5, -2, 2)
+    assert ordered_trade.timestamp == 26100000000
+    assert ordered_trade.price == 30505
+    executed_trade = broker.forward_to(30000000000)
+    assert executed_trade.price == 30503
+    assert executed_trade.timestamp == 28200000000
+
+def test_order_short(trades):
+    broker = BrokerSim(trades)
+
+    broker.forward_to(20000000000)
+    assert broker.next_trade.volume == 5
+    ordered_trade = broker.order(-3, 2, -3)
+    assert ordered_trade.price == 30505
+    assert ordered_trade.timestamp == 20500000000
+    assert ordered_trade.volume == -3
+    assert broker.stop_loss == 30507
+    assert broker.take_profit == 30502
+    assert broker.contracts == -3
+
+    executed_trade = broker.forward_to(22000000000)
+    assert executed_trade is None
+    executed_trade = broker.forward_to(25000000000)
+    assert executed_trade is not None
+    assert executed_trade.price == 30507
+    assert executed_trade.timestamp == 22700000000
+    assert broker.time == 25000000000
+    assert broker.stop_loss is None
+    assert broker.take_profit is None
+
+    ordered_trade = broker.order(-5, 2, -2)
+    assert ordered_trade.timestamp == 26100000000
+    assert ordered_trade.price == 30505
+    executed_trade = broker.forward_to(30000000000)
+    assert executed_trade.price == 30503
+    assert executed_trade.timestamp == 28200000000
+
+def test_no_take_profit(trades):
+    broker = BrokerSim(trades)
+    broker.forward_to(18000000000)
+    ordered_trade = broker.order(2, -2, None)
+    assert ordered_trade.timestamp == 18300000000
+    assert ordered_trade.price == 30503
+    executed_trade = broker.forward_to(40000000000)
+    assert executed_trade.price == 30501
+    assert executed_trade.timestamp == 30400000000
+    assert executed_trade.volume == -2
+
+def test_adjust_brackets(trades):
+    broker = BrokerSim(trades)
+    broker.forward_to(19000000000)
+    ordered_trade = broker.order(-2, None, None)
+    assert ordered_trade.price == 30504
+    executed_trade = broker.forward_to(25000000000)
+    assert executed_trade is None
+    broker.adust_bracket(take_profit=30501)
+    executed_trade = broker.forward_to(40000000000)
+    executed_trade.price == 30501
