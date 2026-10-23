@@ -13,6 +13,7 @@ from array import array
 from collections import deque
 from collections.abc import Iterable
 from pathlib import Path
+from datetime import datetime, timezone
 
 from pydantic import BaseModel
 
@@ -23,6 +24,95 @@ class Trade(BaseModel):
     timestamp: int # original timestamp in ns
     price: int     # price * 4
     volume: int
+
+
+class TradePair():
+    """ matching pair of trades """
+
+    def __init__(self, size: int, open_time: int, open_price: int, close_time: int, close_price: int):
+        self.size = size
+        self.open_time = open_time
+        self.open_price = open_price
+        self.close_time = close_time
+        self.close_price = close_price
+
+    @property
+    def total_ticks(self):
+        return (self.close_price - self.open_price) * self.size
+
+    @property
+    def tick_capture(self):
+        """ amount of ticks won or lost with this trade pair"""
+        return self.total_ticks // abs(self.size)
+
+    @property
+    def duration(self):
+        return self.close_time - self.open_time
+
+    @classmethod
+    def from_trades(cls, open: Trade, close: Trade):
+        """ creates a trade pair with maximum size and reduces the volumes of the trades accordingly """
+        if open.volume * close.volume >= 0:
+            raise ValueError(f'__init__(): sizes of open and close do not match')
+
+        size = 0
+        if abs(open.volume) > abs(close.volume):
+            size = -close.volume
+            close.volume = 0
+            open.volume -= size
+        else:
+            size = open.volume
+            open.volume = 0
+            close.volume += size
+
+        return cls(size, open.timestamp, open.price, close.timestamp, close.price)
+
+    def to_dict(self) -> dict:
+        return {
+            'open_time': datetime.fromtimestamp(self.open_time // 10**9, tz=timezone.utc),
+            'close_time': datetime.fromtimestamp(self.close_time // 10**9, tz=timezone.utc),
+            'duration': (self.duration // 10**6) / 1000,
+            'size': self.size,
+            'open_price': self.open_price / 4,
+            'close_price': self.close_price / 4,
+            'tick_capture': self.tick_capture,
+            'total_ticks': self.total_ticks,
+        }
+
+class Position:
+    """ represents a position """
+
+    def __init__(self):
+        self.trades = deque()
+        self.trade_pairs = []
+        self.stop_loss = None
+
+    @property
+    def is_flat(self):
+        return len(self.trades) == 0
+
+    @property
+    def size(self) -> int:
+        sum = 0
+        for trade in self.trades:
+            sum += trade.volume
+        return sum
+    
+    def append(self, new_trade: Trade):
+        if self.size * new_trade.volume >= 0:
+            self.trades.append(new_trade)
+        else:
+            # Build Trade-pairs
+            while len(self.trades) > 0:
+                trade = self.trades[0]
+                pair = TradePair.from_trades(trade, new_trade)
+                self.trade_pairs.append(pair)
+                if trade.volume == 0:
+                    self.trades.popleft()
+                if new_trade.volume == 0:
+                    break
+            if new_trade.volume != 0:
+                self.trades.append(new_trade)
 
 
 class VolumeProfile():
@@ -547,8 +637,8 @@ class Chart():
             direction = self._bars[-1].direction
         return direction
         
-    EMA_9_FACTOR  = 2 / (9 + 1)
-    EMA_48_FACTOR = 2 / (48 +1)
+    EMA_9_FACTOR  = 2 / (3 + 1) # (9 + 1)
+    EMA_48_FACTOR = EMA_9_FACTOR / 5 #2 / (48 +1)
 
     def _exp_moving_avg(value: float, ema: float, factor: float):
         """ calculates the exponetial moving average of bar """

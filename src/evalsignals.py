@@ -1,6 +1,18 @@
 #
 # Evaluates trading signals
 #
+# a signal is considered as correct,
+# if the trend of the next 3 bars (average) goes in the direction of the signal
+#
+# let b_0 be the bar of the signal.
+# then the following conditions must be fulfilled:
+#
+#  (1) b_3.average > b_1.average
+#  (2) b_2.average > b_1.average
+#  (3) b_3.average - b_1.avarage > average_range(9) / 2
+#
+# these condition are for a long signal.
+#
 
 import pandas as pd
 from yw import YesterdaysWeather

@@ -8,20 +8,18 @@ class YesterdaysWeather:
 
     FIELDNAMES = ['contracts', 'stop_loss', 'ema_9', 'ema_48']
 
-    def __init__(self, max_loss: int = 50, stop_loss_factor: float = 1.0):
+    def __init__(self, max_loss: int = 50, stop_loss_factor: float = 0.6):
         self.MAX_LOSS = max_loss
         self.STOP_LOSS_FACTOR = stop_loss_factor
 
-    def contract_size(self, direction: int, bar: Bar) -> (int, int):
+    def contract_size(self, direction: int, bar: Bar, chart: Chart) -> (int, int):
         """ calculates contract size and stop loss of a contract """
+        stop_loss = round(chart.average_range(9) * self.STOP_LOSS_FACTOR)
+        max_contracts = self.MAX_LOSS // stop_loss
         if direction < 0:
-            stop_loss = round((bar.high - bar.average) * self.STOP_LOSS_FACTOR)
-            max_contracts = self.MAX_LOSS // stop_loss
             return -max_contracts, stop_loss
         elif direction > 0:
-            stop_loss = round((bar.average - bar.low) * self.STOP_LOSS_FACTOR)
-            max_contracts = self.MAX_LOSS // stop_loss
-            return max_contracts, -stop_loss
+            return max_contracts, stop_loss
         else:
             return 0, 0 # pragma: no cover
 
@@ -33,21 +31,21 @@ class YesterdaysWeather:
             # we may go long...
             if trend > 1 and bar.low < bar.ema_9:
                 # we have a trend of a least 2 and we are not completely above EMA9
-                contracts, stop_loss = self.contract_size(1, bar)
+                contracts, stop_loss = self.contract_size(1, bar, chart)
             elif bar.high < bar.ema_9:
                 # we have a very small (starting?) trend and are completely below the moving average.
-                contracts, stop_loss = self.contract_size(1, bar)
+                contracts, stop_loss = self.contract_size(1, bar, chart)
         elif bar.direction < 0:
             # we may go short...
             if trend > 1 and bar.high > bar.ema_9:
-                contracts, stop_loss = self.contract_size(-1, bar)
+                contracts, stop_loss = self.contract_size(-1, bar, chart)
             elif bar.low > bar.ema_9:
-                contracts, stop_loss = self.contract_size(-1, bar)
+                contracts, stop_loss = self.contract_size(-1, bar, chart)
 
         bar.contracts = contracts
         bar.stop_loss = stop_loss
 
-    def simulate(file, num_bars: int = None, bar_size: int = 36, max_loss: int = 50, stop_loss_factor: float = 1.0): # pragma: no cover
+    def simulate(file, num_bars: int = None, bar_size: int = 36, max_loss: int = 50, stop_loss_factor: float = 0.6): # pragma: no cover
         main_chart = Chart(bar_size=bar_size)
         model = MarketModel()
         model.charts.append(main_chart)
@@ -69,7 +67,7 @@ if __name__ == '__main__':
     parser.add_argument('-n', '--num-bars', type=int, default=sys.maxsize, help='number of bars to simulate')
     parser.add_argument('-o', '--out-file', type=str, required=True, help="name of output file")
     parser.add_argument('-m', '--max-loss', type=int, default=50, help="name of file for volume profile data")
-    parser.add_argument('-s', '--stop-loss-factor', type=float, default=1.2, help="stop loss adjustment factor")
+    parser.add_argument('-s', '--stop-loss-factor', type=float, default=0.6, help="stop loss adjustment factor")
     args = parser.parse_args()
 
     main_chart = YesterdaysWeather.simulate(args.file, args.num_bars, args.bar_size, args.max_loss, args.stop_loss_factor)
