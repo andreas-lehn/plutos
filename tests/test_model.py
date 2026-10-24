@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 import sys
 import pytest
 
-from model import Trade, TradePair, Position, VolumeProfile, Sample, SampleBuilder, SampleReader, SampleWriter, Bar, Chart, MarketModel
+from model import Trade, TradePair, TradeMatcher, VolumeProfile, Sample, SampleBuilder, SampleReader, SampleWriter, Candle, Chart, MarketModel
 import marketdata
 
 @pytest.fixture
@@ -109,7 +109,7 @@ def trade_list_5():
     ]
     return trades
 
-def test_Position():
+def test_TradeMatcher():
     t_0 = Trade(timestamp=0, price=12501, volume = 2)
     t_1 = Trade(timestamp=1, price=12503, volume = 3)
     t_2 = Trade(timestamp=2, price=12499, volume = 4)
@@ -118,7 +118,7 @@ def test_Position():
     t_5 = Trade(timestamp=5, price=12501, volume = -6)
     t_6 = Trade(timestamp=6, price=12501, volume = 1)
 
-    pos = Position()
+    pos = TradeMatcher()
     pos.append(t_0)
     assert pos.size == 2
     pos.append(t_1)
@@ -437,81 +437,81 @@ def test_sample_writer(some_samples, csv_out_in_path):
     for out, read in zip(some_samples, reader):
         assert out.to_dict() == read.to_dict()
 
-def test_bar(some_samples):
+def test_candle(some_samples):
     s0 = some_samples[0]
-    bar = Bar.from_sample(s0)
-    assert bar.timestamp == s0.timestamp
+    candle = Candle.from_sample(s0)
+    assert candle.timestamp == s0.timestamp
 
     s0 = s0.volumes
-    assert len(bar) == 1
-    assert bar.open == s0.average
-    assert bar.high == s0.high
-    assert bar.average == 101
-    assert bar.low  == s0.low
-    assert bar.close == s0.average
-    assert bar.volumes[101] == 3
-    assert bar.volumes[102] == 1
-    assert bar.volume == 7
-    assert bar.range == s0.high - s0.low
+    assert len(candle) == 1
+    assert candle.open == s0.average
+    assert candle.high == s0.high
+    assert candle.average == 101
+    assert candle.low  == s0.low
+    assert candle.close == s0.average
+    assert candle.volumes[101] == 3
+    assert candle.volumes[102] == 1
+    assert candle.volume == 7
+    assert candle.range == s0.high - s0.low
 
 
-    bar.append(some_samples[1])
-    assert len(bar) == 2
-    assert bar.close == 101
-    assert bar.low  == 99
-    assert bar.high == 103
-    assert bar.volume == 15
-    assert bar.volumes[99]  == 1
-    assert bar.volumes[100] == 4
-    assert bar.delta == some_samples[1].volumes.average - s0.average
-    assert bar.timestamp == some_samples[1].timestamp
-    bar.append(some_samples[2])
-    bar.append(some_samples[3])
-    assert len(bar) == 4
-    assert bar.open == 101
-    assert bar.low  == 99
-    assert bar.high == 104
-    assert bar.close == 101
-    assert bar.volumes[101] == 8
-    assert bar.volumes[102] == 5
+    candle.append(some_samples[1])
+    assert len(candle) == 2
+    assert candle.close == 101
+    assert candle.low  == 99
+    assert candle.high == 103
+    assert candle.volume == 15
+    assert candle.volumes[99]  == 1
+    assert candle.volumes[100] == 4
+    assert candle.delta == some_samples[1].volumes.average - s0.average
+    assert candle.timestamp == some_samples[1].timestamp
+    candle.append(some_samples[2])
+    candle.append(some_samples[3])
+    assert len(candle) == 4
+    assert candle.open == 101
+    assert candle.low  == 99
+    assert candle.high == 104
+    assert candle.close == 101
+    assert candle.volumes[101] == 8
+    assert candle.volumes[102] == 5
 
-    sample = bar.popleft()
-    assert bar.volumes[101] == 8 - sample[101]
-    bar.popleft()
-    assert bar.open != 101
-    assert bar.close == 101
+    sample = candle.popleft()
+    assert candle.volumes[101] == 8 - sample[101]
+    candle.popleft()
+    assert candle.open != 101
+    assert candle.close == 101
 
-def test_bar_iter(some_samples):
-    bar = Bar.from_samples(some_samples)
-    for b, s in zip(bar, some_samples):
+def test_candle_iter(some_samples):
+    candle = Candle.from_samples(some_samples)
+    for b, s in zip(candle, some_samples):
         assert b.low  == s.volumes.low
         assert b.high == s.volumes.high
 
-def test_bar_to_dict(some_samples):
-    bar = Bar.from_sample(some_samples[1])
-    d = bar.to_dict()
-    assert d['len'] == len(bar)
-    assert d['open'] == bar.open
-    assert d['low'] == bar.low
-    assert d['average'] == bar.average
-    assert d['high'] == bar.high
-    assert d['close'] == bar.close
+def test_candle_to_dict(some_samples):
+    candle = Candle.from_sample(some_samples[1])
+    d = candle.to_dict()
+    assert d['len'] == len(candle)
+    assert d['open'] == candle.open
+    assert d['low'] == candle.low
+    assert d['average'] == candle.average
+    assert d['high'] == candle.high
+    assert d['close'] == candle.close
     vol = 0
     for v in d['volumes']:
         vol += v
-    assert d['volume'] == bar.volume
+    assert d['volume'] == candle.volume
 
-def test_bar_filtered_dict(some_samples):
-    bar = Bar.from_sample(some_samples[0])
-    # bar from Sample: Sample(17100000000, VolumeProfile.from_dict({'low': 99,  'high': 102, 'volumes': [1, 2, 3, 1]}))
-    d = bar.to_filtered_dict(['timestamp', 'low', 'volume'])
+def test_candle_filtered_dict(some_samples):
+    candle = Candle.from_sample(some_samples[0])
+    # candle from Sample: Sample(17100000000, VolumeProfile.from_dict({'low': 99,  'high': 102, 'volumes': [1, 2, 3, 1]}))
+    d = candle.to_filtered_dict(['timestamp', 'low', 'volume'])
     assert d == {'timestamp': 17100000000, 'low': 99, 'volume': 7}
 
     with pytest.raises(KeyError):
         d['high']
 
-    bar.signal = 'sell'
-    d = bar.to_filtered_dict(['timestamp', 'signal'])
+    candle.signal = 'sell'
+    d = candle.to_filtered_dict(['timestamp', 'signal'])
     assert d == {'timestamp': 17100000000, 'signal': 'sell'}
 
 @pytest.fixture
@@ -532,7 +532,7 @@ def trades_12():
     ]
 
 def test_chart(trades_12):
-    chart = Chart(bar_size=2, maxlen=5)
+    chart = Chart(candle_size=2, maxlen=5)
 
     # convert the trades to samples...
     builder = SampleBuilder(trades_12)
@@ -553,10 +553,10 @@ def test_chart(trades_12):
     assert chart.trend_direction < 0
     assert chart.average_range(5) == 20
 
-    bar_0 = chart[0]
-    assert bar_0.ema_fast == bar_0.average
-    assert bar_0.ema_slow == bar_0.average
-    assert bar_0.direction == bar_0.delta
+    candle_0 = chart[0]
+    assert candle_0.ema_fast == candle_0.average
+    assert candle_0.ema_slow == candle_0.average
+    assert candle_0.direction == candle_0.delta
 
     chart.append(samples[2])
     chart.append(samples[3])
@@ -565,10 +565,10 @@ def test_chart(trades_12):
     assert chart.trend_direction == 0
     assert chart.average_range(5) == 20
 
-    bar_1 = chart[1]
-    assert bar_1.ema_fast == Chart.EMA_FAST_FACTOR * bar_1.average + Chart.EMA_FAST_FACTOR * bar_0.average
-    assert bar_1.ema_slow == Chart.EMA_SLOW_FACTOR * bar_1.average + (1 - Chart.EMA_SLOW_FACTOR) * bar_0.average
-    assert bar_1.direction == 0
+    candle_1 = chart[1]
+    assert candle_1.ema_fast == Chart.EMA_FAST_FACTOR * candle_1.average + Chart.EMA_FAST_FACTOR * candle_0.average
+    assert candle_1.ema_slow == Chart.EMA_SLOW_FACTOR * candle_1.average + (1 - Chart.EMA_SLOW_FACTOR) * candle_0.average
+    assert candle_1.direction == 0
 
     chart.append(samples[4])
     chart.append(samples[5])
@@ -619,7 +619,7 @@ def test_direction():
     builder = SampleBuilder(trades)
     samples = [s for s in builder]
     
-    chart = Chart(bar_size=2)
+    chart = Chart(candle_size=2)
     chart.append(samples[0])
     chart.append(samples[1])
     b_0 = chart[0]
@@ -671,7 +671,7 @@ def test_direction_mirrowed():
     builder = SampleBuilder(trades)
     samples = [s for s in builder]
     
-    chart = Chart(bar_size=2)
+    chart = Chart(candle_size=2)
     chart.append(samples[0])
     chart.append(samples[1])
     assert chart.trend_direction == -1
@@ -722,7 +722,7 @@ def test_average_range():
     builder = SampleBuilder(trades)
     samples = [s for s in builder]
 
-    chart = Chart(bar_size=2, maxlen=5)
+    chart = Chart(candle_size=2, maxlen=5)
     chart.append(samples[0])
     chart.append(samples[1])
     assert chart.average_range(5) == 20
@@ -750,18 +750,18 @@ def test_average_range():
 
 def test_chart_from_sample(trades_12):
     builder = SampleBuilder(trades_12)
-    chart = Chart.from_samples(builder, bar_size=4)
+    chart = Chart.from_samples(builder, candle_size=4)
     assert len(chart) == 3
 
     volume = 0
-    for bar in chart:
-        volume += bar.volume
+    for candle in chart:
+        volume += candle.volume
     assert volume == 12
 
 def test_chart_callbacks(trades_12):
     class Callee:
         called = False
-        def cb(bar, chart):
+        def cb(candle, chart):
             Callee.called = True
     
     chart = Chart(4)

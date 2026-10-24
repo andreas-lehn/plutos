@@ -9,14 +9,14 @@ from scipy.signal import find_peaks
 parser = argparse.ArgumentParser(description="create a chart diagram")
 parser.add_argument('file', help='OHLC data file)')
 parser.add_argument('-p', '--profile', type=str, help="file with volume profile data")
-parser.add_argument('-s', '--start', type=int, default=0, help="start offset (sec) of bar in charts file")
-parser.add_argument('-n', '--num-bars', type=int, help="number of bars to be drawn into chart")
+parser.add_argument('-s', '--start', type=int, default=0, help="start offset (sec) of candle in charts file")
+parser.add_argument('-n', '--num-candles', type=int, help="number of candles to be drawn into chart")
 args = parser.parse_args()
 
 # 1. CSV-Datei einlesen
 df_sticks = pd.read_csv(args.file)
-if args.num_bars:
-    df_sticks = df_sticks.iloc[args.start:args.start + args.num_bars]
+if args.num_candles:
+    df_sticks = df_sticks.iloc[args.start:args.start + args.num_candles]
 else:
     df_sticks = df_sticks.iloc[args.start:]
 
@@ -45,7 +45,7 @@ if 'average' in df_sticks.columns:
     additional_plots.append(mpf.make_addplot(df_sticks['average'], type='scatter', color='grey', marker='o', markersize=markersize, panel=0))
 
 if 'contracts' in df_sticks.columns:
-    additional_plots.append(mpf.make_addplot(df_sticks['contracts'], type='bar', width=0.5, panel=2))
+    additional_plots.append(mpf.make_addplot(df_sticks['contracts'], type='candle', width=0.5, panel=2))
     df_sticks["long"]  = np.where(df_sticks["contracts"] > 0, df_sticks["Low"] - 2, np.nan)
     if df_sticks["long"].notna().any():
         additional_plots.append(mpf.make_addplot(df_sticks["long"].values, type="scatter", marker="^", color="white", edgecolors="black", linewidths=0.5, markersize=4*markersize, panel=0))
@@ -103,12 +103,12 @@ if args.profile:
     else:
         balken_hoehe = 0.5
 
-    ax_overlay.barh(
+    ax_overlay.candleh(
         y=df_prof['price'],             # Y-Position: Die Preise aus der zweiten CSV
         width=df_prof['volume'],       # X-Länge: Das skalierte Volumen
         height=balken_hoehe,            # Dicke der Balken
         color='#1f77b4',
-        alpha=0.5,                     # Transparent, damit die Kerzen sichtbar bleiben
+        alpha=0.5,                     # Transparent, damit die Kerzen sichtcandle bleiben
         align='center',
     )
     ax_overlay.plot(df_prof['smooth_volume'], df_prof['price'], color='#1f77b4', linewidth=1)

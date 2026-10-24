@@ -4,7 +4,7 @@
 
 import pytest
 from typing import Iterable
-from brokersim import BrokerSim
+from chartsim import BrokerProxy
 from model import Trade
 
 @pytest.fixture
@@ -30,7 +30,7 @@ def trades():
 
 
 def test_forward_to(trades):
-    broker = BrokerSim(trades)
+    broker = BrokerProxy(trades)
     assert broker.time == 0
     assert broker.next_trade.timestamp == 16000000000
     broker.forward_to(24700000000)
@@ -44,14 +44,19 @@ def test_forward_to(trades):
     broker.forward_to(24800000000)
     assert broker.time == 24800000000
     assert broker.next_trade.price == 30506
-    broker.forward_to(32000000000)
-    assert broker.next_trade == None
+
+    with pytest.raises(StopIteration):
+        broker.forward_to(32000000000)
+
 
 def test_order_long(trades):
-    broker = BrokerSim(trades)
+    broker = BrokerProxy(trades)
 
     broker.forward_to(20000000000)
     assert broker.next_trade.volume == 5
+    ordered_trade = broker.order(0, 2)
+    assert ordered_trade == None
+
     ordered_trade = broker.order(3, 2)
     assert ordered_trade.price == 30505
     assert ordered_trade.timestamp == 20500000000
@@ -68,7 +73,7 @@ def test_order_long(trades):
     assert broker.contracts == 0
 
 def test_order_short(trades):
-    broker = BrokerSim(trades)
+    broker = BrokerProxy(trades)
 
     broker.forward_to(20000000000)
     assert broker.next_trade.volume == 5
@@ -89,7 +94,7 @@ def test_order_short(trades):
     assert broker.stop_loss is None
 
 def test_stop_loss_long(trades):
-    broker = BrokerSim(trades)
+    broker = BrokerProxy(trades)
     broker.forward_to(19000000000)
     
     ordered_trade = broker.order(2, 2)
@@ -107,12 +112,12 @@ def test_stop_loss_long(trades):
 
     broker.stop_loss = 30503.9
     assert broker.stop_loss == 30504
-    
-    executed_trade = broker.forward_to(40000000000)
-    executed_trade.price == 30503
+
+    with pytest.raises(StopIteration):
+        executed_trade = broker.forward_to(40000000000)
 
 def test_stop_loss_short(trades):
-    broker = BrokerSim(trades)
+    broker = BrokerProxy(trades)
     broker.forward_to(19000000000)
     ordered_trade = broker.order(-2, 2)
     assert ordered_trade.price == 30504

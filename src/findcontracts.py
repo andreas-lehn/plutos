@@ -10,9 +10,9 @@ def find_contracts(file: str):
     with open(file, mode="r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         i = 0
-        for bar in reader:
-            if int(bar['contracts']) != 0:
-                print(f"[{i:4d}]: contracts = {bar['contracts']}")
+        for candle in reader:
+            if int(candle['contracts']) != 0:
+                print(f"[{i:4d}]: contracts = {candle['contracts']}")
             i += 1
 
 if __name__ == '__main__':

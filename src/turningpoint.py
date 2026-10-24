@@ -4,7 +4,7 @@
 # dieser Trader steigt ein, wenn EMA9 die Richtung wechselt...
 #
 
-from model import MarketModel, Chart, Bar
+from model import MarketModel, Chart, Candle
 
 class TurningPoint:
 
@@ -27,39 +27,39 @@ class TurningPoint:
         else:
             return 0, 0 # pragma: no cover
 
-    def on_bar(self, bar: Bar, chart: Chart):
+    def on_candle(self, candle: Candle, chart: Chart):
         contracts, stop_loss = 0, 0
 
         if len(chart) > 48: # TODO: Konstante definieren: wir können starten, wenn alle daten aus der vergangenheit vorhanden sind.
             avg_range = chart.average_range(9)
             threshold = self.THRESHOLD_FACTOR * avg_range
-            ema_fast = bar.ema_fast
-            ema_slow = bar.ema_slow
+            ema_fast = candle.ema_fast
+            ema_slow = candle.ema_slow
 
-            bar_1 = chart.look_back(1)
-            ema_fast_1 = bar_1.ema_fast
-            ema_slow_1 = bar_1.ema_slow
+            candle_1 = chart.look_back(1)
+            ema_fast_1 = candle_1.ema_fast
+            ema_slow_1 = candle_1.ema_slow
             delta_ema = ema_fast - ema_slow
 
-            if delta_ema > threshold and bar.delta < 0 and -(ema_fast - ema_fast_1) > (ema_slow - ema_slow_1) * self.GRADIENT_FACTOR:
+            if delta_ema > threshold and candle.delta < 0 and -(ema_fast - ema_fast_1) > (ema_slow - ema_slow_1) * self.GRADIENT_FACTOR:
                 # ema_fast ist weit über ema_slow und fällt schneller als ema_slow steigt
                 # we go short
                 contracts, stop_loss = self.contract_size(-1, avg_range)
-            elif delta_ema < -threshold and bar.delta > 0 and (ema_fast - ema_fast_1) > -(ema_slow - ema_slow_1) * self.GRADIENT_FACTOR:
-                # ema_fast is far below ema_slow and current bar is rising and ema short is rising much faster than ema long is sinking
+            elif delta_ema < -threshold and candle.delta > 0 and (ema_fast - ema_fast_1) > -(ema_slow - ema_slow_1) * self.GRADIENT_FACTOR:
+                # ema_fast is far below ema_slow and current candle is rising and ema short is rising much faster than ema long is sinking
                 # we go long
                 contracts, stop_loss = self.contract_size(1, avg_range)
 
-        bar.contracts = contracts
-        bar.stop_loss = stop_loss
+        candle.contracts = contracts
+        candle.stop_loss = stop_loss
 
-    def simulate(file, num_bars: int = None, bar_size: int = 36, **kwargs): # pragma: no cover
-        main_chart = Chart(bar_size=bar_size)
+    def simulate(file, num_candles: int = None, candle_size: int = 36, **kwargs): # pragma: no cover
+        main_chart = Chart(candle_size=candle_size)
         model = MarketModel()
         model.charts.append(main_chart)
         trader = TurningPoint(**kwargs)
-        main_chart.register_callback(trader.on_bar)
-        model.simulate_file(file, num_bars * bar_size if num_bars else 24*60*60*10**9)
+        main_chart.register_callback(trader.on_candle)
+        model.simulate_file(file, num_candles * candle_size if num_candles else 24*60*60*10**9)
         return main_chart
 
 if __name__ == '__main__':
@@ -68,8 +68,8 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description="Simulate Yesterdays Weather trader on historical data")
     parser.add_argument('file', help='name of Databento native file (.dbn)')
-    parser.add_argument('-b', '--bar-size', type=int, default=36, help="size of bar in seconds")
-    parser.add_argument('-n', '--num-bars', type=int, default=sys.maxsize, help='number of bars to simulate')
+    parser.add_argument('-b', '--candle-size', type=int, default=36, help="size of candle in seconds")
+    parser.add_argument('-n', '--num-candles', type=int, default=sys.maxsize, help='number of candles to simulate')
     parser.add_argument('-o', '--out-file', type=str, required=True, help="name of output file")
     parser.add_argument('-m', '--max-loss', type=int, default=100, help="name of file for volume profile data")
     parser.add_argument('-s', '--stop-loss-factor', type=float, default=1.0, help="stop loss adjustment factor")
@@ -79,11 +79,11 @@ if __name__ == '__main__':
 
     main_chart = TurningPoint.simulate(
         file=args.file,
-        bar_size=args.bar_size,
-        num_bars=args.num_bars,
+        candle_size=args.candle_size,
+        num_candles=args.num_candles,
         max_loss=args.max_loss,
         stop_loss_factor=args.stop_loss_factor,
         threshold_factor=args.threshold_factor,
         gradient_factor=args.gradient_factor,
     )
-    main_chart.to_file(args.out_file, fieldnames=Bar.OHLC_FIELDNAMES + TurningPoint.FIELDNAMES)
+    main_chart.to_file(args.out_file, fieldnames=Candle.OHLC_FIELDNAMES + TurningPoint.FIELDNAMES)

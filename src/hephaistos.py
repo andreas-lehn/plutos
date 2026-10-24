@@ -4,11 +4,10 @@
 
 import csv
 from pathlib import Path
-from model import Bar, Chart, MarketModel
+from model import Candle, Chart, MarketModel
 import pandas as pd
 import numpy as np
 import xgboost as xgb
-from model import MarketModel, Chart, Bar
 
 MAX_LOSS = 50
 START_OFFSET = 48 # don't begin trading bevor this offset in seconds since start of the session
@@ -22,48 +21,48 @@ class Hephaistos:
         self.model.load_model(model_path)
         self.threshold = threshold
  
-    def contract_size(direction: int, bar: Bar) -> (int, int):
+    def contract_size(direction: int, candle: Candle) -> (int, int):
         """ calculates contract size and stop loss of a contract """
         if direction < 0:
-            stop_loss = bar.high - bar.average
+            stop_loss = candle.high - candle.average
             max_contracts = MAX_LOSS // stop_loss
             return -max_contracts, stop_loss
         elif direction > 0:
-            stop_loss = bar.average - bar.low
+            stop_loss = candle.average - candle.low
             max_contracts = MAX_LOSS // stop_loss
             return max_contracts, -stop_loss
         else:
             return 0, 0 # pragma: no cover
 
-    def on_bar(self, bar: Bar, chart: Chart):
+    def on_candle(self, candle: Candle, chart: Chart):
         contracts, stop_loss, prediction = 0, 0, 0
 
         if len(chart) > 48:
-            data = DataCollector.data_set(bar, chart)
+            data = DataCollector.data_set(candle, chart)
             data['time'] = len(chart) - 1
             df = pd.DataFrame([data])
             df = df[DataCollector.FIELDNAMES[:-1]]
             prediction = self.model.predict(df)[0]
 
             if abs(prediction) > self.threshold:
-                contracts, stop_loss = Hephaistos.contract_size(prediction, bar)
+                contracts, stop_loss = Hephaistos.contract_size(prediction, candle)
     
-        bar.contracts = contracts
-        bar.stop_loss = stop_loss
-        bar.prediction = prediction
+        candle.contracts = contracts
+        candle.stop_loss = stop_loss
+        candle.prediction = prediction
 
-    def simulate(file, model_path: Path, bar_size: int = 36, num_bars: int = None, threshold: int = 20): # pragma: no cover
-        main_chart = Chart(bar_size)
+    def simulate(file, model_path: Path, candle_size: int = 36, num_candles: int = None, threshold: int = 20): # pragma: no cover
+        main_chart = Chart(candle_size)
         model = MarketModel()
         model.charts.append(main_chart)
         trader = Hephaistos(model_path, threshold)
-        main_chart.register_callback(trader.on_bar)
-        model.simulate_file(file, num_bars * bar_size if num_bars else 24*60*60*10**9)
+        main_chart.register_callback(trader.on_candle)
+        model.simulate_file(file, num_candles * candle_size if num_candles else 24*60*60*10**9)
         return main_chart
 
 
 class DataCollector:
-    """ delivers a data set for each bar """
+    """ delivers a data set for each candle """
 
     FIELDNAMES = [
         'time', 
@@ -79,31 +78,31 @@ class DataCollector:
         self.time = 0
         self.data = []
  
-    def data_set(bar: Bar, chart: Chart):
+    def data_set(candle: Candle, chart: Chart):
         data = {}
-        data['low']    = bar.average - bar.low
-        data['high']   = bar.average - bar.high
-        data['close']  = bar.average - bar.close
-        data['delta']  = bar.delta
-        data['range']  = bar.range
-        data['volume'] = bar.volume
-        data['ema_fast'] = bar.average - bar.ema_fast
-        data['ema_slow'] = bar.average - bar.ema_slow
+        data['low']    = candle.average - candle.low
+        data['high']   = candle.average - candle.high
+        data['close']  = candle.average - candle.close
+        data['delta']  = candle.delta
+        data['range']  = candle.range
+        data['volume'] = candle.volume
+        data['ema_fast'] = candle.average - candle.ema_fast
+        data['ema_slow'] = candle.average - candle.ema_slow
         
-        bar_1 = chart.look_back(1)
-        data['avg_1']      = bar.average - bar_1.average
-        data['ema_fast_1'] = bar.ema_fast - bar_1.ema_fast
-        data['ema_slow_1'] = bar.ema_slow - bar_1.ema_slow
+        candle_1 = chart.look_back(1)
+        data['avg_1']      = candle.average - candle_1.average
+        data['ema_fast_1'] = candle.ema_fast - candle_1.ema_fast
+        data['ema_slow_1'] = candle.ema_slow - candle_1.ema_slow
 
-        bar_3 = chart.look_back(3)
-        data['avg_3']      = bar.average - bar_3.average
-        data['ema_fast_3'] = bar.ema_fast - bar_3.ema_fast
-        data['ema_slow_3'] = bar.ema_slow - bar_3.ema_slow
+        candle_3 = chart.look_back(3)
+        data['avg_3']      = candle.average - candle_3.average
+        data['ema_fast_3'] = candle.ema_fast - candle_3.ema_fast
+        data['ema_slow_3'] = candle.ema_slow - candle_3.ema_slow
 
         return data
     
-    def on_bar(self, bar: Bar, chart: Chart):
-        data = DataCollector.data_set(bar, chart)
+    def on_candle(self, candle: Candle, chart: Chart):
+        data = DataCollector.data_set(candle, chart)
         data['time'] = self.time
         data['target'] = None
         self.data.append(data)
@@ -112,7 +111,7 @@ class DataCollector:
         # set target value in past data sets
         offset = DataCollector.LOOK_AHEAD + 1
         if len(self.data) >= offset:
-            self.data[-offset]['target'] = bar.average - chart[-offset].average
+            self.data[-offset]['target'] = candle.average - chart[-offset].average
 
     def data_path(file: Path) -> Path:
         """ generates the path for training data file from a source file (.dbn) """
@@ -164,8 +163,8 @@ def prepare_cmd(prog_name: str, args):  #pragma: no cover
         path = Path(file)
 
         collector = DataCollector()
-        main_chart = Chart(bar_size=args.bar_size)
-        main_chart.register_callback(collector.on_bar)
+        main_chart = Chart(candle_size=args.candle_size)
+        main_chart.register_callback(collector.on_candle)
         model = MarketModel()
         model.charts.append(main_chart)
         model.simulate_file(path)
@@ -230,8 +229,8 @@ def sim_cmd(prog_name: str, args): # pragma; no cover
     """ simulate a Databento trades file with Hephaistos """
     print (f"{prog_name}: I simulate file '{args.file}'")
     
-    chart = Hephaistos.simulate(args.file, args.model, args.bar_size, args.num_bars, args.threshold)
-    chart.to_file(args.out_file, fieldnames=Bar.OHLC_FIELDNAMES + Hephaistos.FIELDNAMES)
+    chart = Hephaistos.simulate(args.file, args.model, args.candle_size, args.num_candles, args.threshold)
+    chart.to_file(args.out_file, fieldnames=Candle.OHLC_FIELDNAMES + Hephaistos.FIELDNAMES)
 
 
 if __name__ == '__main__':
@@ -239,7 +238,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description="Hephaistos training utility")
     parser.set_defaults(command=lambda prog_anme, args: parser.print_usage())
-    parser.add_argument('-b', '--bar-size', type=int, default=36, help="size of a bar")
+    parser.add_argument('-b', '--candle-size', type=int, default=36, help="size of a candle")
     subparsers = parser.add_subparsers()
 
     train = subparsers.add_parser('fit', description='fit a model from historical data')
@@ -261,7 +260,7 @@ if __name__ == '__main__':
     sim.add_argument('file', type=str, help="file (.dbn) to simulate")
     sim.add_argument('-m', '--model', type=str, default='hephaistos.json', help='model file')
     sim.add_argument('-t', '--threshold', type=int, default=20, help='threshold to start a trade')
-    sim.add_argument('-n', '--num-bars', type=int, help='number of bars to simulate')
+    sim.add_argument('-n', '--num-candles', type=int, help='number of candles to simulate')
     sim.add_argument('-o', '--out-file', type=str, required=True, help="name of output file")
 
     sim.set_defaults(command=sim_cmd)

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from model import BarBuilder, SampleLoader
+from model import CandleBuilder, SampleLoader
 from trader import KentBeckTrader, Statistics, Trade
 
 pd.options.display.float_format = "{:.2f}".format
@@ -13,17 +13,17 @@ DATA_DIR = Path(os.getenv("DATABENTO_DIR", "../databento"))
 
 SYMBOL = "MNQZ6"
 DATE = "2026-10-01"
-BAR_SIZE = "30s"
+CANDLE_SIZE = "30s"
 
 REFERENCE_DAYS = ["2026-09-14", "2026-09-18", "2026-09-23", "2026-09-28", "2026-10-01"]
 
 
-def filename(date: str = DATE, bar: str = BAR_SIZE, symbol: str = SYMBOL) -> str:
-    return f"{symbol}_{date}_{bar}.csv"
+def filename(date: str = DATE, candle: str = CANDLE_SIZE, symbol: str = SYMBOL) -> str:
+    return f"{symbol}_{date}_{candle}.csv"
 
 
-def pathname(date: str = DATE, bar: str = BAR_SIZE, symbol: str = SYMBOL) -> str:
-    return DATA_DIR / filename(date, bar, symbol)
+def pathname(date: str = DATE, candle: str = CANDLE_SIZE, symbol: str = SYMBOL) -> str:
+    return DATA_DIR / filename(date, candle, symbol)
 
 
 def run(
@@ -35,7 +35,7 @@ def run(
     if isinstance(files, (str, Path)):
         trader = KentBeckTrader(filter_constant, slope_threshold, margin)
         loader = SampleLoader()
-        builder = BarBuilder(60)
+        builder = CandleBuilder(60)
         builder.add_listener(trader)
         loader.add_listener(builder)
         loader.load_and_stream(files)
@@ -53,7 +53,7 @@ if __name__ == "__main__":
     parser.add_argument("-f", "--filter", type=float, default=0.5, help="PT1 filter constant")
     parser.add_argument("-s", "--slope-threshold", type=float, default=0.001, help="threshold for slope")
     parser.add_argument("-m", "--margin", type=float, default=1.0, help="stop loss margin")
-    parser.add_argument("files", nargs="+", help="list of CSV file with bars to be simulated")
+    parser.add_argument("files", nargs="+", help="list of CSV file with candles to be simulated")
     args = parser.parse_args()
 
     stats = run(args.files, args.filter, args.slope_threshold, args.margin)

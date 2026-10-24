@@ -2,9 +2,9 @@
 # Evaluates trading signals
 #
 # a signal is considered as correct,
-# if the trend of the next 3 bars (average) goes in the direction of the signal
+# if the trend of the next 3 candles (average) goes in the direction of the signal
 #
-# let b_0 be the bar of the signal.
+# let b_0 be the candle of the signal.
 # then the following conditions must be fulfilled:
 #
 #  (1) b_3.average > b_1.average
@@ -39,13 +39,13 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Evaluate win rate")
     parser.add_argument('files', nargs="+", help='chart data in csv file')
     parser.add_argument('-l', '--look-ahead', type=int, default=3, help="look ahead distance (default == 3)")
-    parser.add_argument('-b', '--bar-size', type=int, default=36, help="size of bar in seconds")
+    parser.add_argument('-b', '--candle-size', type=int, default=36, help="size of candle in seconds")
     args = parser.parse_args()
 
     results = []
     for file in args.files:
-        chart = YesterdaysWeather.simulate(file, bar_size=args.bar_size)
-        df = pd.DataFrame([bar.to_filtered_dict(['average', 'contracts']) for bar in chart])
+        chart = YesterdaysWeather.simulate(file, candle_size=args.candle_size)
+        df = pd.DataFrame([candle.to_filtered_dict(['average', 'contracts']) for candle in chart])
         wins, trades = win_rate(df, args.look_ahead)
         symbol, d, _, _ = split_filename(file)
         results.append({'date': date.fromisoformat(d), 'symbol': symbol, 'wins': wins, 'trades': trades})

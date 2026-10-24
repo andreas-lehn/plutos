@@ -2,7 +2,7 @@
 # Yesterdays Weather trader
 #
 
-from model import MarketModel, Chart, Bar
+from model import MarketModel, Chart, Candle
 
 class YesterdaysWeather:
 
@@ -12,7 +12,7 @@ class YesterdaysWeather:
         self.MAX_LOSS = max_loss
         self.STOP_LOSS_FACTOR = stop_loss_factor
 
-    def contract_size(self, direction: int, bar: Bar, chart: Chart) -> (int, int):
+    def contract_size(self, direction: int, candle: Candle, chart: Chart) -> (int, int):
         """ calculates contract size and stop loss of a contract """
         stop_loss = round(chart.average_range(9) * self.STOP_LOSS_FACTOR)
         max_contracts = self.MAX_LOSS // stop_loss
@@ -23,30 +23,30 @@ class YesterdaysWeather:
         else:
             return 0, 0 # pragma: no cover
 
-    def on_bar(self, bar: Bar, chart: Chart):
+    def on_candle(self, candle: Candle, chart: Chart):
         contracts, stop_loss = 0, 0
 
         trend = chart.trend_length
-        if bar.direction > 0:
+        if candle.direction > 0:
             # we may go long...
             if trend >= self.TREND_LENGTH:
                 # we have a trend of a least 2 and we are not completely above fast EMA
-                contracts, stop_loss = self.contract_size(1, bar, chart)
-        elif bar.direction < 0:
+                contracts, stop_loss = self.contract_size(1, candle, chart)
+        elif candle.direction < 0:
             # we may go short...
             if trend >= self.TREND_LENGTH:
-                contracts, stop_loss = self.contract_size(-1, bar, chart)
+                contracts, stop_loss = self.contract_size(-1, candle, chart)
 
-        bar.contracts = contracts
-        bar.stop_loss = stop_loss
+        candle.contracts = contracts
+        candle.stop_loss = stop_loss
 
-    def simulate(file, num_bars: int = None, bar_size: int = 36, **kwargs): # pragma: no cover
-        main_chart = Chart(bar_size=bar_size)
+    def simulate(file, num_candles: int = None, candle_size: int = 36, **kwargs): # pragma: no cover
+        main_chart = Chart(candle_size=candle_size)
         model = MarketModel()
         model.charts.append(main_chart)
         trader = YesterdaysWeather(**kwargs)
-        main_chart.register_callback(trader.on_bar)
-        model.simulate_file(file, num_bars * bar_size if num_bars else 24*60*60*10**9)
+        main_chart.register_callback(trader.on_candle)
+        model.simulate_file(file, num_candles * candle_size if num_candles else 24*60*60*10**9)
         return main_chart
 
 if __name__ == '__main__':
@@ -55,8 +55,8 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description="Simulate Yesterdays Weather trader on historical data")
     parser.add_argument('file', help='name of Databento native file (.dbn)')
-    parser.add_argument('-b', '--bar-size', type=int, default=36, help="size of bar in seconds")
-    parser.add_argument('-n', '--num-bars', type=int, default=sys.maxsize, help='number of bars to simulate')
+    parser.add_argument('-b', '--candle-size', type=int, default=36, help="size of candle in seconds")
+    parser.add_argument('-n', '--num-candles', type=int, default=sys.maxsize, help='number of candles to simulate')
     parser.add_argument('-o', '--out-file', type=str, required=True, help="name of output file")
     parser.add_argument('-l', '--trend-length', type=int, default=4, help="length of the trend needed for a signal")
     parser.add_argument('-m', '--max-loss', type=int, default=50, help="name of file for volume profile data")
@@ -65,10 +65,10 @@ if __name__ == '__main__':
 
     main_chart = YesterdaysWeather.simulate(
         file=args.file,
-        num_bars=args.num_bars,
-        bar_size=args.bar_size,
+        num_candles=args.num_candles,
+        candle_size=args.candle_size,
         trend_length=args.trend_length,
         max_loss=args.max_loss,
         stop_loss_factor=args.stop_loss_factor,
     )
-    main_chart.to_file(args.out_file, fieldnames=Bar.OHLC_FIELDNAMES + YesterdaysWeather.FIELDNAMES)
+    main_chart.to_file(args.out_file, fieldnames=Candle.OHLC_FIELDNAMES + YesterdaysWeather.FIELDNAMES)

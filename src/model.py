@@ -1,7 +1,7 @@
 """
 data model for trading bot
 
-contains classes for trades, bars, charts,...
+contains classes for trades, candles, charts,...
 """
 
 
@@ -79,13 +79,12 @@ class TradePair():
             'total_ticks': self.total_ticks,
         }
 
-class Position:
+class TradeMatcher:
     """ represents a position """
 
     def __init__(self):
         self.trades = deque()
         self.trade_pairs = []
-        self.stop_loss = None
 
     @property
     def is_flat(self):
@@ -374,7 +373,7 @@ class SampleBuilder:
                 return
 
             if self.sample is None:
-                # this is the first sample sample of the bar
+                # this is the first sample sample of the candle
                 self.sample = Sample(trade.timestamp, VolumeProfile())
                 self.timestamp = timestamp
 
@@ -408,7 +407,7 @@ class SampleBuilder:
         self.sample = None
 
 
-class Bar():
+class Candle:
     """ accumulates multipe samples """
 
     def __init__(self):
@@ -416,8 +415,6 @@ class Bar():
         self._timestamp: int = 0
         self._samples: Iterable[VolumeProfile] = deque()
         self._volumes: Iterable[int] = VolumeProfile()
-        #self.ema_fast = None
-        #self.ema_slow = None
 
     @property
     def timestamp(self) -> int:
@@ -497,23 +494,23 @@ class Bar():
 
     @classmethod
     def from_sample(cls, sample: VolumeProfile | Sample):
-        bar = Bar()
-        bar.append(sample)
-        return bar
+        candle = Candle()
+        candle.append(sample)
+        return candle
     
     @classmethod
     def from_samples(cls, samples: Iterable[VolumeProfile | Sample]):
-        bar = Bar()
+        candle = Candle()
         for sample in samples:
-            bar.append(sample)
-        return bar
+            candle.append(sample)
+        return candle
     
     def __iter__(self):
         return self._samples.__iter__()
 
     def __repr__(self): # pragma: no cover
         return (
-            "Bar("
+            "Candle("
                 f"open={self.open},"
                 f"low={self.low},"
                 f"avg={self.average},"
@@ -526,18 +523,18 @@ class Bar():
 
 
 class Chart():
-    """ a chart contains a sequence of Bars all with the same size 
+    """ a chart contains a sequence of Candles all with the same size 
     
     A chart has a limited size.
-    New bars cause old bars to disappear.
+    New candles cause old candles to disappear.
 
     """
 
-    def __init__(self, bar_size: int, maxlen: int = None):
-        self._bar_size = bar_size
-        self._current_bar = Bar()
+    def __init__(self, candle_size: int, maxlen: int = None):
+        self._candle_size = candle_size
+        self._current_candle = Candle()
         self._maxlen = maxlen if maxlen else sys.maxsize
-        self._bars = deque()
+        self._candles = deque()
         self._volumes = VolumeProfile()
         self._callbacks = []
 
@@ -547,9 +544,9 @@ class Chart():
     def unregister_callback(self, callback):
         self._callbacks.remove(callback)
 
-    def _notify_listeners(self, bar):
+    def _notify_listeners(self, candle):
         for cb in self._callbacks:
-            cb(bar, self)
+            cb(candle, self)
 
     def average_range(self, n: int = 5) -> int:
         if n == 0:
@@ -559,10 +556,10 @@ class Chart():
             return self.average_range(len(self))
         
         sum_range = 0
-        for i, bar in enumerate(reversed(self._bars)):
+        for i, candle in enumerate(reversed(self._candles)):
             if i == n:
                 break # pragma: no cover
-            sum_range += bar.range
+            sum_range += candle.range
         return round(sum_range / n)
 
 #    def delta(self, n: int = 5) -> int:
@@ -578,8 +575,8 @@ class Chart():
     def volumes(self) -> VolumeProfile:
         return self._volumes
 
-    def from_samples(samples, bar_size, maxlen=None):
-        chart = Chart(bar_size, maxlen)
+    def from_samples(samples, candle_size, maxlen=None):
+        chart = Chart(candle_size, maxlen)
         for sample in samples:
             chart.append(sample)
         return chart
@@ -588,106 +585,106 @@ class Chart():
         """ appends sample to a chart
         
         Appending samples to a chart is the way to build up a chart.
-        Dependingn on the bar size new bars will be addded sone times.
+        Dependingn on the candle size new candles will be addded sone times.
 
-        When a bar is added to a chart, some characteristic propertys often used in trading applications
-        are calculated and attached as properties to the bar.
+        When a candle is added to a chart, some characteristic propertys often used in trading applications
+        are calculated and attached as properties to the candle.
         These properties are:
 
          * `ema_fast`   exponential moving average with periodicity 3 (short term moving average)
          * `ema_slow`   exponential moving average with periodicity 19 (long term moving average)
-         * `direction`  direction, in which the bar is moving expressed as a positiv/negative number showing the strength in ticks
+         * `direction`  direction, in which the candle is moving expressed as a positiv/negative number showing the strength in ticks
         
         """
-        self._current_bar.append(sample)
+        self._current_candle.append(sample)
         self._volumes += sample.volumes
-        if len(self._current_bar) >= self._bar_size:
-            self._commit_current_bar()
-            if len(self._bars) > self._maxlen:
+        if len(self._current_candle) >= self._candle_size:
+            self._commit_current_candle()
+            if len(self._candles) > self._maxlen:
                 # chart is full, remove an old one
                 self.popleft()            
-            self._notify_listeners(self._current_bar)
-            self._current_bar = Bar()
+            self._notify_listeners(self._current_candle)
+            self._current_candle = Candle()
 
-    def popleft(self) -> Bar:
-        bar = self._bars.popleft()
-        self._volumes -= bar.volumes
-        return bar
+    def popleft(self) -> Candle:
+        candle = self._candles.popleft()
+        self._volumes -= candle.volumes
+        return candle
 
     @property
     def trend_length(self) -> int:
         """ length of the trend """
         length = 0
         direction = None
-        for bar in reversed(self._bars):
+        for candle in reversed(self._candles):
             if direction == None:
-                direction = bar.direction
-            elif (average - bar.average) * direction > 0:
+                direction = candle.direction
+            elif (average - candle.average) * direction > 0:
                 length += 1
             else:
                 break
-            average = bar.average
+            average = candle.average
         return length
 
     @property
     def trend_direction(self) -> int:
         """ direction of the trend (in ticks)"""
         direction = 0
-        if len(self._bars) > 0:
-            direction = self._bars[-1].direction
+        if len(self._candles) > 0:
+            direction = self._candles[-1].direction
         return direction
         
     EMA_FAST_FACTOR = 0.5   # = 2 / (3 + 1)
     EMA_SLOW_FACTOR = EMA_FAST_FACTOR / 5
 
     def _exp_moving_avg(value: float, ema: float, factor: float):
-        """ calculates the exponetial moving average of bar """
+        """ calculates the exponetial moving average of candle """
         return value * factor + ema * (1 - factor)
 
-    def _direction(bar: Bar, last_bar: Bar):
-        """ calculates the direction of bar """
-        dir = bar.delta
-        if last_bar:
-            dir_last = bar.average - last_bar.average
+    def _direction(candle: Candle, last_candle: Candle):
+        """ calculates the direction of candle """
+        dir = candle.delta
+        if last_candle:
+            dir_last = candle.average - last_candle.average
             if dir * dir_last > 0:
                 dir = dir_last
             else:
                 dir = 0
         return dir
     
-    def _commit_current_bar(self):
-        bar = self._current_bar
-        last_bar = None
-        if len(self._bars) == 0:
-            bar.ema_fast = self._current_bar.average
-            bar.ema_slow = self._current_bar.average
-            bar.direction = bar.delta
+    def _commit_current_candle(self):
+        candle = self._current_candle
+        last_candle = None
+        if len(self._candles) == 0:
+            candle.ema_fast = self._current_candle.average
+            candle.ema_slow = self._current_candle.average
+            candle.direction = candle.delta
         else:
-            last_bar = self[-1]
-            bar.ema_fast = Chart._exp_moving_avg(bar.average, last_bar.ema_fast, Chart.EMA_FAST_FACTOR)
-            bar.ema_slow = Chart._exp_moving_avg(bar.average, last_bar.ema_slow, Chart.EMA_SLOW_FACTOR)
-            bar.direction = Chart._direction(bar, last_bar)
-        self._bars.append(bar)
+            last_candle = self[-1]
+            candle.ema_fast = Chart._exp_moving_avg(candle.average, last_candle.ema_fast, Chart.EMA_FAST_FACTOR)
+            candle.ema_slow = Chart._exp_moving_avg(candle.average, last_candle.ema_slow, Chart.EMA_SLOW_FACTOR)
+            candle.direction = Chart._direction(candle, last_candle)
+        self._candles.append(candle)
 
-    def to_file(self, file: str | Path, fieldnames = Bar.OHLC_FIELDNAMES): # pragma: no cover
+    def to_file(self, file: str | Path, fieldnames = Candle.OHLC_FIELDNAMES): # pragma: no cover
         with open(file, "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
-            writer.writerows([bar.to_filtered_dict(fieldnames) for bar in self])
+            writer.writerows([candle.to_filtered_dict(fieldnames) for candle in self])
 
     def __getitem__(self, index: int) -> int:
-        return self._bars[index]
+        return self._candles[index]
 
     def look_back(self, n: int) -> int:
-        if n >= len(self._bars):
-            return self._bars[0]
-        return self._bars[-(n + 1)]
+        if n >= len(self._candles):
+            return self._candles[0]
+        return self._candles[-(n + 1)]
 
     def __iter__(self):
-        return self._bars.__iter__()
+        return self._candles.__iter__()
 
     def __len__(self):
-        return len(self._bars)
+        return len(self._candles)
     
 
 class MarketModel:
@@ -716,10 +713,10 @@ class MarketModel:
         all charts are unlimited
         """
         model = cls()
-        model.charts.append(Chart(bar_size=12, maxlen=15))  #  3 min
-        model.charts.append(Chart(bar_size=36, maxlen=60))  # 36 min
-        model.charts.append(Chart(bar_size=60, maxlen=36))  # 36 min
-        model.charts.append(Chart(bar_size=720, maxlen=120))# 24 Std
+        model.charts.append(Chart(candle_size=12, maxlen=15))  #  3 min
+        model.charts.append(Chart(candle_size=36, maxlen=60))  # 36 min
+        model.charts.append(Chart(candle_size=60, maxlen=36))  # 36 min
+        model.charts.append(Chart(candle_size=720, maxlen=120))# 24 Std
         return model
 
     def simulate_file(self, file: str | Path, duration: int = 0): # pragma: no cover
@@ -745,23 +742,23 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description="load a file into default market model and put out some statistics")
     parser.add_argument('file', help='name of Databento native file (.dbn)')
-    parser.add_argument('-b', '--bar-size', type=int, default=36, help="size of bar in seconds")
-    parser.add_argument('-n', '--num', type=int, default=0, help='number of bars')
+    parser.add_argument('-b', '--candle-size', type=int, default=36, help="size of candle in seconds")
+    parser.add_argument('-n', '--num', type=int, default=0, help='number of candles')
     parser.add_argument('-o', '--ohlc-file', type=str, help="name of file for OHLCV data")
     parser.add_argument('-p', '--profile-file', type=str, help="name of file for volume profile data")
     args = parser.parse_args()
 
-    main_chart = Chart(bar_size=args.bar_size)
+    main_chart = Chart(candle_size=args.candle_size)
     model = MarketModel()
     model.charts.append(main_chart)
-    model.simulate_file(args.file, args.num * args.bar_size)
+    model.simulate_file(args.file, args.num * args.candle_size)
 
     if args.ohlc_file:    
         with open(args.ohlc_file, "w", newline="", encoding="utf-8") as f:
             fieldnames = ['timestamp', 'open', 'low', 'average', 'high', 'close', 'volume', 'ema_fast', 'ema_slow']
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
-            writer.writerows([bar.to_filtered_dict(fieldnames) for bar in main_chart])
+            writer.writerows([candle.to_filtered_dict(fieldnames) for candle in main_chart])
 
     if args.profile_file:
         with open(args.profile_file, "w", newline="", encoding="utf-8") as f:
