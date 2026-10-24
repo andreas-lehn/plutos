@@ -69,12 +69,12 @@ class TradePair():
 
     def to_dict(self) -> dict:
         return {
-            'open_time': datetime.fromtimestamp(self.open_time // 10**9, tz=timezone.utc),
-            'close_time': datetime.fromtimestamp(self.close_time // 10**9, tz=timezone.utc),
+            'open_time': self.open_time, #datetime.fromtimestamp(self.open_time // 10**9, tz=timezone.utc),
+            'close_time': self.close_time, #datetime.fromtimestamp(self.close_time // 10**9, tz=timezone.utc),
             'duration': (self.duration // 10**6) / 1000,
             'size': self.size,
-            'open_price': self.open_price / 4,
-            'close_price': self.close_price / 4,
+            'open_price': self.open_price,
+            'close_price': self.close_price,
             'tick_capture': self.tick_capture,
             'total_ticks': self.total_ticks,
         }
@@ -637,8 +637,11 @@ class Chart():
             direction = self._bars[-1].direction
         return direction
         
-    EMA_9_FACTOR  = 2 / (3 + 1) # (9 + 1)
-    EMA_48_FACTOR = EMA_9_FACTOR / 5 #2 / (48 +1)
+    EMA_FAST_FACTOR = 0.5   # = 2 / (3 + 1)
+    EMA_SLOW_FACTOR = EMA_FAST_FACTOR / 5
+
+    EMA_9_FACTOR  = EMA_FAST_FACTOR
+    EMA_48_FACTOR = EMA_SLOW_FACTOR
 
     def _exp_moving_avg(value: float, ema: float, factor: float):
         """ calculates the exponetial moving average of bar """
@@ -661,9 +664,15 @@ class Chart():
         if len(self._bars) == 0:
             bar.ema_9  = self._current_bar.average
             bar.ema_48 = self._current_bar.average
+            bar.ema_fast = self._current_bar.average
+            bar.ema_mid  = self._current_bar.average
+            bar.ema_slow = self._current_bar.average
+
             bar.direction = bar.delta
         else:
             last_bar = self[-1]
+            bar.ema_fast = Chart._exp_moving_avg(bar.average, last_bar.ema_fast, Chart.EMA_FAST_FACTOR)
+            bar.ema_slow = Chart._exp_moving_avg(bar.average, last_bar.ema_slow, Chart.EMA_SLOW_FACTOR)
             bar.ema_9  = Chart._exp_moving_avg(bar.average, last_bar.ema_9, Chart.EMA_9_FACTOR)
             bar.ema_48 = Chart._exp_moving_avg(bar.average, last_bar.ema_48, Chart.EMA_48_FACTOR)
             bar.direction = Chart._direction(bar, last_bar)
@@ -758,7 +767,7 @@ if __name__ == '__main__':
 
     if args.ohlc_file:    
         with open(args.ohlc_file, "w", newline="", encoding="utf-8") as f:
-            fieldnames = ['timestamp', 'open', 'low', 'average', 'high', 'close', 'volume', 'ema_9', 'ema_48']
+            fieldnames = ['timestamp', 'open', 'low', 'average', 'high', 'close', 'volume', 'ema_fast', 'ema_slow']
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows([bar.to_filtered_dict(fieldnames) for bar in main_chart])

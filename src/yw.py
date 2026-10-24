@@ -7,8 +7,8 @@ from model import MarketModel, Chart, Bar
 class YesterdaysWeather:
 
     FIELDNAMES = ['contracts', 'stop_loss', 'ema_9', 'ema_48']
-
-    def __init__(self, max_loss: int = 50, stop_loss_factor: float = 0.6):
+    def __init__(self, trend_length: int = 3, max_loss: int = 50, stop_loss_factor: float = 0.6):
+        self.TREND_LENGTH = trend_length
         self.MAX_LOSS = max_loss
         self.STOP_LOSS_FACTOR = stop_loss_factor
 
@@ -29,30 +29,22 @@ class YesterdaysWeather:
         trend = chart.trend_length
         if bar.direction > 0:
             # we may go long...
-            if trend > 1 and bar.low < bar.ema_9:
-                # we have a trend of a least 2 and we are not completely above EMA9
-                contracts, stop_loss = self.contract_size(1, bar, chart)
-            elif bar.high < bar.ema_9:
-                # we have a very small (starting?) trend and are completely below the moving average.
+            if trend >= self.TREND_LENGTH:
+                # we have a trend of a least 2 and we are not completely above fast EMA
                 contracts, stop_loss = self.contract_size(1, bar, chart)
         elif bar.direction < 0:
             # we may go short...
-            if trend > 1 and bar.high > bar.ema_9:
-                contracts, stop_loss = self.contract_size(-1, bar, chart)
-            elif bar.low > bar.ema_9:
+            if trend >= self.TREND_LENGTH:
                 contracts, stop_loss = self.contract_size(-1, bar, chart)
 
         bar.contracts = contracts
         bar.stop_loss = stop_loss
 
-    def simulate(file, num_bars: int = None, bar_size: int = 36, max_loss: int = 50, stop_loss_factor: float = 0.6): # pragma: no cover
+    def simulate(file, num_bars: int = None, bar_size: int = 36, **kwargs): # pragma: no cover
         main_chart = Chart(bar_size=bar_size)
         model = MarketModel()
         model.charts.append(main_chart)
-        trader = YesterdaysWeather(
-            max_loss=max_loss,
-            stop_loss_factor=stop_loss_factor,
-        )
+        trader = YesterdaysWeather(**kwargs)
         main_chart.register_callback(trader.on_bar)
         model.simulate_file(file, num_bars * bar_size if num_bars else 24*60*60*10**9)
         return main_chart
@@ -66,9 +58,17 @@ if __name__ == '__main__':
     parser.add_argument('-b', '--bar-size', type=int, default=36, help="size of bar in seconds")
     parser.add_argument('-n', '--num-bars', type=int, default=sys.maxsize, help='number of bars to simulate')
     parser.add_argument('-o', '--out-file', type=str, required=True, help="name of output file")
+    parser.add_argument('-l', '--trend-length', type=int, default=4, help="length of the trend needed for a signal")
     parser.add_argument('-m', '--max-loss', type=int, default=50, help="name of file for volume profile data")
     parser.add_argument('-s', '--stop-loss-factor', type=float, default=0.6, help="stop loss adjustment factor")
     args = parser.parse_args()
 
-    main_chart = YesterdaysWeather.simulate(args.file, args.num_bars, args.bar_size, args.max_loss, args.stop_loss_factor)
+    main_chart = YesterdaysWeather.simulate(
+        file=args.file,
+        num_bars=args.num_bars,
+        bar_size=args.bar_size,
+        trend_length=args.trend_length,
+        max_loss=args.max_loss,
+        stop_loss_factor=args.stop_loss_factor,
+    )
     main_chart.to_file(args.out_file, fieldnames=Bar.OHLC_FIELDNAMES + YesterdaysWeather.FIELDNAMES)
