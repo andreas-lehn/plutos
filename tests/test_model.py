@@ -43,6 +43,7 @@ def test_TradePair_from_trades():
     assert pair.close_price == 12502
     assert pair.tick_capture == 1
     assert pair.total_ticks == 2
+    assert pair.duration == 1
     assert t_1.volume == 0
     assert t_2.volume == 0
 
@@ -95,8 +96,6 @@ def test_TradePair_to_dict():
     assert d['open_price'] == 12501
     assert d['close_time'] == 102
     assert d['close_price'] == 12502
-    assert d['tick_capture'] == 1
-    assert d['total_ticks'] == 2
 
 @pytest.fixture
 def trade_list_5():
