@@ -45,7 +45,7 @@ if 'average' in df_sticks.columns:
     additional_plots.append(mpf.make_addplot(df_sticks['average'], type='scatter', color='grey', marker='o', markersize=markersize, panel=0))
 
 if 'contracts' in df_sticks.columns:
-    additional_plots.append(mpf.make_addplot(df_sticks['contracts'], type='candle', width=0.5, panel=2))
+    additional_plots.append(mpf.make_addplot(df_sticks['contracts'], type='bar', width=0.5, panel=2))
     df_sticks["long"]  = np.where(df_sticks["contracts"] > 0, df_sticks["Low"] - 2, np.nan)
     if df_sticks["long"].notna().any():
         additional_plots.append(mpf.make_addplot(df_sticks["long"].values, type="scatter", marker="^", color="white", edgecolors="black", linewidths=0.5, markersize=4*markersize, panel=0))
