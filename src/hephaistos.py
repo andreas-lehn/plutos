@@ -67,9 +67,9 @@ class DataCollector:
 
     FIELDNAMES = [
         'time', 
-        'low', 'high', 'close', 'delta', 'range', 'volume', 'ema_9', 'ema_48',
-        'avg_1', 'ema_9_1', 'ema_48_1',
-        'avg_3','ema_9_3', 'ema_48_3',
+        'low', 'high', 'close', 'delta', 'range', 'volume', 'ema_fast', 'ema_slow',
+        'avg_1', 'ema_fast_1', 'ema_slow_1',
+        'avg_3','ema_fast_3', 'ema_slow_3',
         'target',
     ]
 
@@ -81,24 +81,24 @@ class DataCollector:
  
     def data_set(bar: Bar, chart: Chart):
         data = {}
-        data['low']     = bar.average - bar.low
-        data['high']    = bar.average - bar.high
-        data['close']   = bar.average - bar.close
-        data['delta']   = bar.delta
-        data['range']   = bar.range
-        data['volume']  = bar.volume
-        data['ema_9']   = bar.average - bar.ema_9
-        data['ema_48']  = bar.average - bar.ema_48
+        data['low']    = bar.average - bar.low
+        data['high']   = bar.average - bar.high
+        data['close']  = bar.average - bar.close
+        data['delta']  = bar.delta
+        data['range']  = bar.range
+        data['volume'] = bar.volume
+        data['ema_fast'] = bar.average - bar.ema_fast
+        data['ema_slow'] = bar.average - bar.ema_slow
         
         bar_1 = chart.look_back(1)
-        data['avg_1']    = bar.average - bar_1.average
-        data['ema_9_1']  = bar.ema_9 - bar_1.ema_9
-        data['ema_48_1'] = bar.ema_48 - bar_1.ema_48
+        data['avg_1']      = bar.average - bar_1.average
+        data['ema_fast_1'] = bar.ema_fast - bar_1.ema_fast
+        data['ema_slow_1'] = bar.ema_slow - bar_1.ema_slow
 
         bar_3 = chart.look_back(3)
-        data['avg_3']    = bar.average - bar_3.average
-        data['ema_9_3']  = bar.ema_9 - bar_3.ema_9
-        data['ema_48_3'] = bar.ema_48 - bar_3.ema_48 
+        data['avg_3']      = bar.average - bar_3.average
+        data['ema_fast_3'] = bar.ema_fast - bar_3.ema_fast
+        data['ema_slow_3'] = bar.ema_slow - bar_3.ema_slow
 
         return data
     

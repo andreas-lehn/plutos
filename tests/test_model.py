@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 import sys
 import pytest
 
-from model import Trade, VolumeProfile, Sample, SampleBuilder, SampleReader, SampleWriter, Bar, Chart, MarketModel
+from model import Trade, TradePair, Position, VolumeProfile, Sample, SampleBuilder, SampleReader, SampleWriter, Bar, Chart, MarketModel
 import marketdata
 
 @pytest.fixture
@@ -32,6 +32,72 @@ def trade_list_40():
         ))
     return trades
 
+def test_TradePair_from_trades():
+    t_1 = Trade(timestamp=101, price=12501, volume=2)
+    t_2 = Trade(timestamp=102, price=12502, volume=-2)
+    pair = TradePair.from_trades(t_1, t_2)
+    assert pair.size == 2
+    assert pair.open_time == 101
+    assert pair.open_price == 12501
+    assert pair.close_time == 102
+    assert pair.close_price == 12502
+    assert pair.tick_capture == 1
+    assert pair.total_ticks == 2
+    assert t_1.volume == 0
+    assert t_2.volume == 0
+
+    t_1 = Trade(timestamp=101, price=12501, volume=-2)
+    t_2 = Trade(timestamp=102, price=12502, volume=2)
+    pair = TradePair.from_trades(t_1, t_2)
+    assert pair.size == -2
+    assert pair.tick_capture == -1
+    assert pair.total_ticks == -2
+    assert t_1.volume == 0
+    assert t_2.volume == 0
+
+    t_1 = Trade(timestamp=101, price=12501, volume=1)
+    t_2 = Trade(timestamp=102, price=12502, volume=-2)
+    pair = TradePair.from_trades(t_1, t_2)
+    assert pair.size == 1    
+    assert pair.tick_capture == 1
+    assert pair.total_ticks == 1
+    assert t_1.volume == 0
+    assert t_2.volume == -1
+
+    t_1 = Trade(timestamp=101, price=12501, volume=3)
+    t_2 = Trade(timestamp=102, price=12502, volume=-2)
+    pair = TradePair.from_trades(t_1, t_2)
+    assert pair.size == 2
+    assert pair.tick_capture == 1
+    assert pair.total_ticks == 2
+    assert t_1.volume == 1
+    assert t_2.volume == 0
+
+    t_1 = Trade(timestamp=101, price=12501, volume=-3)
+    t_2 = Trade(timestamp=102, price=12502, volume=2)
+    pair = TradePair.from_trades(t_1, t_2)
+    assert pair.size == -2
+    assert pair.tick_capture == -1
+    assert pair.total_ticks == -2
+    assert t_1.volume == -1
+    assert t_2.volume == 0
+
+    with pytest.raises(ValueError):
+        TradePair.from_trades(t_1, t_1)
+
+def test_TradePair_to_dict():
+    t_1 = Trade(timestamp=101, price=12501, volume=2)
+    t_2 = Trade(timestamp=102, price=12502, volume=-2)
+    pair = TradePair.from_trades(t_1, t_2)
+    d = pair.to_dict()
+    assert d['size'] == 2
+    assert d['open_time'] == 101
+    assert d['open_price'] == 12501
+    assert d['close_time'] == 102
+    assert d['close_price'] == 12502
+    assert d['tick_capture'] == 1
+    assert d['total_ticks'] == 2
+
 @pytest.fixture
 def trade_list_5():
     trades = [ 
@@ -43,6 +109,39 @@ def trade_list_5():
     ]
     return trades
 
+def test_Position():
+    t_0 = Trade(timestamp=0, price=12501, volume = 2)
+    t_1 = Trade(timestamp=1, price=12503, volume = 3)
+    t_2 = Trade(timestamp=2, price=12499, volume = 4)
+    t_3 = Trade(timestamp=3, price=12501, volume = -3)
+    t_4 = Trade(timestamp=4, price=12501, volume = -1)
+    t_5 = Trade(timestamp=5, price=12501, volume = -6)
+    t_6 = Trade(timestamp=6, price=12501, volume = 1)
+
+    pos = Position()
+    pos.append(t_0)
+    assert pos.size == 2
+    pos.append(t_1)
+    assert pos.size == 5
+    pos.append(t_2)
+    assert pos.size == 9
+    pos.append(t_3)
+    assert pos.size == 6
+    pos.append(t_4)
+    assert pos.size == 5
+    pos.append(t_5)
+    assert pos.size == -1
+    pos.append(t_6)
+    assert pos.size == 0
+    assert pos.is_flat
+
+    assert len(pos.trade_pairs) == 6
+    assert pos.trade_pairs[0].size == 2
+    assert pos.trade_pairs[1].size == 1
+    assert pos.trade_pairs[2].size == 1
+    assert pos.trade_pairs[3].size == 1
+    assert pos.trade_pairs[4].size == 4
+    assert pos.trade_pairs[5].size == -1
 
 def test_VolumeProfile():
     sample = VolumeProfile()
@@ -455,8 +554,8 @@ def test_chart(trades_12):
     assert chart.average_range(5) == 20
 
     bar_0 = chart[0]
-    assert bar_0.ema_9 == bar_0.average
-    assert bar_0.ema_48 == bar_0.average
+    assert bar_0.ema_fast == bar_0.average
+    assert bar_0.ema_slow == bar_0.average
     assert bar_0.direction == bar_0.delta
 
     chart.append(samples[2])
@@ -467,8 +566,8 @@ def test_chart(trades_12):
     assert chart.average_range(5) == 20
 
     bar_1 = chart[1]
-    assert bar_1.ema_9  == 0.2 * bar_1.average + 0.8 * bar_0.average
-    assert bar_1.ema_48 == Chart.EMA_48_FACTOR * bar_1.average + (1 - Chart.EMA_48_FACTOR) * bar_0.average
+    assert bar_1.ema_fast == Chart.EMA_FAST_FACTOR * bar_1.average + Chart.EMA_FAST_FACTOR * bar_0.average
+    assert bar_1.ema_slow == Chart.EMA_SLOW_FACTOR * bar_1.average + (1 - Chart.EMA_SLOW_FACTOR) * bar_0.average
     assert bar_1.direction == 0
 
     chart.append(samples[4])

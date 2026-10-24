@@ -57,23 +57,10 @@ if 'contracts' in df_sticks.columns:
 if 'prediction' in df_sticks.columns:
     additional_plots.append(mpf.make_addplot(df_sticks['prediction'], width=0.5, panel=3))
 
-if 'moving_average' in df_sticks.columns:
-    df_sticks['moving_average'] = df_sticks['moving_average'] / 4
-    additional_plots.append(mpf.make_addplot(df_sticks["moving_average"], color='#1f77b4', panel=0))
-
-if 'ema_9' in df_sticks.columns:
-    df_sticks['ema_9'] = df_sticks['ema_9'] / 4
-    additional_plots.append(mpf.make_addplot(df_sticks["ema_9"], width=0.6, color='#1f77b4', panel=0))
-
-if 'ema_48' in df_sticks.columns:
-    df_sticks['ema_48'] = df_sticks['ema_48'] / 4
-    additional_plots.append(mpf.make_addplot(df_sticks["ema_48"], width=0.6, color='grey', panel=0))
-
-#if 'stop_loss' in df_sticks.columns:
- #   df_sticks['stop_loss'] = df_sticks['stop_loss'] / 4
-  #  df_sticks['stop_loss_absolute'] = np.where(df_sticks['stop_loss'] != 0, df_sticks['average'] + df_sticks['stop_loss'], np.nan)
-   # if df_sticks['stop_loss_absolute'].notna().any():
-    #    additional_plots.append(mpf.make_addplot(df_sticks['stop_loss_absolute'], type='scatter', marker='x', markersize=markersize, panel=0))
+for average in ['ema_fast', 'ema_slow']:
+    if average in df_sticks.columns:
+        df_sticks[average] = df_sticks[average] / 4
+        additional_plots.append(mpf.make_addplot(df_sticks[average], width=0.6, panel=0))
 
 # 3. Candlestick-Basisplot erstellen und Achsen abfangen
 fig, axlist = mpf.plot(

@@ -416,8 +416,8 @@ class Bar():
         self._timestamp: int = 0
         self._samples: Iterable[VolumeProfile] = deque()
         self._volumes: Iterable[int] = VolumeProfile()
-        self.ema_9 = None
-        self.ema_48 = None
+        #self.ema_fast = None
+        #self.ema_slow = None
 
     @property
     def timestamp(self) -> int:
@@ -594,10 +594,10 @@ class Chart():
         are calculated and attached as properties to the bar.
         These properties are:
 
-         * `ema_9`      exponential moving average with periodicity 9 (short term moving average)
-         * `ema_48`     exponential moving average with periodicity 48 (long term moving average)
+         * `ema_fast`   exponential moving average with periodicity 3 (short term moving average)
+         * `ema_slow`   exponential moving average with periodicity 19 (long term moving average)
          * `direction`  direction, in which the bar is moving expressed as a positiv/negative number showing the strength in ticks
-         
+        
         """
         self._current_bar.append(sample)
         self._volumes += sample.volumes
@@ -640,9 +640,6 @@ class Chart():
     EMA_FAST_FACTOR = 0.5   # = 2 / (3 + 1)
     EMA_SLOW_FACTOR = EMA_FAST_FACTOR / 5
 
-    EMA_9_FACTOR  = EMA_FAST_FACTOR
-    EMA_48_FACTOR = EMA_SLOW_FACTOR
-
     def _exp_moving_avg(value: float, ema: float, factor: float):
         """ calculates the exponetial moving average of bar """
         return value * factor + ema * (1 - factor)
@@ -662,19 +659,13 @@ class Chart():
         bar = self._current_bar
         last_bar = None
         if len(self._bars) == 0:
-            bar.ema_9  = self._current_bar.average
-            bar.ema_48 = self._current_bar.average
             bar.ema_fast = self._current_bar.average
-            bar.ema_mid  = self._current_bar.average
             bar.ema_slow = self._current_bar.average
-
             bar.direction = bar.delta
         else:
             last_bar = self[-1]
             bar.ema_fast = Chart._exp_moving_avg(bar.average, last_bar.ema_fast, Chart.EMA_FAST_FACTOR)
             bar.ema_slow = Chart._exp_moving_avg(bar.average, last_bar.ema_slow, Chart.EMA_SLOW_FACTOR)
-            bar.ema_9  = Chart._exp_moving_avg(bar.average, last_bar.ema_9, Chart.EMA_9_FACTOR)
-            bar.ema_48 = Chart._exp_moving_avg(bar.average, last_bar.ema_48, Chart.EMA_48_FACTOR)
             bar.direction = Chart._direction(bar, last_bar)
         self._bars.append(bar)
 

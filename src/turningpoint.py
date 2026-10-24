@@ -8,20 +8,17 @@ from model import MarketModel, Chart, Bar
 
 class TurningPoint:
 
-    FIELDNAMES = ['contracts', 'stop_loss', 'ema_9', 'ema_48']
-    EMA_MID_FACTOR = 0.5
+    FIELDNAMES = ['contracts', 'stop_loss', 'ema_fast', 'ema_slow']
 
     def __init__(self, max_loss: int = 100, stop_loss_factor: float = 4.0, threshold_factor: float = 2.0, gradient_factor: float = 1.2):
         self.MAX_LOSS = max_loss
         self.STOP_LOSS_FACTOR = stop_loss_factor
         self.THRESHOLD_FACTOR = threshold_factor
         self.GRADIENT_FACTOR = gradient_factor
-        self.ema_9 = None
-        self.ema_48 = None
 
-    def contract_size(self, direction: int, atr: int) -> (int, int):
+    def contract_size(self, direction: int, avg_range: int) -> (int, int):
         """ calculates contract size and stop loss of a contract """
-        stop_loss = round(atr * self.STOP_LOSS_FACTOR)
+        stop_loss = round(avg_range * self.STOP_LOSS_FACTOR)
         max_contracts = 1#self.MAX_LOSS // stop_loss
         if direction < 0:
             return -max_contracts, stop_loss
@@ -33,29 +30,25 @@ class TurningPoint:
     def on_bar(self, bar: Bar, chart: Chart):
         contracts, stop_loss = 0, 0
 
-        if len(chart) > 48:
-            ema_9 = bar.ema_9
-            if self.ema_9 is None:
-                self.ema_9 = ema_9
-            ema_48 = bar.ema_48
-            if self.ema_48 is None:
-                self.ema_48 = ema_48
+        if len(chart) > 48: # TODO: Konstante definieren: wir können starten, wenn alle daten aus der vergangenheit vorhanden sind.
+            avg_range = chart.average_range(9)
+            threshold = self.THRESHOLD_FACTOR * avg_range
+            ema_fast = bar.ema_fast
+            ema_slow = bar.ema_slow
 
-            atr = chart.average_range(9)
-            threshold = self.THRESHOLD_FACTOR * atr
-            delta_ema = ema_9 - ema_48
+            bar_1 = chart.look_back(1)
+            ema_fast_1 = bar_1.ema_fast
+            ema_slow_1 = bar_1.ema_slow
+            delta_ema = ema_fast - ema_slow
 
-            if delta_ema > threshold and bar.delta < 0 and -(ema_9 - self.ema_9) > (ema_48 - self.ema_48) * self.GRADIENT_FACTOR:
-                # ema_9 ist weit über ema_48 und fällt schnelle als ema_48 steigt
+            if delta_ema > threshold and bar.delta < 0 and -(ema_fast - ema_fast_1) > (ema_slow - ema_slow_1) * self.GRADIENT_FACTOR:
+                # ema_fast ist weit über ema_slow und fällt schneller als ema_slow steigt
                 # we go short
-                contracts, stop_loss = self.contract_size(-1, atr)
-            elif delta_ema < -threshold and bar.delta > 0 and (ema_9 - self.ema_9) > -(ema_48 - self.ema_48) * self.GRADIENT_FACTOR:
-                # ema_9 is far below ema_48 and current bar is rising and ema short is rising much faster than ema long is sinking
+                contracts, stop_loss = self.contract_size(-1, avg_range)
+            elif delta_ema < -threshold and bar.delta > 0 and (ema_fast - ema_fast_1) > -(ema_slow - ema_slow_1) * self.GRADIENT_FACTOR:
+                # ema_fast is far below ema_slow and current bar is rising and ema short is rising much faster than ema long is sinking
                 # we go long
-                contracts, stop_loss = self.contract_size(1, atr)
-
-            self.ema_9 = ema_9
-            self.ema_48 = ema_48
+                contracts, stop_loss = self.contract_size(1, avg_range)
 
         bar.contracts = contracts
         bar.stop_loss = stop_loss
