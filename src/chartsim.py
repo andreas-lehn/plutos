@@ -163,12 +163,42 @@ if __name__ == '__main__':
         print(f'{parser.prog}: no trade pairs available')
         exit()
 
+    #
+    # calculate statistics
+    #
+
+    df['total_ticks'] = (df['close_price'] - df['open_price']) * df['size']
+    df['tick_capture'] = df['total_ticks'] // df['size'].abs()
     df['is_win'] = df['tick_capture'] > 0
-    print(df.head(25).to_string())
+    df['total_win'] = df['total_ticks'] * df['is_win']
+    df['total_loss'] = df['total_ticks'] * (1 - df['is_win'])
 
     wins = df['is_win'].sum()
     total_trades = len(df)
+    losses = total_trades - wins
     sum_ticks = df['tick_capture'].sum()
     sum_total = df['total_ticks'].sum()
+    sum_win = df['total_win'].sum()
+    max_win = df['total_win'].max()
+    sum_loss = df['total_loss'].sum()
+    max_loss = df['total_loss'].min()
+    rate = wins/total_trades * 100
+    profit_factor = sum_win / -sum_loss if sum_loss != 0 else 0
 
-    print(f'sum ticks: {sum_ticks}, sum_total: {sum_total}, trades: {total_trades}, win rate: {wins/total_trades}')
+    print()
+    print('    trades    wins  losses  win_rate  tick_capture  total_ticks  profit_factor  max_win  max_loss')
+    print('    '
+        f'{total_trades:6d}  '
+        f'{wins:6d}  '
+        f'{losses:6d}    '
+        f'{rate:6.2f}        '
+        f'{sum_ticks:6d}       '
+        f'{sum_total:6d}       '
+        f'{profit_factor:8.4}   '
+        f'{max_win:6d}    '
+        f'{max_loss:6d}'
+    )
+
+    if args.out_file:
+        df.drop(columns=['total_ticks', 'tick_capture', 'is_win', 'total_win', 'total_loss'], inplace=True)
+        df.to_csv(args.out_file, index=False)
