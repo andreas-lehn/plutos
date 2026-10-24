@@ -110,38 +110,24 @@ def trade_list_5():
     return trades
 
 def test_TradeMatcher():
-    t_0 = Trade(timestamp=0, price=12501, volume = 2)
-    t_1 = Trade(timestamp=1, price=12503, volume = 3)
-    t_2 = Trade(timestamp=2, price=12499, volume = 4)
-    t_3 = Trade(timestamp=3, price=12501, volume = -3)
-    t_4 = Trade(timestamp=4, price=12501, volume = -1)
-    t_5 = Trade(timestamp=5, price=12501, volume = -6)
-    t_6 = Trade(timestamp=6, price=12501, volume = 1)
-
-    pos = TradeMatcher()
-    pos.append(t_0)
-    assert pos.size == 2
-    pos.append(t_1)
-    assert pos.size == 5
-    pos.append(t_2)
-    assert pos.size == 9
-    pos.append(t_3)
-    assert pos.size == 6
-    pos.append(t_4)
-    assert pos.size == 5
-    pos.append(t_5)
-    assert pos.size == -1
-    pos.append(t_6)
-    assert pos.size == 0
-    assert pos.is_flat
-
-    assert len(pos.trade_pairs) == 6
-    assert pos.trade_pairs[0].size == 2
-    assert pos.trade_pairs[1].size == 1
-    assert pos.trade_pairs[2].size == 1
-    assert pos.trade_pairs[3].size == 1
-    assert pos.trade_pairs[4].size == 4
-    assert pos.trade_pairs[5].size == -1
+    matcher = TradeMatcher.for_trades([
+        Trade(timestamp=0, price=12501, volume = 2),
+        Trade(timestamp=1, price=12503, volume = 3),
+        Trade(timestamp=2, price=12499, volume = 4),
+        Trade(timestamp=3, price=12501, volume = -3),
+        Trade(timestamp=4, price=12501, volume = -1),
+        Trade(timestamp=5, price=12501, volume = -6),
+        Trade(timestamp=6, price=12501, volume = 1),
+    ])
+    trade_pairs = [pair for pair in matcher]
+    assert len(trade_pairs) == 6
+    assert trade_pairs[0].size == 2
+    assert trade_pairs[1].size == 1
+    assert trade_pairs[2].size == 1
+    assert trade_pairs[3].size == 1
+    assert trade_pairs[4].size == 4
+    assert trade_pairs[5].size == -1
+    assert matcher.is_flat
 
 def test_VolumeProfile():
     sample = VolumeProfile()

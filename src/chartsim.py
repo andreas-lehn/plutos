@@ -151,20 +151,18 @@ if __name__ == '__main__':
     parser.add_argument('-o', '--out-file', type=Path, help="result file with generated trades.")
     args = parser.parse_args()
 
-    matcher = TradeMatcher()
     simulator = ChartSimulator.simulate(
         market_data=args.market_data,
         candles_file=args.file,
         stop_loss_factor=args.stop_loss_factor
     )
-    for trade in simulator:
-        matcher.append(trade)
+    matcher = TradeMatcher(simulator)
 
-    if len(matcher.trade_pairs) == 0:
+    df = pd.DataFrame([pair.to_dict() for pair in matcher])
+    if len(df) == 0:
         print(f'{parser.prog}: no trade pairs available')
         exit()
 
-    df = pd.DataFrame([pair.to_dict() for pair in matcher.trade_pairs])
     df['is_win'] = df['tick_capture'] > 0
     print(df.head(25).to_string())
 

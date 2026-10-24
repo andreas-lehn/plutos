@@ -82,36 +82,45 @@ class TradePair():
 class TradeMatcher:
     """ represents a position """
 
-    def __init__(self):
-        self.trades = deque()
-        self.trade_pairs = []
+    def __init__(self, trades):
+        self.open_trades = deque()
+        self.trades_source = trades
 
+    @classmethod
+    def for_trades(cls, trades: Iterable[Trade]):
+        return cls(trades)
+    
     @property
     def is_flat(self):
-        return len(self.trades) == 0
+        return len(self.open_trades) == 0
 
     @property
     def size(self) -> int:
         sum = 0
-        for trade in self.trades:
+        for trade in self.open_trades:
             sum += trade.volume
         return sum
     
-    def append(self, new_trade: Trade):
+    def process(self, new_trade: Trade) -> TradePair:
         if self.size * new_trade.volume >= 0:
-            self.trades.append(new_trade)
+            self.open_trades.append(new_trade)
         else:
             # Build Trade-pairs
-            while len(self.trades) > 0:
-                trade = self.trades[0]
+            while len(self.open_trades) > 0:
+                trade = self.open_trades[0]
                 pair = TradePair.from_trades(trade, new_trade)
-                self.trade_pairs.append(pair)
+                yield pair
                 if trade.volume == 0:
-                    self.trades.popleft()
+                    self.open_trades.popleft()
                 if new_trade.volume == 0:
                     break
             if new_trade.volume != 0:
-                self.trades.append(new_trade)
+                self.open_trades.append(new_trade)
+
+    def __iter__(self):
+        for trade in self.trades_source:
+            for pair in self.process(trade):
+                yield pair
 
 
 class VolumeProfile():
