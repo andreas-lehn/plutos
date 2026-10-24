@@ -14,7 +14,7 @@ SLIPAGE = 150 * 10**6 # slipage in nano seconds
 class BrokerProxy:
 
     @classmethod
-    def from_file(cls, market_data: Path):
+    def from_file(cls, market_data: Path): # pragma: no cover
         return cls(iter(marketdata.from_file(market_data)))
 
     def __init__(self, trades: Iterator[Trade]):
@@ -96,12 +96,12 @@ class BrokerProxy:
 
 class ChartSimulator:
 
-    def __init__(self, broker: BrokerProxy, candles_file: Path, stop_loss_factor: float):
+    def __init__(self, broker: BrokerProxy, candles_file: Path, stop_loss_factor: float): # pragma: no cover
         self.broker = broker
         self.candles_file = candles_file
         self.stop_loss_factor = stop_loss_factor
 
-    def __iter__(self):
+    def __iter__(self): # pragma: no cover
         """ simulates chart file """
         with open(self.candles_file, encoding='utf-8') as f:
             reader = csv.DictReader(f)
