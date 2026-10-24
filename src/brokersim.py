@@ -14,7 +14,7 @@ class BrokerSim:
 
     def __init__(self, trades: Iterator):
         self.contracts = 0
-        self.stop_loss = None
+        self._stop_loss = None
         self.trades = trades
         self.next_trade = None
         self.time = -1
@@ -24,9 +24,9 @@ class BrokerSim:
         execute = False
         price = trade.price
         if self.contracts > 0:
-            execute = price < self.stop_loss
+            execute = price < self._stop_loss
         elif self.contracts < 0:
-            execute = price > self.stop_loss
+            execute = price > self._stop_loss
     
         executed_trade = None
         if execute:
@@ -36,7 +36,7 @@ class BrokerSim:
                 volume=-self.contracts,
             )
             self.contracts = 0
-            self.stop_loss = None
+            self._stop_loss = None
         return executed_trade
 
     def forward_to(self, time: int) -> None | Trade:
@@ -60,7 +60,7 @@ class BrokerSim:
 
     def order(self, contracts: int, stop_loss: int) -> Trade:
         price = self.next_trade.price
-        self.stop_loss = price - (stop_loss * contracts // abs(contracts))
+        self._stop_loss = price - (stop_loss * contracts // abs(contracts))
         self.contracts += contracts
         self.time = self.next_trade.timestamp
         return Trade(
@@ -69,34 +69,37 @@ class BrokerSim:
             volume=contracts
         )
 
-    def adjust_stop_loss(self, stop_loss: int):
+    @property
+    def stop_loss(self) -> int:
+        return self._stop_loss
+
+    @stop_loss.setter
+    def stop_loss(self, new_stop_loss: int):
         if self.contracts > 0:
-            self.stop_loss = max(self.stop_loss, stop_loss)
+            self._stop_loss = max(self.stop_loss, round(new_stop_loss))
         elif self.contracts < 0:
-            self.stop_loss = min(self.stop_loss, stop_loss)
+            self._stop_loss = min(self.stop_loss, round(new_stop_loss))
 
+    def adjust_stop_loss(self, low: int, high: int, filter_constant: float):
+        if self.contracts > 0:
+            # we are long: adjust stop-loss based on low of current bar
+            self.stop_loss = filter_constant * low + (1 - filter_constant) * self.stop_loss
+        elif self.contracts < 0:
+            # we are short: adjust stop-loss base on high of current bar
+            self.stop_loss = filter_constant * high + (1 - filter_constant) * self.stop_loss
 
-    def simulate(self, timestamp: int, low: int, average: int, high: int, contracts: int, filter_constant: float, stop_loss: int) -> Trade:
+    def simulate(self, timestamp: int, low: int, high: int, contracts: int, filter_constant: float, stop_loss: int): #pragma: no cover
         executed_trade = self.forward_to(timestamp + SLIPAGE)
         if executed_trade:
             yield executed_trade
 
-        if self.contracts > 0:
-            # we are long: adjust stop-loss based on low of current bar
-            self.adjust_stop_loss(filter_constant * low + (1 - filter_constant) * self.stop_loss)
-        elif self.contracts < 0:
-            # we are short: adjust stop-loss base on high of current bar
-            self.adjust_stop_loss(filter_constant * high + (1 - filter_constant) * self.stop_loss)
-        else:
+        if self.contracts == 0:
             # no trade active, we may oder...
-            ordered_trade = None
-            if contracts > 0:
-                ordered_trade = self.order(contracts, stop_loss)
-            elif contracts < 0:
-                ordered_trade = self.order(contracts, stop_loss)
-
+            ordered_trade = ordered_trade = self.order(contracts, stop_loss)
             if ordered_trade:
                 yield ordered_trade
+        else:
+            self.adjust_stop_loss(low, high, filter_constant)
 
 
 def simulate(market_data: str, trades_file: str, filter_constant) -> Iterable[Trade]: # pragma: no cover
