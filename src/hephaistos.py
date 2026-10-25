@@ -14,42 +14,49 @@ START_OFFSET = 48 # don't begin trading bevor this offset in seconds since start
 
 class Hephaistos:
 
-    FIELDNAMES = ['contracts', 'stop_loss', 'prediction']
+    FIELDNAMES = ['contracts', 'stop_loss', 'p_short', 'p_long']
 
     def __init__(self, model_path: Path, threshold: int):
-        self.model = xgb.XGBRegressor()
+        self.model = xgb.XGBClassifier()
         self.model.load_model(model_path)
-        self.threshold = threshold
+        self.threshold = threshold / 100
+        self.data = []
  
     def contract_size(direction: int, candle: Candle) -> (int, int):
         """ calculates contract size and stop loss of a contract """
         if direction < 0:
-            stop_loss = candle.high - candle.average
+            stop_loss = 50
             max_contracts = MAX_LOSS // stop_loss
             return -max_contracts, stop_loss
         elif direction > 0:
-            stop_loss = candle.average - candle.low
+            stop_loss = 50
             max_contracts = MAX_LOSS // stop_loss
-            return max_contracts, -stop_loss
+            return max_contracts, stop_loss
         else:
             return 0, 0 # pragma: no cover
 
     def on_candle(self, candle: Candle, chart: Chart):
-        contracts, stop_loss, prediction = 0, 0, 0
+        contracts, stop_loss, p_long, p_short = 0, 0, 0.0, 0.0
 
-        if len(chart) > 48:
+        if len(chart) > START_OFFSET:
             data = DataCollector.data_set(candle, chart)
+            DataCollector.fill_past_data(data, self.data)
             data['time'] = len(chart) - 1
+            self.data.append(data)
+            
             df = pd.DataFrame([data])
-            df = df[DataCollector.FIELDNAMES[:-1]]
-            prediction = self.model.predict(df)[0]
+            p_short, _, p_long = self.model.predict_proba(df)[0]
 
-            if abs(prediction) > self.threshold:
-                contracts, stop_loss = Hephaistos.contract_size(prediction, candle)
+            if p_long > self.threshold:
+                contracts, stop_loss = Hephaistos.contract_size(1, candle)
+            elif p_short > self.threshold:
+                contracts, stop_loss = Hephaistos.contract_size(-1, candle)
     
         candle.contracts = contracts
         candle.stop_loss = stop_loss
-        candle.prediction = prediction
+        candle.p_short = p_short
+        candle.p_long = p_long
+
 
     def simulate(file, model_path: Path, candle_size: int = 36, num_candles: int = None, threshold: int = 20): # pragma: no cover
         main_chart = Chart(candle_size)
@@ -64,14 +71,6 @@ class Hephaistos:
 class DataCollector:
     """ delivers a data set for each candle """
 
-    FIELDNAMES = [
-        'time', 
-        'low', 'high', 'close', 'delta', 'range', 'volume', 'ema_fast', 'ema_slow',
-        'avg_1', 'ema_fast_1', 'ema_slow_1',
-        'avg_3','ema_fast_3', 'ema_slow_3',
-        'target',
-    ]
-
     LOOK_AHEAD = 3
 
     def __init__(self):
@@ -79,30 +78,49 @@ class DataCollector:
         self.data = []
  
     def data_set(candle: Candle, chart: Chart):
-        data = {}
-        data['low']    = candle.average - candle.low
-        data['high']   = candle.average - candle.high
-        data['close']  = candle.average - candle.close
-        data['delta']  = candle.delta
-        data['range']  = candle.range
-        data['volume'] = candle.volume
-        data['ema_fast'] = candle.average - candle.ema_fast
-        data['ema_slow'] = candle.average - candle.ema_slow
-        
-        candle_1 = chart.look_back(1)
-        data['avg_1']      = candle.average - candle_1.average
-        data['ema_fast_1'] = candle.ema_fast - candle_1.ema_fast
-        data['ema_slow_1'] = candle.ema_slow - candle_1.ema_slow
+        data = dict()
 
-        candle_3 = chart.look_back(3)
-        data['avg_3']      = candle.average - candle_3.average
-        data['ema_fast_3'] = candle.ema_fast - candle_3.ema_fast
-        data['ema_slow_3'] = candle.ema_slow - candle_3.ema_slow
+        average_0 = chart[0].average
+        data['open'] = candle.open - average_0
+        data['low'] = candle.low - average_0
+        data['average'] = candle.average - average_0
+        data['high'] = candle.high - average_0
+        data['close'] = candle.close - average_0
+        data['ema_fast'] = candle.ema_fast - average_0
+        data['ema_slow'] = candle.ema_slow - average_0
 
+        average = candle.average
+        data['delta_open']  = candle.open - average 
+        data['delta_low']   = candle.low - average
+        data['delta_high']  = candle.high - average
+        data['delta_close'] = candle.close - average
+        data['delta_ema_fast'] = candle.ema_fast - average
+        data['delta_ema_slow'] = candle.ema_slow - average
+        data['delta_ema'] = candle.ema_slow - candle.ema_fast
+
+        data['wick_top'] = candle.high - max(candle.open, candle.close)
+        data['wick_low'] = min(candle.open, candle.close) - candle.low
+        data['delta']    = candle.delta
+        data['range']    = candle.range
+        data['atr']      = chart.average_range(9)
+        data['volume']   = candle.volume
+        return data
+
+    def fill_past_data(data, past_data: list):
+        FIELD_NAMES = [key for key in data.keys()]
+        MAX_LOOK_BACK = 5
+        for i in range(1, MAX_LOOK_BACK + 1):
+            pd = data
+            if len(past_data) > 0:            
+                pd = past_data[-min(i, len(past_data))]
+            for field in FIELD_NAMES:
+                field_n = field + '_' + str(i)
+                data[field_n] = data[field] - pd[field]
         return data
     
     def on_candle(self, candle: Candle, chart: Chart):
         data = DataCollector.data_set(candle, chart)
+        DataCollector.fill_past_data(data, self.data)
         data['time'] = self.time
         data['target'] = None
         self.data.append(data)
@@ -127,31 +145,49 @@ def load_files(files) -> pd.DataFrame: # pragma: no cover
     frames = []
     for file in files:
         df = pd.read_csv(file)
-        df = df.iloc[48:-3]
+        df = df.iloc[24:-5]
         frames.append(df)
     return pd.concat(frames, axis=0)
 
-def split_target(df: pd.DataFrame, target_col: str = 'target'): # pragma: no cover
+def split_target(df: pd.DataFrame, short: int = 24, long: int = 24, target_col: str = 'target'): # pragma: no cover
     feature_cols = [col for col in df.columns if col != target_col]
     X = df[feature_cols]
-    y = df[target_col]
+
+    conditions = [
+        (df[target_col] < short),
+        (df[target_col] >= short) & (df[target_col] <= long),
+        (df[target_col] > long)
+    ]
+    y = np.select(conditions, [0, 1, 2])
     return X, y
+
+def find_quantile(df: pd.DataFrame, target_col: str = 'target', quantile: float = 0.25):
+    short = df[target_col].quantile(quantile)
+    long  = df[target_col].quantile(1 - quantile)
+    return short, long
 
 def fit_cmd(prog_name: str, args): #pragma: no cover
     """ fit the model to training data """
     print(f'{prog_name}: I fit a model to training data...')
 
-    df = load_files(args.files)
-    X, y = split_target(df)
+    df_training = load_files(args.training_files)
+    short, long = find_quantile(df_training)
+    X_train, y_train = split_target(df_training, short, long)
 
-    model = xgb.XGBRegressor(
-        n_estimators = 100,
-        learning_rate = 0.05,
-        max_depth = 6,
+    df_eval = load_files(args.eval_files)
+    X_eval, y_eval = split_target(df_eval, short, long)
+
+    model = xgb.XGBClassifier(
+        objective='multi:softprob',
+        num_class=3,
+        eval_metric='mlogloss',
+        early_stopping_rounds=25,
+        n_estimators = 1500,
+        learning_rate = 0.03,
+        max_depth = 4,
         random_state = 42,
-        n_jobs = -1,
     )
-    model.fit(X, y)
+    model.fit(X_train, y_train, eval_set=[(X_eval, y_eval)], verbose=True)
     model.save_model(args.model)
     print(f'{prog_name}: model written to {args.model}')
 
@@ -170,43 +206,9 @@ def prepare_cmd(prog_name: str, args):  #pragma: no cover
         model.simulate_file(path)
 
         with open(DataCollector.data_path(path), "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=DataCollector.FIELDNAMES)
+            writer = csv.DictWriter(f, fieldnames=collector.data[0].keys())
             writer.writeheader()
             writer.writerows(collector.data)
-
-EVLUATION_BINS = [-np.inf, -50, -40, -30, -20, -10, 10, 20, 30, 40, 50, np.inf]
-EVALUATION_LABELS = ['-50', '-40', '-30', '-20', '-10', '  0', '+10', '+20', '+30', '+40', '+50']
-
-def evaluate_prediction(y_pred, y):
-    zones = pd.cut(y_pred, bins=EVLUATION_BINS, labels=EVALUATION_LABELS, include_lowest=True)
-    evaluation = []
-    for pred, target in zip(y_pred, y):
-        if abs(pred) < 10:
-            if abs(pred) <= abs(target):
-                evaluation.append('correct')
-            else:
-                evaluation.append('wrong')
-        elif pred * target <= 0:
-            evaluation.append('wrong')
-        else:
-            evaluation.append('correct')
-
-    analyse_df = pd.DataFrame({'zone': zones, 'eval': evaluation})
-    crosstab = pd.crosstab(analyse_df['zone'], analyse_df['eval'])
-    for col in ['correct', 'wrong']:
-        if  col not in crosstab.columns:
-            crosstab[col] = 0
-    
-    crosstab['total'] = crosstab.sum(axis=1)
-    percent_tab = crosstab.copy()
-    for col in ['correct', 'wrong']:
-        percent_tab[col] = (crosstab[col] / crosstab['total']).fillna(0) * 100
-
-    return pd.DataFrame({
-        'total': crosstab['total'],
-        'correct (%)': percent_tab['correct'],
-        'wrong (%)': percent_tab['wrong'],
-    })
 
 
 def predict_cmd(prog_name: str, args): # pragma: no cover
@@ -216,13 +218,27 @@ def predict_cmd(prog_name: str, args): # pragma: no cover
     df = load_files(args.files)
     X, y = split_target(df)
 
-    model = xgb.XGBRegressor()
+    model = xgb.XGBClassifier()
     model.load_model(args.model)
-    y_pred = model.predict(X)
+    prob = model.predict_proba(X)
+    prob_short = prob[:, 0]
+    prob_long  = prob[:, 2]
 
-    result_df = evaluate_prediction(y_pred, y)
-    print()
-    print(result_df.to_string())
+    THRESHOLD = 0.65
+    long_signals = prob_long > THRESHOLD
+    total_long_signals = np.sum(long_signals)
+    correct_long_signals = np.sum(long_signals & (y == 2))
+    long_rate = correct_long_signals/total_long_signals
+
+    short_signals = prob_short > THRESHOLD
+    total_short_signals = np.sum(short_signals)
+    correct_short_signals = np.sum(short_signals & (y == 0))
+    short_rate = correct_short_signals/total_short_signals
+    
+    print( '              short    long')
+    print(f'    p > {int(THRESHOLD*100):2d}%  {total_long_signals:6d}  {total_short_signals:6d}')
+    print(f'    correct  {correct_long_signals:6d}  {correct_short_signals:6d}')
+    print(f'    rate     {long_rate*100:6.2f}  {short_rate*100:6.2f}')
 
 
 def sim_cmd(prog_name: str, args): # pragma; no cover
@@ -242,7 +258,8 @@ if __name__ == '__main__':
     subparsers = parser.add_subparsers()
 
     train = subparsers.add_parser('fit', description='fit a model from historical data')
-    train.add_argument('files', nargs='+', type=str, help='files with training data (.csv')
+    train.add_argument('-t', '--training_files', nargs='+', type=str, help='files with training data (.csv')
+    train.add_argument('-e', '--eval-files', nargs='+', type=str, help='files to evaluate fitting of training data')
     train.add_argument('-m', '--model', type=str, default='hephaistos.json', help='model file')
     train.set_defaults(command=fit_cmd)
 
@@ -259,7 +276,7 @@ if __name__ == '__main__':
     sim = subparsers.add_parser('sim', description="simulate a Databento trades file")
     sim.add_argument('file', type=str, help="file (.dbn) to simulate")
     sim.add_argument('-m', '--model', type=str, default='hephaistos.json', help='model file')
-    sim.add_argument('-t', '--threshold', type=int, default=20, help='threshold to start a trade')
+    sim.add_argument('-t', '--threshold', type=int, default=65, help='threshold to start a trade')
     sim.add_argument('-n', '--num-candles', type=int, help='number of candles to simulate')
     sim.add_argument('-o', '--out-file', type=str, required=True, help="name of output file")
 
