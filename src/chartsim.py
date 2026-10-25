@@ -198,7 +198,7 @@ if __name__ == '__main__':
         f'{rate:6.2f}  '
         f'{sum_ticks:5d}  '
         f'{sum_total:5d}  '
-        f'{profit_factor:8.4}   '
+        f'{profit_factor:8.4f}   '
         f'{max_win:6d}    '
         f'{max_loss:6d}'
     )
