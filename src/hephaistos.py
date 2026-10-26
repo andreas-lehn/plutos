@@ -141,11 +141,37 @@ class DataCollector:
             )
         return Path(f'{parts[0]}_{parts[1]}_hephaistos.csv')
 
+def drop_special_phases(df: pd.DataFrame, candle_size: int = 36):
+    # der beginn und das ende einer CME session
+    # sowie der beginn der nasdaq session sind spezielle momente,
+    # die das training verfälschen.
+    # deshalb werden die zeiten hier herausgefiltert.
+    # 
+    # CME session start:    17:00 h
+    # Nasdaq session start:  8:30 h Chicago Time (9:30 h New York time)
+    # CME session end:      16:00 h
+    # 
+    # Filter offset:
+    #   00:00 - 00:20   Startphase der CME session
+    #   15:20 - 16:00   Startphase der Nasdaq
+    #   22:40 - 23:00   Endphase der CME session
+    #
+    # Das entsprichet den folgenden offsets in anzahl candles:
+
+    CME_START    =            20  * 60 // candle_size + 1
+    NASDAQ_START = (15 * 60 + 20) * 60 // candle_size
+    NASDAQ_END   = (15 * 60 + 50) * 60 // candle_size + 1
+    CME_END      = (22 * 60 + 40) * 60 // candle_size
+
+    drop_rows = np.r_[0:CME_START, NASDAQ_START:NASDAQ_END, CME_END:len(df)]
+    df.drop(df.index[drop_rows], inplace=True)
+
+
 def load_files(files) -> pd.DataFrame: # pragma: no cover
     frames = []
     for file in files:
         df = pd.read_csv(file)
-        df = df.iloc[24:-5]
+        drop_special_phases(df)
         frames.append(df)
     return pd.concat(frames, axis=0)
 
@@ -213,7 +239,7 @@ def prepare_cmd(prog_name: str, args):  #pragma: no cover
 
 def predict_cmd(prog_name: str, args): # pragma: no cover
     """ predict based on a given model """
-    print (f"{prog_name}: I predict based on model '{args.model}'' ...")
+    print (f"{prog_name}: I predict based on model '{args.model}'...")
 
     df = load_files(args.files)
     X, y = split_target(df)
