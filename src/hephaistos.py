@@ -9,7 +9,7 @@ import pandas as pd
 import numpy as np
 import xgboost as xgb
 
-MAX_LOSS = 50
+MAX_LOSS = 100
 START_OFFSET = 48 # don't begin trading bevor this offset in seconds since start of the session
 
 class Hephaistos:
@@ -25,11 +25,11 @@ class Hephaistos:
     def contract_size(direction: int, candle: Candle) -> (int, int):
         """ calculates contract size and stop loss of a contract """
         if direction < 0:
-            stop_loss = 50
+            stop_loss = 100
             max_contracts = MAX_LOSS // stop_loss
             return -max_contracts, stop_loss
         elif direction > 0:
-            stop_loss = 50
+            stop_loss = 100
             max_contracts = MAX_LOSS // stop_loss
             return max_contracts, stop_loss
         else:
@@ -71,8 +71,6 @@ class Hephaistos:
 class DataCollector:
     """ delivers a data set for each candle """
 
-    LOOK_AHEAD = 3
-
     def __init__(self):
         self.time = 0
         self.data = []
@@ -108,7 +106,7 @@ class DataCollector:
 
     def fill_past_data(data, past_data: list):
         FIELD_NAMES = [key for key in data.keys()]
-        MAX_LOOK_BACK = 5
+        MAX_LOOK_BACK = 9
         for i in range(1, MAX_LOOK_BACK + 1):
             pd = data
             if len(past_data) > 0:            
@@ -117,7 +115,9 @@ class DataCollector:
                 field_n = field + '_' + str(i)
                 data[field_n] = data[field] - pd[field]
         return data
-    
+
+    LOOK_AHEAD = 3
+
     def on_candle(self, candle: Candle, chart: Chart):
         data = DataCollector.data_set(candle, chart)
         DataCollector.fill_past_data(data, self.data)
@@ -129,7 +129,7 @@ class DataCollector:
         # set target value in past data sets
         offset = DataCollector.LOOK_AHEAD + 1
         if len(self.data) >= offset:
-            self.data[-offset]['target'] = candle.average - chart[-offset].average
+            self.data[-offset]['target'] = candle.close - chart[-offset+1].open
 
     def data_path(file: Path) -> Path:
         """ generates the path for training data file from a source file (.dbn) """
@@ -247,24 +247,32 @@ def predict_cmd(prog_name: str, args): # pragma: no cover
     model = xgb.XGBClassifier()
     model.load_model(args.model)
     prob = model.predict_proba(X)
-    prob_short = prob[:, 0]
-    prob_long  = prob[:, 2]
 
-    THRESHOLD = 0.65
-    long_signals = prob_long > THRESHOLD
+    QUANTILE = 0.95
+    prob_short = prob[:, 0]
+    prob_short_max = np.max(prob_short)
+    prob_short_75 = np.quantile(prob_short, QUANTILE)
+    
+    prob_long = prob[:, 2]
+    prob_long_max = np.max(prob_long)
+    prob_long_75  = np.quantile(prob_long, QUANTILE)
+
+    long_signals = prob_long > prob_long_75
     total_long_signals = np.sum(long_signals)
     correct_long_signals = np.sum(long_signals & (y == 2))
     long_rate = correct_long_signals/total_long_signals
 
-    short_signals = prob_short > THRESHOLD
+    short_signals = prob_short > prob_short_75
     total_short_signals = np.sum(short_signals)
     correct_short_signals = np.sum(short_signals & (y == 0))
     short_rate = correct_short_signals/total_short_signals
     
-    print( '              short    long')
-    print(f'    p > {int(THRESHOLD*100):2d}%  {total_long_signals:6d}  {total_short_signals:6d}')
-    print(f'    correct  {correct_long_signals:6d}  {correct_short_signals:6d}')
-    print(f'    rate     {long_rate*100:6.2f}  {short_rate*100:6.2f}')
+    print( '                short    long')
+    print(f'    p max      {prob_short_max*100:6.2f}  {prob_long_max*100:6.2f}')
+    print(f'    p {QUANTILE}%    {prob_short_75*100:6.2f}  {prob_long_75*100:6.2f}')
+    print(f'    total      {total_long_signals:6d}  {total_short_signals:6d}')
+    print(f'    correct    {correct_long_signals:6d}  {correct_short_signals:6d}')
+    print(f'    rate       {long_rate*100:6.2f}  {short_rate*100:6.2f}')
 
 
 def sim_cmd(prog_name: str, args): # pragma; no cover
@@ -286,7 +294,7 @@ if __name__ == '__main__':
     train = subparsers.add_parser('fit', description='fit a model from historical data')
     train.add_argument('-t', '--training_files', nargs='+', type=str, help='files with training data (.csv')
     train.add_argument('-e', '--eval-files', nargs='+', type=str, help='files to evaluate fitting of training data')
-    train.add_argument('-m', '--model', type=str, default='hephaistos.json', help='model file')
+    train.add_argument('-m', '--model', type=str, default='hephaistos-model.json', help='model file')
     train.set_defaults(command=fit_cmd)
 
     data = subparsers.add_parser('prepare', description='generate training data out of Databento native files')
@@ -296,12 +304,12 @@ if __name__ == '__main__':
 
     test = subparsers.add_parser('predict', description='predict historical test data and evaluate results')
     test.add_argument('files', nargs='+', type=str, help='file with taining data (.csv)')
-    test.add_argument('-m', '--model', type=str, default='hephaistos.json', help='model file')
+    test.add_argument('-m', '--model', type=str, default='hephaistos-model.json', help='model file')
     test.set_defaults(command=predict_cmd)
 
     sim = subparsers.add_parser('sim', description="simulate a Databento trades file")
     sim.add_argument('file', type=str, help="file (.dbn) to simulate")
-    sim.add_argument('-m', '--model', type=str, default='hephaistos.json', help='model file')
+    sim.add_argument('-m', '--model', type=str, default='hephaistos-model.json', help='model file')
     sim.add_argument('-t', '--threshold', type=int, default=65, help='threshold to start a trade')
     sim.add_argument('-n', '--num-candles', type=int, help='number of candles to simulate')
     sim.add_argument('-o', '--out-file', type=str, required=True, help="name of output file")
