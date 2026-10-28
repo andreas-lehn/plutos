@@ -2,25 +2,24 @@
 # find contracts in a charts file
 #
 
+import io
 import csv
+import click
 
-def find_contracts(file: str):
-    print(f'searching for contracts in file "{file}"')
+@click.command()
+@click.argument('file', type=click.File('r', encoding='utf-8'), help="chart file")
+def find_contracts(file: io.TextIOWrapper):
+    """ find contracts in a chart file """
+    click.echo(f'searching for contracts in file "{file.name}"')
 
-    with open(file, mode="r", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        i = 0
-        print('    time  contracts  stop_loss')
-        for candle in reader:
-            if int(candle['contracts']) != 0:
-                print(f"    {i:4d}  {int(candle['contracts']):9d}  {int(candle['stop_loss']):9d}")
-            i += 1
+    reader = csv.DictReader(file)
+    i = 0
+    click.secho('    time  contracts  stop_loss', bold=True)
+    for candle in reader:
+        if int(candle['contracts']) != 0:
+            print(f"    {i:4d}  {int(candle['contracts']):9d}  {int(candle['stop_loss']):9d}")
+        i += 1
+
 
 if __name__ == '__main__':
-    import argparse
-    
-    parser = argparse.ArgumentParser(description="find contracts in chart file")
-    parser.add_argument('file', type=str, help="chart file")
-    args = parser.parse_args()
-
-    find_contracts(args.file)       
+    find_contracts()       

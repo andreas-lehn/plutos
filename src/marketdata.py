@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 
 import databento as db
 
-from model import Trade
+from src.model import Trade
 
 SECONDS_OF_DAY = 86400
 
