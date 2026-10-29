@@ -2,7 +2,7 @@
 # Yesterdays Weather trader
 #
 
-from model import MarketModel, Chart, Candle
+from .model import MarketModel, Chart, Candle
 
 class YesterdaysWeather:
 

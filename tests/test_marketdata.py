@@ -5,8 +5,8 @@ from zoneinfo import ZoneInfo
 import pytest
 import csv
 
-from model import Trade
-import marketdata
+from plutos.model import Trade
+from plutos import marketdata
 
 
 @pytest.fixture

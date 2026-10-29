@@ -4,8 +4,8 @@ from zoneinfo import ZoneInfo
 import sys
 import pytest
 
-from model import Trade, TradePair, TradeMatcher, VolumeProfile, Sample, SampleBuilder, SampleReader, SampleWriter, Candle, Chart, MarketModel
-import marketdata
+from plutos.model import Trade, TradePair, TradeMatcher, VolumeProfile, Sample, SampleBuilder, SampleReader, SampleWriter, Candle, Chart, MarketModel
+from plutos import marketdata
 
 @pytest.fixture
 def csv_path():

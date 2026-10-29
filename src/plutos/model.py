@@ -8,7 +8,6 @@ contains classes for trades, candles, charts,...
 import ast
 import csv
 import sys
-import math
 from array import array
 from collections import deque
 from collections.abc import Iterable

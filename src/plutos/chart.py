@@ -3,9 +3,9 @@
 #
 
 import click
-from src.findcontracts import find_contracts
-from src.visu import show
-from src.chartsim import sim
+from .findcontracts import find_contracts
+from .visu import show
+from .chartsim import sim
 
 @click.group()
 def chart():

@@ -4,8 +4,8 @@
 
 import pytest
 
-from model import Trade, SampleBuilder, Candle, Chart
-from yw import YesterdaysWeather
+from plutos.model import Trade, SampleBuilder, Candle, Chart
+from plutos.yw import YesterdaysWeather
 
 @pytest.fixture
 def trades():

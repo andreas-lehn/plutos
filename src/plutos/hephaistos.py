@@ -4,7 +4,7 @@
 
 import csv
 from pathlib import Path
-from model import Candle, Chart, MarketModel
+from .model import Candle, Chart, MarketModel
 import pandas as pd
 import numpy as np
 import xgboost as xgb

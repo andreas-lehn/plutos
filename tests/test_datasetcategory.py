@@ -4,7 +4,7 @@
 
 import pytest
 from click.testing import CliRunner
-from src.datasetcategory import category, START_OF_PLUTOS_EPOCHE, category_index
+from plutos.datasetcategory import category, START_OF_PLUTOS_EPOCHE, category_index
 from datetime import datetime
 
 def test_category_index():

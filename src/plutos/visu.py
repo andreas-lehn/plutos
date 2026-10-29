@@ -19,7 +19,7 @@ def show(chart_file: io.TextIOWrapper, profile_file: io.TextIOWrapper, start:int
     if num_candles:
         df_sticks = df_sticks.iloc[start:start + num_candles]
     else:
-        df_sticks = df_sticks.iloc[args.start:]
+        df_sticks = df_sticks.iloc[start:]
 
     df_sticks['open'] = df_sticks['open'] / 4
     df_sticks['low'] = df_sticks['low'] / 4

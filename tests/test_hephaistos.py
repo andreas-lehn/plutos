@@ -3,7 +3,7 @@
 #
 
 import pandas as pd
-from hephaistos import DataCollector
+from plutos.hephaistos import DataCollector
 from pathlib import Path
 import pytest
 

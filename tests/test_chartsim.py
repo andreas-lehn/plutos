@@ -4,8 +4,8 @@
 
 import pytest
 from typing import Iterable
-from chartsim import BrokerProxy
-from model import Trade
+from plutos.chartsim import BrokerProxy
+from plutos.model import Trade
 
 @pytest.fixture
 def trades():

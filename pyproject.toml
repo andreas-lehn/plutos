@@ -14,6 +14,7 @@ dependencies = [
     "tqdm",
     "xgboost",
     "click",
+    "mplfinance>=0.12.10b0",
 ]
 
 [dependency-groups]
@@ -24,10 +25,10 @@ dev = [
 ]
 
 [project.scripts]
-chart = "src.chart:chart"
+plutos = "plutos.cli:plutos"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src"]
+packages = ["src/plutos"]
 
 [build-system]
 requires = ["hatchling"]

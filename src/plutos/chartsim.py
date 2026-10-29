@@ -4,8 +4,8 @@
 
 import csv
 from typing import Iterator, Iterable
-from src.model import Trade, TradePair, TradeMatcher
-import src.marketdata as marketdata
+from .model import Trade, TradePair, TradeMatcher
+from . import marketdata
 import pandas as pd
 from pathlib import Path
 import click
