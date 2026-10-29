@@ -11,7 +11,7 @@ from datetime import datetime
 import pandas as pd
 from pydantic import BaseModel
 
-from model import Candle, CandleBuilder, SampleLoader
+from .model import Candle, CandleBuilder, SampleLoader
 
 
 class ToDictMixIn:

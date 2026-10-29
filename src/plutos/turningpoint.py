@@ -4,7 +4,7 @@
 # dieser Trader steigt ein, wenn EMA9 die Richtung wechselt...
 #
 
-from model import MarketModel, Chart, Candle
+from .model import MarketModel, Chart, Candle
 
 class TurningPoint:
 

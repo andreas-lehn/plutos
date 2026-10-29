@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from model import CandleBuilder, SampleLoader
-from trader import KentBeckTrader, Statistics, Trade
+from .model import CandleBuilder, SampleLoader
+from .trader import KentBeckTrader, Statistics, Trade
 
 pd.options.display.float_format = "{:.2f}".format
 
