@@ -7,7 +7,9 @@ interface to market data
 """
 
 import sys
-from datetime import UTC, date, datetime, timedelta
+import click
+
+from datetime import UTC, date, datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -128,9 +130,29 @@ def from_live_stream(): # pragma: no cover
     pass
 
 
-def CME_session(date: date) -> (datetime, datetime):
+def CME_session(dt: datetime) -> (datetime, datetime):
     """ calculate start and end time of a CME session based on a given date """
-    end_date = datetime(date.year, date.month, date.day, 17, 0, tzinfo=ZoneInfo("America/Chicago"))
+    end_date = datetime(dt.year, dt.month, dt.day, 17, 0, tzinfo=ZoneInfo("America/Chicago"))
     start_date = end_date - timedelta(days=1)
     return (start_date.astimezone(UTC), end_date.astimezone(UTC))
 
+
+@click.command('download')
+@click.option('-p', '--product-code', type=str, default='MNQ', help="product code e.g., NQ, MNQ, ES,...)")
+@click.argument('date', type=click.DateTime(formats=["%Y-%m-%d"]), required=True, help="date of session in ISO format")
+def download_session(product_code: str, date: datetime): #pragma: no cover
+    """ download trades of a CME session from databento """
+
+    start_date, end_date = CME_session(date)
+    symbol = active_symbol(product_code, end_date.date())
+    click.echo(f"loading trades of {symbol} for intervall [{start_date.isoformat()}, {end_date.isoformat()}]")
+    data = download_trades(symbol, start_date.isoformat(), end_date.isoformat())
+    if data:
+        download_start = datetime.fromtimestamp(data.metadata.start // 10**9, timezone.utc)
+        download_end = datetime.fromtimestamp(data.metadata.end // 10**9, timezone.utc)
+        click.echo(f"downloaded records for intervall [{download_start.isoformat()}, {download_end.isoformat()}]")
+        filename = f"{symbol}_{end_date.date().isoformat()}_trades.dbn"
+        data.to_file(filename)
+        click.echo(f"{data.nbytes} bytes written to {filename}")
+    else:
+        click.echo(f'download failed.')
