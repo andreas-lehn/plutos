@@ -9,7 +9,7 @@ import click
 
 @click.command()
 @click.argument('chart_file', type=click.File('r', encoding='utf-8'), help="chart file")
-@click.option('-p', '--profile_file', type=click.File('r', encoding='utf-8'), help="file with volume profile")
+@click.option('-p', '--profile-file', type=click.File('r', encoding='utf-8'), help="file with volume profile")
 @click.option('-s', '--start', type=int, default=0, help="start offset (sec) of candle in charts file")
 @click.option('-n', '--num-candles', type=int, help="number of candles to be drawn into chart")
 def show(chart_file: io.TextIOWrapper, profile_file: io.TextIOWrapper, start:int, num_candles: int): 
@@ -83,7 +83,7 @@ def show(chart_file: io.TextIOWrapper, profile_file: io.TextIOWrapper, start:int
 
     # 2. ZWEITE CSV: Volumen-Profil (Volumen pro Preis) laden
     if profile_file:
-        df_prof = pd.read_csv(args.profile)
+        df_prof = pd.read_csv(profile_file)
         df_prof['price'] = df_prof['price'] / 4
         max_vol_wert = df_prof['volume'].max()
 
@@ -104,7 +104,7 @@ def show(chart_file: io.TextIOWrapper, profile_file: io.TextIOWrapper, start:int
         else:
             balken_hoehe = 0.5
 
-        ax_overlay.candleh(
+        ax_overlay.barh(
             y=df_prof['price'],             # Y-Position: Die Preise aus der zweiten CSV
             width=df_prof['volume'],       # X-Länge: Das skalierte Volumen
             height=balken_hoehe,            # Dicke der Balken

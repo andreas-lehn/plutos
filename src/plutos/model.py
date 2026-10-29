@@ -4,10 +4,12 @@ data model for trading bot
 contains classes for trades, candles, charts,...
 """
 
-
+import io
 import ast
 import csv
 import sys
+import click
+
 from array import array
 from collections import deque
 from collections.abc import Iterable
@@ -727,7 +729,7 @@ class MarketModel:
     def simulate_file(self, file: str | Path, duration: int = 0): # pragma: no cover
         """ simulates file for a duration (in seconds) """
     
-        import marketdata
+        from . import marketdata
         from tqdm import tqdm
 
         if duration == 0:
@@ -742,33 +744,28 @@ class MarketModel:
         )
 
 
-if __name__ == '__main__':
-    import argparse
-
-    parser = argparse.ArgumentParser(description="load a file into default market model and put out some statistics")
-    parser.add_argument('file', help='name of Databento native file (.dbn)')
-    parser.add_argument('-b', '--candle-size', type=int, default=36, help="size of candle in seconds")
-    parser.add_argument('-n', '--num', type=int, default=0, help='number of candles')
-    parser.add_argument('-o', '--ohlc-file', type=str, help="name of file for OHLCV data")
-    parser.add_argument('-p', '--profile-file', type=str, help="name of file for volume profile data")
-    args = parser.parse_args()
-
-    main_chart = Chart(candle_size=args.candle_size)
+@click.command('chart')
+@click.argument('file', type=click.Path(), help='name of marked data file (.dbn)')
+@click.option('-s', '--candle-size', type=int, default=36, help="size of candle in seconds")
+@click.option('-n', '--num', type=int, default=0, help='number of candles')
+@click.option('-o', '--ohlc-file', type=click.File('w', encoding='utf-8'), help="chart file")
+@click.option('-p', '--profile-file', type=click.File('w', encoding='utf-8'), help="volume profile file")
+def chart_cmd(file: Path, candle_size: int, num: int, ohlc_file: io.TextIOWrapper, profile_file: io.TextIOWrapper): # pragma: no cover
+    """ create a chart from market data """
+    main_chart = Chart(candle_size=candle_size)
     model = MarketModel()
     model.charts.append(main_chart)
-    model.simulate_file(args.file, args.num * args.candle_size)
+    model.simulate_file(file, num * candle_size)
 
-    if args.ohlc_file:    
-        with open(args.ohlc_file, "w", newline="", encoding="utf-8") as f:
-            fieldnames = ['timestamp', 'open', 'low', 'average', 'high', 'close', 'volume', 'ema_fast', 'ema_slow']
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
-            writer.writeheader()
-            writer.writerows([candle.to_filtered_dict(fieldnames) for candle in main_chart])
+    if ohlc_file:    
+        fieldnames = ['timestamp', 'open', 'low', 'average', 'high', 'close', 'volume', 'ema_fast', 'ema_slow']
+        writer = csv.DictWriter(ohlc_file, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows([candle.to_filtered_dict(fieldnames) for candle in main_chart])
 
-    if args.profile_file:
-        with open(args.profile_file, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=['price', "volume", 'smooth_volume'])
-            writer.writeheader()
-            smoothed_volumes = main_chart.volumes.convolute(main_chart.average_range() // 2)
-            for p, v in main_chart.volumes:
-                writer.writerow({'price': p, 'volume': v, 'smooth_volume': smoothed_volumes[p]})
+    if profile_file:
+        writer = csv.DictWriter(profile_file, fieldnames=['price', "volume", 'smooth_volume'])
+        writer.writeheader()
+        smoothed_volumes = main_chart.volumes.convolute(main_chart.average_range() // 2)
+        for p, v in main_chart.volumes:
+            writer.writerow({'price': p, 'volume': v, 'smooth_volume': smoothed_volumes[p]})
