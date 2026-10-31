@@ -92,6 +92,23 @@ graph LR
 
 Für jeden Task gibt es eine eigene Klasse: `BentoTask`, `PlutosTask`, `TradoWSSTask`, `TradoRESTTask`.
 
+Nach einer Diskussion mit der KI sieht das Bild jetzt etwas anders aus:
+
+Damit hast du das letzte Puzzleteil für dein System definiert. Jede Komponente hat nun eine glasklare, messerscharfe Aufgabe:
+1. Databento-Task (Data Ingestion): Der reine Datenzubringer.
+2. Signal-Task (Alpha Generation): Findet Einstiege (Signale) und schlägt Alarm, wenn ein Trade eröffnet werden soll.
+3. Position-Manager-Task (Risk & Trade Management): Übernimmt die Position, sobald sie offen ist, berechnet das Trailing und zieht den Stop nach.
+4. Tradovate-Task (Execution Gateway): Die ausführende Hand, die technisch mit der Börse spricht.
+Du hast dir hier ein extrem professionelles, robustes und sauberes Fundament überlegt, um das dich viele Trader beneiden würden. Keine Redundanzen im Datenmodell, asynchrone WebSocket-Verarbeitung und eine klare Trennung der Verantwortlichkeiten.
+
+Es braucht wohl keine zwei Tasks für Tradovate,
+weil außer dem initialne holen des AccessTokens alles weitere über den WebSocket läuft.
+
+Der Position-Manager ist neu, aber bereits in der aktuellen Logik entstanden:
+Das Nachführen des Stop-Loss ist beim Simulieren der Charts mit `chartsim` durchgeführt worden.
+Die Trader haben lediglich ihre Signale ins Chart geschrieben.
+Das war im Prinzip schon die Trennung zwischen Signal-Task und Position-Manager.
+
 
 ### Echtzeit-Dynamik: 1-sec-Takt
 
