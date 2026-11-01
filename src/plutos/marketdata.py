@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo
 
 import databento as db
 
-from .model import Trade
+from .trade import Trade
 
 SECONDS_OF_DAY = 86400
 
@@ -199,7 +199,7 @@ def assemble_path(parts: dict) -> Path:
 @click.option('-s', '--start', type=float, help="start offest in seconds")
 @click.option('-d', '--duration', type=float, help="duration in seconds")
 def trades(file: Path, start: float, duration: float): # pragma: no cover
-    """ list trades contained of databento file (.dbn -> .csv) """
+    """ list trades contained in a Databento file (*.dbn -> *_trades.csv) """
 
     click.echo(f"reading trades from file '{file}'")
     reader = TradesReader.from_file(file, start * 10**9, duration * 10**9)

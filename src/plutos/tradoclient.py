@@ -113,11 +113,11 @@ class Portfolio:
         return self.symbol_to_id.get(symbol)
 
     def __repr__(self):
-        """Entwickler-Ansicht: Zeigt den internen Zustand kompakt beim Debuggen."""
+        """ Entwickler-Ansicht: Zeigt den internen Zustand kompakt beim Debuggen."""
         return f"Portfolio(account='{self.account_spec}', positions_count={len(self.positions)}, working_orders_count={len(self.working_orders)})"
 
     def __str__(self):
-        """Standard-String-Ausgabe: Liefert eine kurze, prägnante Zusammenfassung."""
+        """ Standard-String-Ausgabe: Liefert eine kurze, prägnante Zusammenfassung."""
         pos_summary = ", ".join([f"{self.get_symbol_by_id(cid)}: {data['net_pos']}" for cid, data in self.positions.items()])
         return f"Account: {self.account_spec} | Balance: {self.cash_balance}$ | Positions: [{pos_summary or 'None'}]"
 
@@ -347,27 +347,6 @@ class Connection:
             print("Sync request successful -> extract state information")
             self.portfolio = Portfolio.from_sync_data(data)
             self.portfolio.display()
-            # Konten extrahieren
-            #for acc in data.get("accounts", []):
-            #    account = Account.from_responce(self, acc)
-            #    self.accounts[account.id] = account
-
-            #for bal_data in data.get("cashBalances", []):
-            #    acc_id = bal_data.get("accountId")
-            #    self.accounts[acc_id].balance = bal_data.get("amount", 0.0)
-            
-            # 3. Temporäre Kontrakt-Übersetzungskarte bauen
-            #contracts_map = {}
-            #for contract in data.get("contracts", []):
-            #    contracts_map[contract.get("id")] = {"symbol": contract.get("name")}
-            
-            # 4. Offene Positionen über die Factory erstellen und einhängen
-            #for pos_data in data.get("positions", []):
-            #    acc_id = pos_data.get("accountId")
-            #    if pos_data.get("netPos", 0) != 0 and acc_id in self.accounts:
-            #        account = self.accounts[acc_id]
-            #        pos = Position.from_sync_data(pos_data, contracts_map, account)
-            #        account.positions[pos.symbol] = pos
 
 
     async def on_event(self, event_type, data):

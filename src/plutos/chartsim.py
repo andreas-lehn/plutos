@@ -4,7 +4,7 @@
 
 import csv
 from typing import Iterator, Iterable
-from .model import Trade, TradePair, TradeMatcher
+from .trade import Trade, TradePair, TradeMatcher
 from . import marketdata
 import pandas as pd
 from pathlib import Path

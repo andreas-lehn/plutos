@@ -315,7 +315,7 @@ class SampleBuilder:
 @click.argument('file', type=click.Path(exists=True, dir_okay=False), help='path to .dbn file')
 @click.option('-s', '--start', type=int, default=0, help="start offest in seconds")
 @click.option('-d', '--duration', type=int, default=marketdata.SECONDS_OF_DAY, help="duration in seconds")
-def samples(file, start: int, duration: int):
+def samples(file, start: int, duration: int): # pragma: no cover
     """ creates samples form a Datebento file (*.dbn -> *_samples.csv) """
 
     click.echo(f"reading form file '{file}'")

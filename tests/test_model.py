@@ -342,7 +342,7 @@ def test_VolumeProfile_type_errors():
 
 def test_sample_builder_streaming(trade_list_40):
     builder = SampleBuilder.from_trades(trade_list_40)
-    samples = [sample.volumes for sample in builder]
+    samples = [sample for sample in builder]
     assert len(samples) == 8
     assert samples[0].low  == 122243
     assert samples[0].high == 122247
@@ -350,6 +350,12 @@ def test_sample_builder_streaming(trade_list_40):
     assert samples[1].high == 122252
     assert samples[2].low  == 122253
     assert samples[7].high == 122282
+
+    d = samples[0].to_dict()
+    d['timestamp'] == 1790632800800000000
+    d['date'] == datetime(2026, 9, 29, 0, 0)
+    d['low']  == 122243
+    d['high'] == 122247
 
 
 def test_sample_builder_start_duration(trade_list_40):
