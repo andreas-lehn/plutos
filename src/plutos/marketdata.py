@@ -178,7 +178,12 @@ def assemble_path(parts: dict) -> Path:
 
     range_str = ""
     if 'range' in parts.keys() and parts['range']:
-        range_str = f"[{str(parts['range'][0])}:{str(parts['range'][1])}]_"
+        range = parts['range']
+        start = str(range[0]) if range[0] and range[0] != 0 else ""
+        end   = str(range[1]) if range[1] and range[1] < SECONDS_OF_DAY else ""
+        range_str = f"[{start}:{end}]_"
+        if range_str == '[:]_':
+            range_str = ""
 
     parent = Path('.')
     if 'parent' in parts.keys():
