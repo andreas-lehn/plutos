@@ -4,6 +4,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 import csv
+from click.testing import CliRunner
 
 from plutos.model import Trade
 from plutos import marketdata
@@ -87,3 +88,52 @@ def test_CME_session():
     (s, e) = marketdata.CME_session(d) 
     assert s == start
     assert e == end
+
+def test_parse_path():
+    parts = marketdata.parse_path("/data/bento/MNQZ6_2026-10-26_trades.dbn")
+    assert parts["parent"] == Path("/data/bento")
+    assert parts["symbol"] == "MNQZ6"
+    assert parts["date"] == date(2026, 10, 26)
+    assert parts["range"] == None
+    assert parts["suffix"] == ".dbn"
+
+    parts = marketdata.parse_path("MNQZ6_2026-10-27_[12.5:34]_candles.csv")
+    assert parts["parent"] == Path(".")
+    assert parts["symbol"] == "MNQZ6"
+    assert parts["date"] == date(2026, 10, 27)
+    assert parts["range"] == (12.5, 34.0)
+    assert parts["suffix"] == ".csv"
+
+    with pytest.raises(ValueError):
+        marketdata.parse_path('a_path_with_too_much.csv')
+
+    with pytest.raises(ValueError):
+        marketdata.parse_path('too_less.dbn')
+
+    
+def test_assemble_path():
+    path = marketdata.assemble_path({
+        'symbol': 'MNQZ6',
+        'date': '2026-10-15',
+        'content': 'trades',
+        'suffix': '.csv',
+    })
+    assert path == Path('./MNQZ6_2026-10-15_trades.csv')
+
+    path = marketdata.assemble_path({
+        'parent': 'data/bento',
+        'symbol': 'MNQZ6',
+        'date': date(2026, 10, 17),
+        'range': (12, 14),
+        'content': 'candles',
+        'suffix': '.dbn',
+    })
+    assert path == Path('data/bento/MNQZ6_2026-10-17_[12:14]_candles.dbn')
+
+    path = marketdata.assemble_path({
+        'symbol': 'MNQZ6',
+        'date': datetime(2026, 10, 16).timestamp(),
+        'content': 'trades',
+        'suffix': '.csv',
+    })
+    assert path == Path('./MNQZ6_2026-10-16_trades.csv')

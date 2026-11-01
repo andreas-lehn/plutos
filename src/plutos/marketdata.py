@@ -8,6 +8,7 @@ interface to market data
 
 import sys
 import click
+import csv
 
 from datetime import UTC, date, datetime, timedelta, timezone
 from pathlib import Path
@@ -135,6 +136,105 @@ def CME_session(dt: datetime) -> (datetime, datetime):
     end_date = datetime(dt.year, dt.month, dt.day, 17, 0, tzinfo=ZoneInfo("America/Chicago"))
     start_date = end_date - timedelta(days=1)
     return (start_date.astimezone(UTC), end_date.astimezone(UTC))
+
+
+def parse_path(path: Path | str):
+    """ parse a path and return its components 
+    
+    A plutos file name has the following syntax:
+
+        plutos_file_name ::= PATH '/' file_name
+               file-Name ::= SYMBOL '_' ISO_DATE '_' (range '_')? CONTENT '.' SUFFIX
+                   range ::= '[' FLOAT ':' FLOAT ']'
+    """
+
+    if isinstance(path, str):
+        path = Path(path)
+
+    name_parts = path.stem.split('_')
+    n_parts = len(name_parts)
+    if not n_parts in (3, 4):
+        raise ValueError(f"parse_path(): path '{path}' doesn't following Plutos naming convention")
+    
+    range = None
+    if n_parts == 4:
+        # range is present
+        range_str = name_parts[2][1:-1] # eckige Klammern wegschneiden
+        start, end = range_str.split(':')
+        range = (float(start), float(end))
+
+    return {
+        'parent': path.parent,
+        'symbol': name_parts[0],
+        'date': date.fromisoformat(name_parts[1]),
+        'range': range,
+        'content': name_parts[-1],
+        'suffix': path.suffix,
+    }    
+
+
+def assemble_path(parts: dict) -> Path:
+    """ assemble a Path according to Plutos naming conventions """
+
+    range_str = ""
+    if 'range' in parts.keys() and parts['range']:
+        range_str = f"[{str(parts['range'][0])}:{str(parts['range'][1])}]_"
+
+    parent = Path('.')
+    if 'parent' in parts.keys():
+        parent = parts['parent']
+        if isinstance(parent, str):
+            parent = Path(parent)
+
+    d = parts['date']
+    if isinstance(d, str):
+        d = date.fromisoformat(d)
+    elif isinstance(d, (int, float)):
+        d = date.fromtimestamp(d)
+
+    return parent / f"{parts['symbol']}_{d.isoformat()}_{range_str}{parts['content']}{parts['suffix']}" 
+
+@click.command()
+@click.argument('file', type=click.Path(exists=True, dir_okay=False), help='path to .dbn file')
+@click.option('-s', '--start', type=float, help="start offest in seconds")
+@click.option('-d', '--duration', type=float, help="duration in seconds")
+def trades(file: Path, start: float, duration: float): # pragma: no cover
+    """ list trades contained of databento file (.dbn -> .csv) """
+
+    click.echo(f"reading trades from file '{file}'")
+    reader = TradesReader.from_file(file, start * 10**9, duration * 10**9)
+    file_parts = parse_path(file)
+    file_parts['parent'] = '.'
+    file_parts['suffix'] = ".csv"
+    file_parts['range'] = (start, start + duration)
+    out_file = assemble_path(file_parts)
+    n_trades = 0
+    with open(out_file, 'w', encoding='utf-8') as out:
+        writer = csv.DictWriter(out, fieldnames=['timestamp', 'date', 'price', 'volume'])
+        writer.writeheader()
+        for trade in reader:
+            writer.writerow({
+                'timestamp': trade.timestamp,
+                'date': datetime.fromtimestamp(trade.timestamp / 10**9).isoformat(),
+                'price': trade.price,
+                'volume': trade.volume,
+            })
+            n_trades += 1
+    click.echo(f"{n_trades} trades written to file '{out_file}'")
+
+
+@click.command()
+@click.argument('file', type=click.Path(exists=True, dir_okay=False), help='path to .dbn file')
+def info(file: Path): # pragma: no cover
+    """ info about .dbn file """
+    data = db.read_dbn(file)
+    click.secho(f"info about {file}:", bold=True)
+    meta = data.metadata
+    click.echo(f"    {meta.dataset} {meta.schema}")
+    click.echo(f"    {', '.join(meta.symbols)}")
+    start, end = meta.start, meta.end
+    start_date, end_date = datetime.fromtimestamp(start // 10**9), datetime.fromtimestamp(end // 10**9)
+    click.echo(f"    {start_date.isoformat()} ({start}) - {end_date.isoformat()} ({end})")
 
 
 @click.command('download')

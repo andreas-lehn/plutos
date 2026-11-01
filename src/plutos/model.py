@@ -274,7 +274,6 @@ class VolumeProfile():
             ')'
         )
 
-
 class Sample:
     """ a Sample associates a volume profile with a timestamp
     
