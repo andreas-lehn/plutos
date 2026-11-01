@@ -1,10 +1,12 @@
 from pathlib import Path
-from datetime import date, datetime
-from zoneinfo import ZoneInfo
 import sys
 import pytest
+import databento as db
+import pandas as pd
+from datetime import datetime
 
-from plutos.model import Trade, TradePair, TradeMatcher, VolumeProfile, Sample, SampleBuilder, SampleReader, SampleWriter, Candle, Chart, MarketModel
+from plutos.trade import Trade, TradePair, TradeMatcher
+from plutos.model import VolumeProfile, Sample, SampleBuilder, SampleReader, Candle, Chart, MarketModel
 from plutos import marketdata
 
 @pytest.fixture
@@ -349,13 +351,15 @@ def test_sample_builder_streaming(trade_list_40):
     assert samples[2].low  == 122253
     assert samples[7].high == 122282
 
+
 def test_sample_builder_start_duration(trade_list_40):
     builder = SampleBuilder.from_trades(trade_list_40, start_offset=2, duration=2)
     samples = [sample.volumes for sample in builder]
     assert len(samples) == 2
     assert samples[0].high == 122257
     assert samples[1].low  == 122258    
-    
+
+
 def test_sample_builder_reread(trade_list_40):
     builder = SampleBuilder.from_trades(trade_list_40)
     samples = [s.volumes for s in builder ]
@@ -372,6 +376,7 @@ def test_sample_builder_reread(trade_list_40):
     assert samples[2].low  == 122253
     assert samples[7].high == 122282
 
+
 def test_sample_reader(csv_path):
     reader = SampleReader.from_file(csv_path)
     samples = [sample.volumes for sample in reader]
@@ -383,6 +388,7 @@ def test_sample_reader(csv_path):
         assert samples[6][samples[6].low + i] == p
     assert samples[7].high == 122667
 
+
 def test_sample_reader_timestamp(csv_path):
     reader = SampleReader.from_file(csv_path)
     FIRST_TIMESTAMP_IN_FILE = 17100000000
@@ -392,6 +398,38 @@ def test_sample_reader_timestamp(csv_path):
         assert timestamp == timestamp
         timestamp += TIME_INCREMENT
 
+def test_sample_builder_from_file(dbn_path):
+    """ create samples form .dbn file and compare them with Samples created with Pandas in a independent path """
+
+    def dump_record(record: db.DBNRecord):
+        """ helper function to convert a record in a dict """
+        return {
+            "group": record.ts_event // SampleBuilder.SAMPLE_RATE,
+            "timestamp": record.ts_event,
+            "data": datetime.fromtimestamp(record.ts_event / 10**9),
+            "price": record.price // 250_000_000,
+            "volume": record.size,
+        }
+
+    data = db.DBNStore.from_file(dbn_path)
+    df = pd.DataFrame([dump_record(record) for record in data])
+    df = df.groupby("group").agg(
+        timestamp=('timestamp', 'last'),
+        low=('price',  min),
+        high=('price', max),
+        volume=('volume', sum),
+    )
+    # df contains the reference samples
+    # now we build the samples with SampleBuilder and assert that they are equal.
+    reader = marketdata.from_file(dbn_path)
+    builder = SampleBuilder(reader)
+    for sample in builder:
+        ref = df.loc[sample.timestamp // 10**9]
+        assert ref.low == sample.low
+        assert ref.high == sample.high
+        assert ref.timestamp == sample.timestamp
+
+
 @pytest.fixture
 def some_samples():
     return [
@@ -400,6 +438,7 @@ def some_samples():
         Sample(18200000000, VolumeProfile.from_dict({'low': 102, 'high': 104, 'volumes': [         1, 2, 4]})),
         Sample(18700000000, VolumeProfile.from_dict({'low': 99,  'high': 104, 'volumes': [4, 3, 2, 1, 1, 2]})),
     ]                                                       # [4, 7, 8, 5, 4, 6]  
+
 
 def test_volume_profile_copy(some_samples):
     s1 = some_samples[1].volumes
@@ -415,12 +454,6 @@ def test_volume_profile_copy(some_samples):
     c[c.low] += 5
     assert c[c.low] != s1[c.low]
  
-def test_sample_writer(some_samples, csv_out_in_path):
-
-    SampleWriter.to_file(str(csv_out_in_path), some_samples)
-    reader = SampleReader.from_file(csv_out_in_path)
-    for out, read in zip(some_samples, reader):
-        assert out.to_dict() == read.to_dict()
 
 def test_candle(some_samples):
     s0 = some_samples[0]

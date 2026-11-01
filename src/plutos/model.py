@@ -18,107 +18,8 @@ from datetime import datetime, timezone
 
 from pydantic import BaseModel
 
-
-class Trade(BaseModel):
-    """ a basic trade at the exchange """
-
-    timestamp: int # original timestamp in ns
-    price: int     # price * 4
-    volume: int
-
-
-class TradePair():
-    """ matching pair of trades """
-
-    def __init__(self, size: int, open_time: int, open_price: int, close_time: int, close_price: int):
-        self.size = size
-        self.open_time = open_time
-        self.open_price = open_price
-        self.close_time = close_time
-        self.close_price = close_price
-
-    @property
-    def total_ticks(self):
-        return (self.close_price - self.open_price) * self.size
-
-    @property
-    def tick_capture(self):
-        """ amount of ticks won or lost with this trade pair"""
-        return self.total_ticks // abs(self.size)
-
-    @property
-    def duration(self):
-        return self.close_time - self.open_time
-
-    @classmethod
-    def from_trades(cls, open: Trade, close: Trade):
-        """ creates a trade pair with maximum size and reduces the volumes of the trades accordingly """
-        if open.volume * close.volume >= 0:
-            raise ValueError(f'__init__(): sizes of open and close do not match')
-
-        size = 0
-        if abs(open.volume) > abs(close.volume):
-            size = -close.volume
-            close.volume = 0
-            open.volume -= size
-        else:
-            size = open.volume
-            open.volume = 0
-            close.volume += size
-
-        return cls(size, open.timestamp, open.price, close.timestamp, close.price)
-
-    def to_dict(self) -> dict:
-        return {
-            'open_time': self.open_time, #datetime.fromtimestamp(self.open_time // 10**9, tz=timezone.utc),
-            'open_price': self.open_price,
-            'close_time': self.close_time, #datetime.fromtimestamp(self.close_time // 10**9, tz=timezone.utc),
-            'close_price': self.close_price,
-            'size': self.size,
-        }
-
-class TradeMatcher:
-    """ represents a position """
-
-    def __init__(self, trades):
-        self.open_trades = deque()
-        self.trades_source = trades
-
-    @classmethod
-    def for_trades(cls, trades: Iterable[Trade]):
-        return cls(trades)
-    
-    @property
-    def is_flat(self):
-        return len(self.open_trades) == 0
-
-    @property
-    def size(self) -> int:
-        sum = 0
-        for trade in self.open_trades:
-            sum += trade.volume
-        return sum
-    
-    def process(self, new_trade: Trade) -> TradePair:
-        if self.size * new_trade.volume >= 0:
-            self.open_trades.append(new_trade)
-        else:
-            # Build Trade-pairs
-            while len(self.open_trades) > 0:
-                trade = self.open_trades[0]
-                pair = TradePair.from_trades(trade, new_trade)
-                yield pair
-                if trade.volume == 0:
-                    self.open_trades.popleft()
-                if new_trade.volume == 0:
-                    break
-            if new_trade.volume != 0:
-                self.open_trades.append(new_trade)
-
-    def __iter__(self):
-        for trade in self.trades_source:
-            for pair in self.process(trade):
-                yield pair
+from . import marketdata
+from .trade import Trade
 
 
 class VolumeProfile():
@@ -166,7 +67,9 @@ class VolumeProfile():
 
     def range(self) -> int:
         return self.high - self.low
-    
+
+    FIELDNAMES = ['low', 'high', 'volumes']
+
     def to_dict(self) -> dict:
         return {
             "low": self.low,
@@ -284,12 +187,23 @@ class Sample:
         self.timestamp = timestamp
         self.volumes = volumes
 
+    @property
+    def low(self) -> int:
+        return self.volumes.low
+
+    @property
+    def high(self) -> int:
+        return self.volumes.high
+    
     def from_dict(d: dict):
         return Sample(d['timestamp'], VolumeProfile.from_dict(d))
+
+    FIELDNAMES = ['timestamp', 'date'] + VolumeProfile.FIELDNAMES
 
     def to_dict(self) -> dict:
         result = self.volumes.to_dict()
         result['timestamp'] = self.timestamp
+        result['date'] = datetime.fromtimestamp(self.timestamp / 10**9).isoformat()
         return result
 
     def __repr__(self): # pragma: no cover
@@ -318,20 +232,6 @@ class SampleReader:
                 })
 
 
-class SampleWriter:
-    """ writes samples """
-
-    def to_file(file: str | Path, samples):
-        """ writes samples in file as csv """
-        if isinstance(file, str):
-            file = Path(file)
-
-        with open(file, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=['timestamp', 'low', 'high', 'volumes'])
-            writer.writeheader()
-            writer.writerows([sample.to_dict() for sample in samples])
-
-
 class SampleBuilder:
     """ builds 1 sec samples from trades """
 
@@ -349,7 +249,6 @@ class SampleBuilder:
         duration        duration in seconds:
                         the timestamp of the last trade to be used to build a sample
                         is not longer away as 'duration' from the first trade used to build samples
-        n               amount of samples to be build
         """
         return SampleBuilder(trades, start_offset, duration)
 
@@ -411,6 +310,34 @@ class SampleBuilder:
         self.timestamp_offset: int = 0
         self.timestamp: int = None
         self.sample = None
+
+@click.command()
+@click.argument('file', type=click.Path(exists=True, dir_okay=False), help='path to .dbn file')
+@click.option('-s', '--start', type=int, default=0, help="start offest in seconds")
+@click.option('-d', '--duration', type=int, default=marketdata.SECONDS_OF_DAY, help="duration in seconds")
+def samples(file, start: int, duration: int):
+    """ creates samples form a Datebento file (*.dbn -> *_samples.csv) """
+
+    click.echo(f"reading form file '{file}'")
+    reader = marketdata.from_file(file)
+    builder = SampleBuilder(reader, start, duration)
+
+    file_parts = marketdata.parse_path(file)
+    file_parts['parent'] = '.'
+    file_parts['content'] = 'samples'
+    file_parts['suffix'] = '.csv'
+    file_parts['range'] = (start, start + duration)
+    out_file = marketdata.assemble_path(file_parts)
+
+    n_samples = 0
+    with open(out_file, 'w', encoding='utf-8') as out:
+        writer = csv.DictWriter(out, fieldnames=Sample.FIELDNAMES)
+        writer.writeheader()
+        for sample in builder:
+            writer.writerow(sample.to_dict())
+            n_samples += 1
+
+    click.echo(f"{n_samples} samples written to file '{out_file}'")
 
 
 class Candle:
