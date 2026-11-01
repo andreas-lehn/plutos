@@ -3,6 +3,7 @@
 #
 
 import csv
+import click
 from pathlib import Path
 from .model import Candle, Chart, MarketModel
 import pandas as pd
@@ -192,15 +193,31 @@ def find_quantile(df: pd.DataFrame, target_col: str = 'target', quantile: float 
     long  = df[target_col].quantile(1 - quantile)
     return short, long
 
-def fit_cmd(prog_name: str, args): #pragma: no cover
+@click.command('fit')
+@click.option(
+    '-t', '--training-dir',
+    type=click.Path(file_okay=False, dir_okay=True, exists=True, path_type=Path),
+    default='training',
+    help="directory with training files (*_hephaistos.csv), default='training'",
+)
+@click.option(
+    '-e', '--eval-dir',
+    type=click.Path(file_okay=False, dir_okay=True, exists=True, path_type=Path),
+    default='eval',
+    help="directory with evaluation files (*_hephaistos.csv), default='eval'",
+)
+@click.option('-m', '--model-file', type=str, default='hephaistos-model.json', help="model file, default='hephaistos-model.json'")
+def fit_cmd(training_dir: tuple[Path], eval_dir: tuple[Path], model_file: str): #pragma: no cover
     """ fit the model to training data """
-    print(f'{prog_name}: I fit a model to training data...')
+    print('Fitting a model to training data...')
 
-    df_training = load_files(args.training_files)
+    training_files = tuple(f for f in training_dir.glob("*_hephaistos.csv") if f.is_file())
+    df_training = load_files(training_files)
     short, long = find_quantile(df_training)
     X_train, y_train = split_target(df_training, short, long)
 
-    df_eval = load_files(args.eval_files)
+    eval_files = tuple(f for f in eval_dir.glob("*_hephaistos.csv") if f.is_file())
+    df_eval = load_files(eval_files)
     X_eval, y_eval = split_target(df_eval, short, long)
 
     model = xgb.XGBClassifier(
@@ -214,18 +231,20 @@ def fit_cmd(prog_name: str, args): #pragma: no cover
         random_state = 42,
     )
     model.fit(X_train, y_train, eval_set=[(X_eval, y_eval)], verbose=True)
-    model.save_model(args.model)
-    print(f'{prog_name}: model written to {args.model}')
+    model.save_model(model_file)
+    print(f"model written to '{model_file}'")
 
 
-def prepare_cmd(prog_name: str, args):  #pragma: no cover
+@click.command('prepare')
+@click.argument('files', nargs=-1, type=click.Path(exists=True, path_type=Path), help='files with historical data in Databento native file (.dbn)')
+@click.option('-d', '--dir', type=click.Path(), help="directory where to put the output files")
+@click.option('-s', '--candle-size', type=int, default=36, help="size of a candle (default=36s)")
+def prepare_cmd(files: list[Path], dir: Path, candle_size: int):  #pragma: no cover
     """ prepare training data from historical data """
-    print(f'{prog_name}: I generate training data...')
-    for file in args.files:
-        path = Path(file)
-
+    click.echo(f'Generating training data...')
+    for path in files:
         collector = DataCollector()
-        main_chart = Chart(candle_size=args.candle_size)
+        main_chart = Chart(candle_size=candle_size)
         main_chart.register_callback(collector.on_candle)
         model = MarketModel()
         model.charts.append(main_chart)
@@ -237,15 +256,18 @@ def prepare_cmd(prog_name: str, args):  #pragma: no cover
             writer.writerows(collector.data)
 
 
-def predict_cmd(prog_name: str, args): # pragma: no cover
+@click.command('predict')
+@click.argument('files', nargs=-1, type=click.Path(exists=True, path_type=Path), help='files with test data (.csv)')
+@click.option('-m', '--model-file', type=click.Path(exists=True, path_type=Path), default='hephaistos-model.json', help='model file')
+def predict_cmd(files: tuple[Path,...], model_file: Path): # pragma: no cover
     """ predict based on a given model """
-    print (f"{prog_name}: I predict based on model '{args.model}'...")
+    click.echo(f"Predicting based on model '{model_file}'...")
 
-    df = load_files(args.files)
+    df = load_files(files)
     X, y = split_target(df)
 
     model = xgb.XGBClassifier()
-    model.load_model(args.model)
+    model.load_model(model_file)
     prob = model.predict_proba(X)
 
     QUANTILE = 0.95
@@ -267,55 +289,25 @@ def predict_cmd(prog_name: str, args): # pragma: no cover
     correct_short_signals = np.sum(short_signals & (y == 0))
     short_rate = correct_short_signals/total_short_signals
     
-    print( '                short    long')
-    print(f'    p max      {prob_short_max*100:6.2f}  {prob_long_max*100:6.2f}')
-    print(f'    p {QUANTILE}%    {prob_short_75*100:6.2f}  {prob_long_75*100:6.2f}')
-    print(f'    total      {total_long_signals:6d}  {total_short_signals:6d}')
-    print(f'    correct    {correct_long_signals:6d}  {correct_short_signals:6d}')
-    print(f'    rate       {long_rate*100:6.2f}  {short_rate*100:6.2f}')
+    click.secho( '                short    long', bold=True)
+    click.secho(f'    p max      {prob_short_max*100:6.2f}  {prob_long_max*100:6.2f}')
+    click.secho(f'    p {QUANTILE}%    {prob_short_75*100:6.2f}  {prob_long_75*100:6.2f}')
+    click.secho(f'    total      {total_long_signals:6d}  {total_short_signals:6d}')
+    click.secho(f'    correct    {correct_long_signals:6d}  {correct_short_signals:6d}')
+    click.secho(f'    rate       {long_rate*100:6.2f}  {short_rate*100:6.2f}')
 
 
-def sim_cmd(prog_name: str, args): # pragma; no cover
-    """ simulate a Databento trades file with Hephaistos """
-    print (f"{prog_name}: I simulate file '{args.file}'")
+@click.command('eval')
+@click.argument('file', type=str, help="file to be evaluated (.dbn)")
+@click.option('-s', '--candle-size', type=int, default=36, help="size of a candle in sec (default=36)")
+@click.option('-m', '--model-file', type=str, default='hephaistos-model.json', help="model file (default='Hephaistos-model.json')")
+@click.option('-t', '--threshold', type=int, default=65, help='threshold to start a trade (default=65%)')
+@click.option('-n', '--num-candles', type=int, help='number of candles to simulate')
+@click.option('-o', '--out-file', type=str, required=True, help="name of output file")
+def eval_cmd(file: Path, candle_size:int, model_file: Path, threshold: int, num_candles: int, out_file: Path): # pragma; no cover
+    """ evaluate a trades file with Hephaistos """
+    click.echo(f"Evaluating file '{file}' based on '{model_file}'")
     
-    chart = Hephaistos.simulate(args.file, args.model, args.candle_size, args.num_candles, args.threshold)
-    chart.to_file(args.out_file, fieldnames=Candle.OHLC_FIELDNAMES + Hephaistos.FIELDNAMES)
-
-
-if __name__ == '__main__':
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Hephaistos training utility")
-    parser.set_defaults(command=lambda prog_anme, args: parser.print_usage())
-    parser.add_argument('-b', '--candle-size', type=int, default=36, help="size of a candle")
-    subparsers = parser.add_subparsers()
-
-    train = subparsers.add_parser('fit', description='fit a model from historical data')
-    train.add_argument('-t', '--training_files', nargs='+', type=str, help='files with training data (.csv')
-    train.add_argument('-e', '--eval-files', nargs='+', type=str, help='files to evaluate fitting of training data')
-    train.add_argument('-m', '--model', type=str, default='hephaistos-model.json', help='model file')
-    train.set_defaults(command=fit_cmd)
-
-    data = subparsers.add_parser('prepare', description='generate training data out of Databento native files')
-    data.add_argument('files', nargs='+', type=str, help='files with historical data in Databento native file (.dbn)')
-    data.add_argument('-d', '--dir', type=str, default=None, help="directory where to put the output files")
-    data.set_defaults(command=prepare_cmd)
-
-    test = subparsers.add_parser('predict', description='predict historical test data and evaluate results')
-    test.add_argument('files', nargs='+', type=str, help='file with taining data (.csv)')
-    test.add_argument('-m', '--model', type=str, default='hephaistos-model.json', help='model file')
-    test.set_defaults(command=predict_cmd)
-
-    sim = subparsers.add_parser('sim', description="simulate a Databento trades file")
-    sim.add_argument('file', type=str, help="file (.dbn) to simulate")
-    sim.add_argument('-m', '--model', type=str, default='hephaistos-model.json', help='model file')
-    sim.add_argument('-t', '--threshold', type=int, default=65, help='threshold to start a trade')
-    sim.add_argument('-n', '--num-candles', type=int, help='number of candles to simulate')
-    sim.add_argument('-o', '--out-file', type=str, required=True, help="name of output file")
-
-    sim.set_defaults(command=sim_cmd)
-
-    args = parser.parse_args()
-    args.command(parser.prog, args)
-
+    chart = Hephaistos.simulate(file, model_file, candle_size, num_candles, threshold)
+    chart.to_file(out_file, fieldnames=Candle.OHLC_FIELDNAMES + Hephaistos.FIELDNAMES)
+    click.echo(f"candles written to '{out_file}'")

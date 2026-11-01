@@ -17,6 +17,7 @@ dependencies = [
     "mplfinance>=0.12.10b0",
     "websockets>=17.3",
     "asyncio>=4.0.0",
+    "scikit-learn>=1.9.1",
 ]
 
 [dependency-groups]
