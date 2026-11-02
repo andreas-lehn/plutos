@@ -7,6 +7,7 @@ import asyncio
 import httpx
 import websockets
 import json
+import click
 
 # Festgelegte Endpunkte (Demo)
 DEMO_URL = "https://demo.tradovateapi.com/v1"
@@ -237,6 +238,8 @@ class Connection:
         self.ws = None
         self._request_id = 0
         self.portfolio = None
+        self._listen_task = None
+        self._heartbeat_task = None
 
     # Als neue Methode in die Klasse einfügen:
     async def _send_command(self, endpoint, body=""):
@@ -255,6 +258,7 @@ class Connection:
         await self.ws.send(message)
         return self._request_id
 
+
     async def authorize(self):
         """ Autorizes open WebSocket connection """
 
@@ -272,6 +276,21 @@ class Connection:
         print("Fordere User-Synchronisation an...")
         # Endpunkt: user/syncrequest, Body: {}
         await self._send_command("user/syncrequest", "{}")
+
+
+    async def subscribe_account(self):
+        """ subribe to account """
+        print("subscript to account...")
+        await self._send_command("account/subscribe", '{' + f'"accountId": {self.portfolio.account_id}' + '}')
+
+
+    async def place_order(self, qty: int):
+        action = "Buy" if qty > 0 else "Sell"
+        order = (
+            f'"accountId": {self.portfolio.account_id}, "action": "{action}", "symbol": "MNQZ6", "orderType": "Market", "orderQty": {abs(qty)}'
+        )
+        print("placing order:", order)
+        await self._send_command('order/placeorder', '{' + order + '}')
 
 
     async def connect(self):
@@ -294,13 +313,12 @@ class Connection:
             response = await client.post(url, json=payload)
             response.raise_for_status()
             self.access_token = response.json().get("accessToken")
-            print("HTTP-Login erfolgreich. Token erhalten.")
+            print("connect(): access token received.")
 
         # 2. WebSocket-Verbindung herstellen
         self.ws = await websockets.connect(self.wss_url)
-        print("WebSocket-Verbindung erfolgreich geöffnet.")
-        asyncio.create_task(self._listen_loop())
-        print("Listener läuft.")
+        self._listen_task    = asyncio.create_task(self._listen_loop())
+        self._heartbeat_task = asyncio.create_task(self._heartbeat())
 
     
     async def disconnect(self):
@@ -326,10 +344,10 @@ class Connection:
 
         # 2. Den WebSocket schließen
         if self.ws:
+            self._heartbeat_task.cancel()
+            self._listen_task.cancel()
             await self.ws.close()
-            print("WebSocket-Verbindung sauber geschlossen.")
-
-    # Vergiss nicht, ganz oben in deiner Datei 'import json' hinzuzufügen!
+            print("web socket closed.")
 
     async def on_response(self, request_id, status, data):
         """
@@ -342,46 +360,47 @@ class Connection:
         if request_id == 1:
             print("Subsciption successful -> sync...")
             await self.user_sync()
-            
-        if request_id == 2:
+        elif request_id == 2:
             print("Sync request successful -> extract state information")
             self.portfolio = Portfolio.from_sync_data(data)
             self.portfolio.display()
+            await self.place_order(1)
+        elif request_id == 3:
+            print("order placed -> sell")
+            await self.place_order(-1)
+        elif request_id == 4:
+            print("we should be flat again")
 
+    def on_order(self, event, entity):
+        """ order event received """
+        print("on_order()", event, entity)
 
-    async def on_event(self, event_type, data):
+    def on_fill(self, event, entity):
+        print("on_fill()", event, entity)
+
+    def on_position(self, event, entity):
+        print("on_position()", event, entity)
+
+    def on_exec_report(self, event, entity):
+        print("on_exec_report()", event, entity)
+
+    def on_cash_balance(self, event, entity):
+        print("on_cash_balance()", event, entity)
+
+    def on_props(self, etype, event, entity):
         """
         Wird aufgerufen, wenn der Server von sich aus eine Änderung schickt.
         """
-        if event_type == "props":
-            entity_type = data.get("entityType")
-            entity = data.get("entity", {})
-            acc_id = entity.get("accountId")
-            if not acc_id:
-                return
-
-            account = self.accounts[acc_id]
-            if not account:
-                return
-
-            # 1. Kontostand-Änderung im Live-Betrieb
-            if entity_type == "cashBal":
-                account.balance = entity.get("amount", 0.0)
-                print(f"[LIVE-UPDATE] Kontostand für {account.name} geändert: {account.balance} USD")
-                
-            # 2. Positions-Änderung im Live-Betrieb
-            elif entity_type == "position":
-                symbol = entity.get("symbol")
-                net_pos = entity.get("netPos", 0)
-                if symbol not in account.positions:
-                    account.positions[symbol] = Position.from_live_event(entity, account)
-                else:
-                    # Bestehende Position im RAM updaten
-                    pos = account.positions[symbol]
-                    pos.qty = net_pos
-                    pos.entry_price = entity.get("prevPrice") or entity.get("openPrice") or pos.entry_price
-
-            self.print_portfolio()
+        if etype == "order":
+            self.on_order(event, entity)
+        elif etype == "fill":
+            self.on_fill(event, entity)
+        elif etype == "position":
+            self.on_position(event, entity)
+        elif etype == "executionReport":
+            self.on_exec_report(event, entity)
+        elif etype == "cashBalance":
+            self.on_cash_balance(event, entity)
 
 
     async def _listen_loop(self):
@@ -390,14 +409,11 @@ class Connection:
         und leitet die Daten sofort an die zuständige Methode weiter.
         """
         try:
+            print('listen loop is running ...')
             async for message in self.ws:
-                if not message:
-                    continue
+                if not message or message == "h" or message == "[]": continue
 
-                if message == "h":
-                    continue
-
-                print(message[:80])
+                #print(message[:120])
 
                 if message == "o":
                     print("socket opened -> authorize ...")
@@ -420,15 +436,31 @@ class Connection:
                         
                         # Pfad 2: Es ist ein spontanes Live-Event (e ist vorhanden)
                         elif "e" in item:
-                            await self.on_event(
-                                event_type=item.get("e"),
-                                data=item.get("d", {})
-                            )
-                                    
+                            event=item.get("e")
+                            data=item.get("d", {})
+                            if event == "props":
+                                self.on_props(data.get("entityType"), data.get("eventType"), data.get("entity"))
+
         except websockets.exceptions.ConnectionClosed:
             print("WebSocket-Verbindung geschlossen. Hörer beendet.")
+        except asyncio.CancelledError:
+            print('listen loop cancelled.')
         except Exception as e:
-            print(f"Fehler in der Router-Schleife: {e}")
+            print(f"error in listen loop: {e}")
+
+
+    async def _heartbeat(self):
+        """ sends a heartbeat signal every 10s """
+        try:
+            print('heartbeat task is running...')
+            while True:
+                await asyncio.sleep(10)
+                if self.ws:
+                    await self.ws.send('[]')
+        except asyncio.CancelledError:
+            print('heartbeat task cancelled.')
+        except Exception as e:
+            print(f"error in heartbeat task: {e}")
 
 
     async def __aenter__(self):
