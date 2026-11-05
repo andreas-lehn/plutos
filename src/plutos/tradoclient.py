@@ -8,20 +8,13 @@ import httpx
 import websockets
 import json
 import click
+from datetime import datetime
 
 # Festgelegte Endpunkte (Demo)
 DEMO_URL = "https://demo.tradovateapi.com/v1"
 DEMO_WSS = "wss://demo.tradovateapi.com/v1/websocket"
 LIVE_URL = "https://live.tradovateapi.com/v1"
 LIVE_WSS = "wss://md.tradovateapi.com/v1/websocket"
-
-
-# tradoclient.py
-import os
-import asyncio
-import httpx
-import websockets
-
 
 class Portfolio:
     def __init__(self):
@@ -235,11 +228,11 @@ class Connection:
             self.wss_url = LIVE_WSS
             
         self.access_token = None
+        self.expitation_time = None
         self.ws = None
         self._request_id = 0
         self.portfolio = None
         self._listen_task = None
-        self._heartbeat_task = None
 
     # Als neue Methode in die Klasse einfügen:
     async def _send_command(self, endpoint, body=""):
@@ -275,13 +268,7 @@ class Connection:
         """
         print("Fordere User-Synchronisation an...")
         # Endpunkt: user/syncrequest, Body: {}
-        await self._send_command("user/syncrequest", "{}")
-
-
-    async def subscribe_account(self):
-        """ subribe to account """
-        print("subscript to account...")
-        await self._send_command("account/subscribe", '{' + f'"accountId": {self.portfolio.account_id}' + '}')
+        await self._send_command("user/syncrequest", '{}')
 
 
     async def place_order(self, qty: int):
@@ -312,13 +299,14 @@ class Connection:
             
             response = await client.post(url, json=payload)
             response.raise_for_status()
-            self.access_token = response.json().get("accessToken")
+            data = response.json()
+            self.access_token = data.get("accessToken")
+            self.expitation_time = datetime.fromisoformat(data.get("expirationTime"))
             print("connect(): access token received.")
 
         # 2. WebSocket-Verbindung herstellen
         self.ws = await websockets.connect(self.wss_url)
         self._listen_task    = asyncio.create_task(self._listen_loop())
-        self._heartbeat_task = asyncio.create_task(self._heartbeat())
 
     
     async def disconnect(self):
@@ -344,7 +332,6 @@ class Connection:
 
         # 2. Den WebSocket schließen
         if self.ws:
-            self._heartbeat_task.cancel()
             self._listen_task.cancel()
             await self.ws.close()
             print("web socket closed.")
@@ -411,20 +398,13 @@ class Connection:
         try:
             print('listen loop is running ...')
             async for message in self.ws:
-                if not message or message == "h" or message == "[]": continue
-
-                #print(message[:120])
-
-                if message == "o":
+                if message == "h":
+                    await self.ws.send('[]')
+                elif message == "o":
                     print("socket opened -> authorize ...")
                     await self.authorize()
-                    continue
-
-                if message.startswith("a"):
+                elif message.startswith("a"):
                     raw_data = json.loads(message[1:])
-                    if not isinstance(raw_data, list):
-                        raw_data = [ raw_data ]
-
                     for item in raw_data:
                         # Pfad 1: Es ist eine Antwort auf ein Command (i ist vorhanden)
                         if "i" in item:
@@ -440,6 +420,15 @@ class Connection:
                             data=item.get("d", {})
                             if event == "props":
                                 self.on_props(data.get("entityType"), data.get("eventType"), data.get("entity"))
+                            elif event == "shutdown":
+                                print('shutdown reveived:', data.get('reasonCode'), data.get('reason'))
+                            elif event == "md":
+                                pass
+                            elif event == "clock":
+                                pass
+                elif message.startswith("c"):
+                    closing_frame = json.load(message[1:])
+                    print('received closing frame:', closing_frame)
 
         except websockets.exceptions.ConnectionClosed:
             print("WebSocket-Verbindung geschlossen. Hörer beendet.")
@@ -447,20 +436,6 @@ class Connection:
             print('listen loop cancelled.')
         except Exception as e:
             print(f"error in listen loop: {e}")
-
-
-    async def _heartbeat(self):
-        """ sends a heartbeat signal every 10s """
-        try:
-            print('heartbeat task is running...')
-            while True:
-                await asyncio.sleep(10)
-                if self.ws:
-                    await self.ws.send('[]')
-        except asyncio.CancelledError:
-            print('heartbeat task cancelled.')
-        except Exception as e:
-            print(f"error in heartbeat task: {e}")
 
 
     async def __aenter__(self):
