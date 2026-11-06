@@ -257,7 +257,7 @@ class Connection:
             f'"isAutomated": true,'
             f'"timeInForce":"Day"'
         )
-        if price:
+        if price and price != 0.0:
             order += f',"price":{price}'
         if stop_price:
             order += f',"stopPrice":{stop_price}'
