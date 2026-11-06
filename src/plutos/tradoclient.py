@@ -37,7 +37,7 @@ class Portfolio:
         aus dem 'd'-Key der Tradovate user/syncrequest Antwort.
         """
         portfolio = cls()
-        
+
         # 1. SCHRITT: Mapping-Tabellen (contracts) aufbauen
         # Das müssen wir zuerst tun, damit wir bei Positionen/Orders Symbole auflösen könnten
         contracts = sync_d_payload.get("contracts", [])
@@ -67,34 +67,23 @@ class Portfolio:
         for pos in positions:
             net_pos = pos.get("netPos", 0)
             c_id = pos.get("contractId")
-            
-            # Wichtig: Tradovate schickt auch geschlossene Positionen (netPos == 0) im Sync mit!
-            if c_id and net_pos != 0:
-                # TRADOVATE PRICE-HUNTING: Suche nach dem echten Einstiegspreis
-                # 1. Versuch: Der Standard-Einstiegspreis
-                price = pos.get("avgPrice")
-                # 2. Versuch: Falls avgPrice 0/None ist, nimm prevAvgPrice (häufig bei Overnight-Positions)
-                if not price or float(price) == 0.0:
-                    price = pos.get("prevAvgPrice")
-
-                portfolio.positions[c_id] = {
-                    "net_pos": net_pos,
-                    "avg_price": price if price else 0.0
-                }
+            portfolio.positions[c_id] = {
+                "net_pos": net_pos,
+            }
 
         # 4. SCHRITT: Nur AKTIVE Orders filtern (orders)
         orders = sync_d_payload.get("orders", [])
+
         for order in orders:
-            status = order.get("orderStatus")
+            status = order.get("ordStatus")
             
             # Wir ignorieren "Filled", "Cancelled", "Rejected" aus der Historie
             if status in ["Working", "PendingNew"]:
                 order_id = order.get("id")
                 portfolio.working_orders[order_id] = {
                     "contract_id": order.get("contractId"),
+                    "status": status,
                     "action": order.get("action"),  # "Buy" oder "Sell"
-                    "qty": order.get("qty"),
-                    "price": order.get("price")
                 }
 
         return portfolio
@@ -106,6 +95,39 @@ class Portfolio:
     def get_id_by_symbol(self, symbol):
         return self.symbol_to_id.get(symbol)
 
+    def on_order(self, event, order):
+        """ order event received """
+        status = order.get("ordStatus")
+        order_id = order.get("id")
+        self.working_orders[order_id] = {
+            "contract_id": order.get("contractId"),
+            "status": status,
+            "action": order.get("action"),  # "Buy" oder "Sell"
+        }
+
+    def on_position(self, event, entity):
+        c_id = entity.get('contractId')
+        net_pos = entity.get('netPos')
+        self.positions[c_id] = {
+            "net_pos": net_pos,
+        }
+
+    def on_cash_balance(self, event, entity):
+        if entity.get("accountId") == self.account_id:
+            self.cash_balance = entity.get("amount")
+
+    def on_props(self, etype, event, entity):
+        """
+        Wird aufgerufen, wenn der Server von sich aus eine Änderung schickt.
+        """
+        if etype == "order":
+            self.on_order(event, entity)
+        elif etype == "position":
+            self.on_position(event, entity)
+        elif etype == "cashBalance":
+            self.on_cash_balance(event, entity)
+
+
     def __repr__(self):
         """ Entwickler-Ansicht: Zeigt den internen Zustand kompakt beim Debuggen."""
         return f"Portfolio(account='{self.account_spec}', positions_count={len(self.positions)}, working_orders_count={len(self.working_orders)})"
@@ -116,92 +138,26 @@ class Portfolio:
         return f"Account: {self.account_spec} | Balance: {self.cash_balance}$ | Positions: [{pos_summary or 'None'}]"
 
     def display(self):
+
         """
         Gibt den kompletten aktuellen Zustand des Portfolios hochformatiert aus.
         Ersetzt das unübersichtliche Loggen im WebSocket-Handler.
         """
         print(f"\nAccount {self.account_spec} ({self.account_id}) {self.cash_balance:.2f} USD\n")
         # 1. Positionen ausgeben
-        print(f"  {'contract id':>12}  symbol  {'qty':>6}  {'Ø price':>10}")
+        print(f"  {'contract id':>12}  symbol  {'qty':>6}")
         for c_id, data in self.positions.items():
             symbol = self.get_symbol_by_id(c_id)
-            # Ein Pluszeichen für Long-Positionen hinzufügen
             pos_str = f"+{data['net_pos']}" if data['net_pos'] > 0 else str(data['net_pos'])
-            print(f"  {c_id:>12}  {symbol:>6}  {pos_str:>6}  {data['avg_price']:>10.2f}")
+            print(f"  {c_id:>12}  {symbol:>6}  {pos_str:>6}")
+
         # 2. Arbeitende Orders ausgeben
         print()
-        print(f"  {'order id':>12}  symbol  {'action':>6}  {'qty':>6}  {'limit':>10}")
+        print(f"  {'order id':>12}  symbol  {'action':>6}  {'status':>10}")
         for o_id, data in self.working_orders.items():
             symbol = self.get_symbol_by_id(data['contract_id'])
-            price_str = f"{data['price']:.2f}" if data['price'] is not None else "Market"
-            print(f"  {o_id:>12}  {symbol:>6}  {data['action']:>6}  {data['qty']:>6} | {price_str:>10}")  
+            print(f"  {o_id:>12}  {symbol:>6}  {data['action']:>6}  {data['status']:>10}")  
         print()
-
-
-# 1. Die neue Account-Klasse ganz oben in der Datei definieren:
-class Account:
-    def __init__(self, connection, id, name):
-        """
-        Repräsentiert dein Handelskonto im RAM.
-        Hält eine saubere Referenz zurück zur übergeordneten Connection.
-        """
-        self.connection = connection
-        self.id = id
-        self.name = name
-        self.balance = 0.0
-        self.positions = {}  # Symbol -> Position (bauen wir im nächsten Schritt)
-
-    @classmethod
-    def from_responce(cls, connection, data):
-        return cls(connection, data.get('id'), data.get('name'))
-    
-    def __repr__(self):
-        return f"<Account(name='{self.name}', id={self.id}, balance={self.balance}USD)>"
-    
-class Position:
-    def __init__(self, account, symbol, qty, entry_price):
-        """
-        Repräsentiert einen aktiven Trade im RAM.
-        Hält eine saubere Referenz nach oben zum Account.
-        """
-        self.account = account
-        self.symbol = symbol
-        self.qty = qty
-        self.entry_price = entry_price
-        self.stop_loss = None  # Wird später gekoppelt
-
-    @classmethod
-    def from_sync_data(cls, pos_data, contracts_map, account):
-        """Factory-Methode für den initialen User-Sync."""
-        contract_id = pos_data.get("contractId")
-        contract_info = contracts_map.get(contract_id, {})
-        
-        symbol = pos_data.get("symbol") or contract_info.get("symbol", f"ID-{contract_id}")
-        qty = pos_data.get("netPos", 0)
-        entry_price = (
-            pos_data.get("netPrice") or 
-            pos_data.get("prevPrice") or 
-            pos_data.get("openPrice") or 
-            0.0
-        )
-        return cls(account, symbol, qty, entry_price)
-
-    @classmethod
-    def from_live_event(cls, entity_data, account):
-        """Factory-Methode für spontane Live-Events über den WebSocket."""
-        symbol = entity_data.get("symbol")
-        qty = entity_data.get("netPos", 0)
-        entry_price = entity_data.get("prevPrice") or entity_data.get("openPrice") or 0.0
-        return cls(account, symbol, qty, entry_price)
-
-
-    @property
-    def is_flat(self):
-        return self.qty == 0
-
-    def __repr__(self):
-        richtung = "LONG" if self.is_long else "SHORT"
-        return f"<Position({richtung} {abs(self.qty)}x {self.symbol} @ {self.entry_price})>"
 
 
 class Connection:
@@ -233,32 +189,48 @@ class Connection:
         self._request_id = 0
         self.portfolio = None
         self._listen_task = None
+        self._pending_requests = {}
+        self.connection_authorized = False
 
     # Als neue Methode in die Klasse einfügen:
-    async def _send_command(self, endpoint, body=""):
+    async def send_command(self, endpoint, body=""):
         """
         Zusatzfunktion, die das Tradovate-WSS-Format generiert,
         die Request-ID automatisch erhöht und die Nachricht absendet.
         """
         if not self.ws:
             raise ConnectionError("WebSocket not connected.")
-            
-        self._request_id += 1
-        
+
         # Format: endpoint\nreq_id\nquery\nbody
+        self._request_id += 1
         message = f"{endpoint}\n{self._request_id}\n\n{body}"
-        
         await self.ws.send(message)
-        return self._request_id
+        
+        loop = asyncio.get_running_loop()
+        future = loop.create_future()
+        self._pending_requests[self._request_id] = future
+        return future
+
+
+    async def on_response(self, request_id, status, data):
+        """
+        Wird aufgerufen, wenn der Server direkt auf eine unserer Anfragen antwortet.
+        """
+
+        future = self._pending_requests.pop(request_id)
+        if status == 200:
+            future.set_result(data)
+            if request_id == 1:
+                self.connection_authorized = True
+        else:
+            future.set_exception(ValueError(f"{request_id} failed {status}: {data}"))
 
 
     async def authorize(self):
         """ Autorizes open WebSocket connection """
-
         if not self.access_token:
             raise ValueError("no access token available")
-        
-        await self._send_command("authorize", self.access_token)
+        return await self.send_command("authorize", self.access_token)
 
 
     async def user_sync(self):
@@ -266,18 +238,51 @@ class Connection:
         Fordert den vollständigen Konto- und Positions-Sync von Tradovate an.
         Die Daten fließen danach automatisch in die Hintergrund-Schleife.
         """
-        print("Fordere User-Synchronisation an...")
-        # Endpunkt: user/syncrequest, Body: {}
-        await self._send_command("user/syncrequest", '{}')
-
-
-    async def place_order(self, qty: int):
-        action = "Buy" if qty > 0 else "Sell"
-        order = (
-            f'"accountId": {self.portfolio.account_id}, "action": "{action}", "symbol": "MNQZ6", "orderType": "Market", "orderQty": {abs(qty)}'
+        return await self.send_command(
+            "user/syncrequest", 
+            '{ "entityTypes": [ "account", "contract", "order", "position", "cashBalance" ] }'
         )
-        print("placing order:", order)
-        await self._send_command('order/placeorder', '{' + order + '}')
+
+
+    async def place_order(self, order_type: str, action: str, qty: int, price: float = None, stop_price: float = None):
+        order = (
+            f'"accountId":{self.portfolio.account_id},'
+            f'"action":"{action}",'
+            f'"symbol":"MNQZ6",'
+            f'"orderType":"{order_type}",'
+            f'"orderQty":{qty},'
+            f'"isAutomated": true,'
+            f'"timeInForce":"Day"'
+        )
+        if price:
+            order += f',"price":{price}'
+        if stop_price:
+            order += f',"stopPrice":{stop_price}'
+
+        command = await self.send_command('order/placeorder', '{' + order + '}')
+        return (await command)['orderId']
+
+
+    async def cancel_order(self, order_id: int):
+        body = f'"orderId": {order_id}'
+        return await self.send_command("order/cancelorder", '{' + body + '}')
+    
+
+    async def modify_order(self, order_id: int, order_type: str, action: str, qty: int, price: float = None, stop_price: float = None):
+        order = (
+            f'"orderId":{order_id},'
+            f'"action":"{action}",'
+            f'"symbol":"MNQZ6",'
+            f'"orderType":"{order_type}",'
+            f'"orderQty":{qty},'
+            f'"isAutomated": true,'
+            f'"timeInForce":"Day"'
+        )
+        if price:
+            order += f',"price":{price}'
+        if stop_price:
+            order += f',"stopPrice":{stop_price}'
+        return await self.send_command('order/modifyorder', '{' + order + '}')
 
 
     async def connect(self):
@@ -306,7 +311,14 @@ class Connection:
 
         # 2. WebSocket-Verbindung herstellen
         self.ws = await websockets.connect(self.wss_url)
-        self._listen_task    = asyncio.create_task(self._listen_loop())
+        self._listen_task = asyncio.create_task(self._listen_loop())
+
+        # Verbindung authorisieren
+        await (await self.authorize())
+
+        # user sychronisieren
+        sync_request = await self.user_sync()
+        self.portfolio = Portfolio.from_sync_data(await sync_request)
 
     
     async def disconnect(self):
@@ -336,59 +348,6 @@ class Connection:
             await self.ws.close()
             print("web socket closed.")
 
-    async def on_response(self, request_id, status, data):
-        """
-        Wird aufgerufen, wenn der Server direkt auf eine unserer Anfragen antwortet.
-        """
-        if status != 200:
-            print(f"[ERROR] Anfrage {request_id} fehlgeschlagen mit Status {status}: {data}")
-            return
-        
-        if request_id == 1:
-            print("Subsciption successful -> sync...")
-            await self.user_sync()
-        elif request_id == 2:
-            print("Sync request successful -> extract state information")
-            self.portfolio = Portfolio.from_sync_data(data)
-            self.portfolio.display()
-            await self.place_order(1)
-        elif request_id == 3:
-            print("order placed -> sell")
-            await self.place_order(-1)
-        elif request_id == 4:
-            print("we should be flat again")
-
-    def on_order(self, event, entity):
-        """ order event received """
-        print("on_order()", event, entity)
-
-    def on_fill(self, event, entity):
-        print("on_fill()", event, entity)
-
-    def on_position(self, event, entity):
-        print("on_position()", event, entity)
-
-    def on_exec_report(self, event, entity):
-        print("on_exec_report()", event, entity)
-
-    def on_cash_balance(self, event, entity):
-        print("on_cash_balance()", event, entity)
-
-    def on_props(self, etype, event, entity):
-        """
-        Wird aufgerufen, wenn der Server von sich aus eine Änderung schickt.
-        """
-        if etype == "order":
-            self.on_order(event, entity)
-        elif etype == "fill":
-            self.on_fill(event, entity)
-        elif etype == "position":
-            self.on_position(event, entity)
-        elif etype == "executionReport":
-            self.on_exec_report(event, entity)
-        elif etype == "cashBalance":
-            self.on_cash_balance(event, entity)
-
 
     async def _listen_loop(self):
         """
@@ -396,13 +355,11 @@ class Connection:
         und leitet die Daten sofort an die zuständige Methode weiter.
         """
         try:
-            print('listen loop is running ...')
             async for message in self.ws:
                 if message == "h":
                     await self.ws.send('[]')
                 elif message == "o":
-                    print("socket opened -> authorize ...")
-                    await self.authorize()
+                    print('connection opened')
                 elif message.startswith("a"):
                     raw_data = json.loads(message[1:])
                     for item in raw_data:
@@ -419,7 +376,7 @@ class Connection:
                             event=item.get("e")
                             data=item.get("d", {})
                             if event == "props":
-                                self.on_props(data.get("entityType"), data.get("eventType"), data.get("entity"))
+                                self.portfolio.on_props(data.get("entityType"), data.get("eventType"), data.get("entity"))
                             elif event == "shutdown":
                                 print('shutdown reveived:', data.get('reasonCode'), data.get('reason'))
                             elif event == "md":
@@ -475,8 +432,8 @@ class Connection:
             f"<{self.__class__.__name__}(mode='{self.mode}', "
             f"connection_state={self.connection_state}, "
             f"url={self.http_base})>"
-        )
 
+        )
 
 async def main():
     print("Starte den reaktiven Tradovate-Live-Monitor...")
@@ -484,11 +441,31 @@ async def main():
     
     try:
         async with Connection(demo=True) as conn:
+            conn.portfolio.display()
+            for order_id in conn.portfolio.working_orders:
+                await conn.cancel_order(order_id)
+            
+            buy_id = await conn.place_order('Market', 'Buy', 1)
+            print(f"buy order = {buy_id}")
+
+            sell_id = await conn.place_order('Market', 'Sell', 1)
+            print(f"sell order = {sell_id}")
+
+            stop_id = await conn.place_order('Stop', 'Sell', 1, stop_price=25000.0)
+            print(f"stop_id = {stop_id}")
+            await conn.modify_order(stop_id, 'Stop', 'Sell', 1, stop_price=26000.0)
+
+            await asyncio.sleep(1.0)
+
+            await conn.cancel_order(stop_id)
+
             # Endlosschleife, die den Bot am Leben hält
             while True:
                 # Wir schlafen jeweils 1 Sekunde, um die CPU nicht zu belasten.
                 # Der Listener läuft im Hintergrund völlig unabhängig davon weiter!
-                await asyncio.sleep(0.2)
+                conn.portfolio.display()
+                await asyncio.sleep(1.0)
+                
                 
     except asyncio.CancelledError:
         # Wird ausgelöst, wenn der Task sauber beendet wird
