@@ -1,8 +1,10 @@
 import logging
-import os
+import asyncio
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
 
-import httpx
-from fastapi import FastAPI, Request
+from . import tradoclient
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -12,79 +14,32 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# Die App zieht sich die Daten direkt aus der aktiven Conda-Umgebung bzw. Render-Umgebung
-TRADOVATE_URL = "https://tradovateapi.com"
-TRADOVATE_USER = os.getenv("TRADOVATE_USER")
-TRADOVATE_PASS = os.getenv("TRADOVATE_PASS")
-TRADOVATE_APP_KEY = os.getenv("TRADOVATE_APP_KEY")
+trado_connection = tradoclient.Connection(True)
 
-# Sicherheitsprüfung beim Start des Bots, ob alle wichtigen Umgebungsvariablen gesetzt sind
-if not TRADOVATE_USER:
-    logger.error("TRADOVATE_USER not set!")
-if not TRADOVATE_PASS:
-    logger.error("TRADOVATE_PASS not set!")
-if not TRADOVATE_APP_KEY:
-    logger.error("TRADOVATE_APP_KEY not set!")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    trado_task = asyncio.create_task(trado_connection.listen_loop())
+    await trado_connection.connect()
 
-# Globale Variable, um das Token für andere Funktionen bereitzuhalten
-token_store = {"access_token": None, "expiration": None}
+    yield
 
+    await trado_connection.disconnect()
+    trado_task.cancel()
 
-async def get_tradovate_token() -> bool:
-    """Holt sich ein frisches OAuth-Token von Tradovate"""
-    url = f"{TRADOVATE_URL}/auth/accesstokenrequest"
-    payload = {
-        "name": TRADOVATE_USER,
-        "password": TRADOVATE_PASS,
-        "appId": TRADOVATE_APP_KEY,
-        "appVersion": "1.0.0",
-    }
-
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(url, json=payload, timeout=5.0)
-
-            if response.status_code == 200:
-                data = response.json()
-                token_store["access_token"] = data.get("accessToken")
-                logger.info("🔐 TRADOVATE: Login erfolgreich! Access Token empfangen.")
-                return True
-            else:
-                logger.error(
-                    f"❌ TRADOVATE: Login fehlgeschlagen. Status: {response.status_code}, Info: {response.text}"
-                )
-                return False
-
-    except Exception as e:
-        logger.error(f"❌ TRADOVATE: Fehler bei Verbindung zu Tradovate: {e}")
-        return False
-
-
-# --- FASTAPI ENDPOINTS ---
-
-
-@app.on_event("startup")
-async def startup_event():
-    """Wird aufgerufen, sobald FastAPI startet."""
-    logger.info("Bot startup...")
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Wird aufgerufen, wenn der Server gestoppt wird."""
-    logger.info("Bot shutting down...")
-
+app = FastAPI(lifespan=lifespan)
 
 @app.get("/")
-def read_root(request: Request):
-    """Gibt die zentralen Metadaten der FastAPI-App dynamisch zurück."""
-    # Holt sich die App-Instanz aus dem Request
-    app = request.app
+async def root():
+    return {
+        "status": "online", 
+        "message": "Plutos bot is running..."
+    }
 
-    return {"name": app.title, "description": app.description, "version": app.version}
-
-
-@app.get("/health")
-def health_check():
-    """Wichtig für das Deployment auf render.com"""
-    return {"status": "healthy"}
+@app.get("/account")
+async def account_info():
+    return (
+        '{'
+            f'"accountName":{trado_connection.portfolio.account_spec},'
+            f'"accountId":{trado_connection.portfolio.account_id},'
+            f'"balance":{trado_connection.portfolio.cash_balance}'
+        '}')

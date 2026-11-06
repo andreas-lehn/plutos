@@ -7,8 +7,11 @@ import asyncio
 import httpx
 import websockets
 import json
-import click
 from datetime import datetime
+import logging
+
+# Holt genau den Logger, den Uvicorn für die Konsolen-Ausgabe nutzt
+logger = logging.getLogger("uvicorn.error")
 
 # Festgelegte Endpunkte (Demo)
 DEMO_URL = "https://demo.tradovateapi.com/v1"
@@ -307,18 +310,20 @@ class Connection:
             data = response.json()
             self.access_token = data.get("accessToken")
             self.expitation_time = datetime.fromisoformat(data.get("expirationTime"))
-            print("connect(): access token received.")
+            logger.info("Tradovate access token received.")
 
         # 2. WebSocket-Verbindung herstellen
         self.ws = await websockets.connect(self.wss_url)
-        self._listen_task = asyncio.create_task(self._listen_loop())
+        logger.info("Tradovate web socket connected.")
 
         # Verbindung authorisieren
         await (await self.authorize())
-
+        logger.info("Tradovate web socket successfully authorized.")
+        
         # user sychronisieren
         sync_request = await self.user_sync()
         self.portfolio = Portfolio.from_sync_data(await sync_request)
+        logger.info(f"Connected to Tradovate account {self.portfolio.account_spec}({self.portfolio.account_id})")
 
     
     async def disconnect(self):
@@ -336,30 +341,34 @@ class Connection:
                     }
                     # Tradovate erwartet eine leere POST-Anfrage zum Ausloggen
                     await client.post(url, headers=headers, json={})
-                    print("Access Token erfolgreich bei Tradovate entwertet (HTTP Logout).")
+                    logger.info("Tradovate access token invalidated (HTTP logout)")
             except Exception as e:
-                print(f"Fehler beim HTTP-Logout (Token konnte nicht entwertet werden): {e}")
+                logger.error(f"error during HTTP logout: Tradovate access token not invalidated): {e}")
             finally:
                 self.access_token = None
 
         # 2. Den WebSocket schließen
         if self.ws:
-            self._listen_task.cancel()
             await self.ws.close()
-            print("web socket closed.")
+            logger.info("Tradovate web socket closed.")
 
 
-    async def _listen_loop(self):
+    async def listen_loop(self):
         """
         Der reine Router: Erkennt den Typ (Response oder Event) 
         und leitet die Daten sofort an die zuständige Methode weiter.
         """
         try:
+            logger.info("Tradovate web socket listen loop is running...")
+            while not self.ws:
+                await asyncio.sleep(0.1)
+
+            logger.info("Tradovate web socket is opened. Receiving messages...")
             async for message in self.ws:
                 if message == "h":
                     await self.ws.send('[]')
                 elif message == "o":
-                    print('connection opened')
+                    logger.info('Recieved Tradovate web socket connection open message')
                 elif message.startswith("a"):
                     raw_data = json.loads(message[1:])
                     for item in raw_data:
@@ -378,21 +387,19 @@ class Connection:
                             if event == "props":
                                 self.portfolio.on_props(data.get("entityType"), data.get("eventType"), data.get("entity"))
                             elif event == "shutdown":
-                                print('shutdown reveived:', data.get('reasonCode'), data.get('reason'))
+                                logger.warning('Tradovate web socket shutdown message reveived:', data.get('reasonCode'), data.get('reason'))
                             elif event == "md":
                                 pass
                             elif event == "clock":
                                 pass
                 elif message.startswith("c"):
                     closing_frame = json.load(message[1:])
-                    print('received closing frame:', closing_frame)
+                    logger.warning('Tradovate web socket closing frame received:', closing_frame)
 
         except websockets.exceptions.ConnectionClosed:
-            print("WebSocket-Verbindung geschlossen. Hörer beendet.")
+            logger.warning("Tradovate web socket closed. Listener loop terminated.")
         except asyncio.CancelledError:
-            print('listen loop cancelled.')
-        except Exception as e:
-            print(f"error in listen loop: {e}")
+            logger.info('Tradovate web sockert listen loop cancelled.')
 
 
     async def __aenter__(self):
@@ -440,7 +447,9 @@ async def main():
     print("Beenden mit STRG+C (Ctrl+C)\n")
     
     try:
-        async with Connection(demo=True) as conn:
+        conn = Connection(demo=True)
+        listen_task = asyncio.create_task(conn.listen_loop())
+        async with conn:
             conn.portfolio.display()
             for order_id in conn.portfolio.working_orders:
                 await conn.cancel_order(order_id)
@@ -465,7 +474,8 @@ async def main():
                 # Der Listener läuft im Hintergrund völlig unabhängig davon weiter!
                 conn.portfolio.display()
                 await asyncio.sleep(1.0)
-                
+        
+        listen_task.cancel()        
                 
     except asyncio.CancelledError:
         # Wird ausgelöst, wenn der Task sauber beendet wird
