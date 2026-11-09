@@ -178,7 +178,7 @@ def load_files(files) -> pd.DataFrame: # pragma: no cover
         frames.append(df)
     return pd.concat(frames, axis=0)
 
-def split_target(df: pd.DataFrame, short: int = 24, long: int = 24, target_col: str = 'target'): # pragma: no cover
+def split_target(df: pd.DataFrame, short: int = -24, long: int = 24, target_col: str = 'target'): # pragma: no cover
     feature_cols = [col for col in df.columns if col != target_col]
     X = df[feature_cols]
 
@@ -209,13 +209,15 @@ def find_quantile(df: pd.DataFrame, target_col: str = 'target', quantile: float 
     help="directory with evaluation files (*_hephaistos.csv), default='eval'",
 )
 @click.option('-m', '--model-file', type=str, default='hephaistos-model.json', help="model file, default='hephaistos-model.json'")
-def fit_cmd(training_dir: tuple[Path], eval_dir: tuple[Path], model_file: str): #pragma: no cover
+@click.option('-q', '--quantile', type=float, default=0.25, help="quantile value for target classification")
+def fit_cmd(training_dir: tuple[Path], eval_dir: tuple[Path], model_file: str, quantile: float): #pragma: no cover
     """ fit the model to training data """
     print('Fitting a model to training data...')
 
     training_files = tuple(f for f in training_dir.glob("*_hephaistos.csv") if f.is_file())
     df_training = load_files(training_files)
-    short, long = find_quantile(df_training)
+    short, long = find_quantile(df_training, quantile=quantile)
+    print('quantile values:', short, long)
     X_train, y_train = split_target(df_training, short, long)
 
     eval_files = tuple(f for f in eval_dir.glob("*_hephaistos.csv") if f.is_file())
@@ -303,13 +305,14 @@ def prepare_cmd(files: list[Path], dir: Path, candle_size: int):  #pragma: no co
 @click.command('predict')
 @click.argument('files', nargs=-1, type=click.Path(exists=True, path_type=Path), help='files with test data (.csv)')
 @click.option('-m', '--model-file', type=click.Path(exists=True, path_type=Path), default='hephaistos-model.json', help='model file')
-@click.option('-t', '--threshold', type=float, help="threshold probability for trades")
-def predict_cmd(files: tuple[Path,...], model_file: Path, threshold): # pragma: no cover
+@click.option('-p', '--probability', type=float, default=0.5, help="threshold probability for trades")
+@click.option('-c', '--classification', type=int, default=24, help="classification threshold for target value")
+def predict_cmd(files: tuple[Path,...], model_file: Path, probability, classification): # pragma: no cover
     """ predict based on a given model """
     click.echo(f"Predicting based on model '{model_file}'...")
 
     df = load_files(files)
-    X, y = split_target(df)
+    X, y = split_target(df, -classification, classification)
 
     model = xgb.XGBClassifier()
     model.load_model(model_file)
@@ -317,8 +320,8 @@ def predict_cmd(files: tuple[Path,...], model_file: Path, threshold): # pragma: 
     prob_short = proba[:, 0] # probability for short
     prob_long  = proba[:, 2] # probability for long
 
-    raw_short = prob_short >= threshold
-    raw_long = prob_long >= threshold
+    raw_short = prob_short >= probability
+    raw_long = prob_long >= probability
     both_active = raw_short & raw_long
     final_short = np.where(both_active, False, raw_short).astype(int)
     final_long = np.where(both_active, False, raw_long).astype(int)
@@ -362,7 +365,7 @@ def predict_cmd(files: tuple[Path,...], model_file: Path, threshold): # pragma: 
     df_cm.loc["precision [%]"] = precision_row
 
     print()
-    print(f'prediction (threshold={threshold:.2f}):')
+    print(f'prediction for probability {probability:.2f}, target classification {classification} ticks')
     print(df_cm.to_string())
     print()
 
