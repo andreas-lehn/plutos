@@ -238,18 +238,27 @@ def fit_cmd(training_dir: tuple[Path], eval_dir: tuple[Path], model_file: str, q
     model.save_model(model_file)
     print(f"model written to '{model_file}'")
 
+    importances = model.feature_importances_
+    df_features = pd.DataFrame({"feature": X_train.columns, "importance [%]": importances * 100})
+    df_features = df_features.sort_values(by="importance [%]", ascending=False).reset_index(
+        drop=True
+    )
+    print()
+    print(df_features.to_string(index=False, float_format="{:.2f}%".format))
+
 
 @click.command()
 @click.argument('files', nargs=-1, type=click.Path(exists=True, path_type=Path), help='eval files to compute precision recall for long')
-@click.option('-d', '--direction', type=click.Choice(['long', 'short']), help="long or short")
+@click.option('-d', '--direction', type=click.Choice(['long', 'short']), default='long', help="long or short")
 @click.option('-m', '--model-file', type=str, default='hephaistos-model.json', help="model file, default='hephaistos-model.json'")
-def prec_recall(files: list[Path], model_file: str, direction: str):
+@click.option('-c', '--classification', type=int, default=24, help="threshold for target classification (in ticks)")
+def prec_recall(files: list[Path], model_file: str, direction: str, classification: int):
     """ calculate precision reacall for long signals """
     """ predict based on a given model """
     click.echo(f"Predicting based on model '{model_file}'...")
 
     df = load_files(files)
-    X, y = split_target(df)
+    X, y = split_target(df, -classification, classification)
 
     model = xgb.XGBClassifier()
     model.load_model(model_file)
