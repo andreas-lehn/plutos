@@ -362,6 +362,7 @@ def predict_cmd(files: tuple[Path,...], model_file: Path, threshold): # pragma: 
     df_cm.loc["precision [%]"] = precision_row
 
     print()
+    print(f'prediction (threshold={threshold:.2f}):')
     print(df_cm.to_string())
     print()
 
