@@ -9,6 +9,8 @@ from .model import Candle, Chart, MarketModel
 import pandas as pd
 import numpy as np
 import xgboost as xgb
+import matplotlib.pyplot as plt
+from sklearn.metrics import precision_recall_curve, confusion_matrix
 
 MAX_LOSS = 100
 START_OFFSET = 48 # don't begin trading bevor this offset in seconds since start of the session
@@ -235,6 +237,48 @@ def fit_cmd(training_dir: tuple[Path], eval_dir: tuple[Path], model_file: str): 
     print(f"model written to '{model_file}'")
 
 
+@click.command()
+@click.argument('files', nargs=-1, type=click.Path(exists=True, path_type=Path), help='eval files to compute precision recall for long')
+@click.option('-d', '--direction', type=click.Choice(['long', 'short']), help="long or short")
+@click.option('-m', '--model-file', type=str, default='hephaistos-model.json', help="model file, default='hephaistos-model.json'")
+def prec_recall(files: list[Path], model_file: str, direction: str):
+    """ calculate precision reacall for long signals """
+    """ predict based on a given model """
+    click.echo(f"Predicting based on model '{model_file}'...")
+
+    df = load_files(files)
+    X, y = split_target(df)
+
+    model = xgb.XGBClassifier()
+    model.load_model(model_file)
+    probs = model.predict_proba(X)
+    signal = 0 if direction == 'short' else 2
+    proba = probs[:,signal]
+    y_binary = (y == signal).astype(int)
+
+    # Precision und Recall für alle möglichen Schwellenwerte berechnen
+    precisions, recalls, thresholds = precision_recall_curve(y_binary, proba)
+    plt.figure(figsize=(8, 5))
+    # Wir plotten Precision gegen die Schwellenwerte (thresholds)
+    # Hinweis: thresholds ist 1 Element kürzer als precisions/recalls, daher das [:-1]
+    plt.plot(thresholds, precisions[:-1], label='precision', color='green', lw=2)
+    plt.plot(thresholds, recalls[:-1], label='recall', color='blue', lw=2)
+
+    plt.xlabel('Konfidenz-Schwelle des Modells (0.0 bis 1.0)')
+    plt.ylabel('Prozentwert')
+    plt.title(f'trade-off {direction} trades')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+    # --- Übersichtliche Tabelle zum Ablesen des Sweet-Spots ---
+    df_tradeoff = pd.DataFrame({
+        'Schwelle': thresholds,
+        'Trefferquote (Precision)': precisions[:-1],
+        'Gefundene Chancen (Recall)': recalls[:-1]
+    })
+
+
 @click.command('prepare')
 @click.argument('files', nargs=-1, type=click.Path(exists=True, path_type=Path), help='files with historical data in Databento native file (.dbn)')
 @click.option('-d', '--dir', type=click.Path(), help="directory where to put the output files")
@@ -259,7 +303,8 @@ def prepare_cmd(files: list[Path], dir: Path, candle_size: int):  #pragma: no co
 @click.command('predict')
 @click.argument('files', nargs=-1, type=click.Path(exists=True, path_type=Path), help='files with test data (.csv)')
 @click.option('-m', '--model-file', type=click.Path(exists=True, path_type=Path), default='hephaistos-model.json', help='model file')
-def predict_cmd(files: tuple[Path,...], model_file: Path): # pragma: no cover
+@click.option('-t', '--threshold', type=float, help="threshold probability for trades")
+def predict_cmd(files: tuple[Path,...], model_file: Path, threshold): # pragma: no cover
     """ predict based on a given model """
     click.echo(f"Predicting based on model '{model_file}'...")
 
@@ -268,33 +313,57 @@ def predict_cmd(files: tuple[Path,...], model_file: Path): # pragma: no cover
 
     model = xgb.XGBClassifier()
     model.load_model(model_file)
-    prob = model.predict_proba(X)
+    proba = model.predict_proba(X)
+    prob_short = proba[:, 0] # probability for short
+    prob_long  = proba[:, 2] # probability for long
 
-    QUANTILE = 0.95
-    prob_short = prob[:, 0]
-    prob_short_max = np.max(prob_short)
-    prob_short_75 = np.quantile(prob_short, QUANTILE)
-    
-    prob_long = prob[:, 2]
-    prob_long_max = np.max(prob_long)
-    prob_long_75  = np.quantile(prob_long, QUANTILE)
+    raw_short = prob_short >= threshold
+    raw_long = prob_long >= threshold
+    both_active = raw_short & raw_long
+    final_short = np.where(both_active, False, raw_short).astype(int)
+    final_long = np.where(both_active, False, raw_long).astype(int)
+    final_neutral = np.where((final_short == 0) & (final_long == 0), 1, 0)
 
-    long_signals = prob_long > prob_long_75
-    total_long_signals = np.sum(long_signals)
-    correct_long_signals = np.sum(long_signals & (y == 2))
-    long_rate = correct_long_signals/total_long_signals
+    df_signals = pd.DataFrame({
+        'pred_short': final_short,
+        'pred_neutral': final_neutral,
+        'pred_long': final_long,
+        'target': y
+    })    
 
-    short_signals = prob_short > prob_short_75
-    total_short_signals = np.sum(short_signals)
-    correct_short_signals = np.sum(short_signals & (y == 0))
-    short_rate = correct_short_signals/total_short_signals
-    
-    click.secho( '                short    long', bold=True)
-    click.secho(f'    p max      {prob_short_max*100:6.2f}  {prob_long_max*100:6.2f}')
-    click.secho(f'    p {QUANTILE}%    {prob_short_75*100:6.2f}  {prob_long_75*100:6.2f}')
-    click.secho(f'    total      {total_long_signals:6d}  {total_short_signals:6d}')
-    click.secho(f'    correct    {correct_long_signals:6d}  {correct_short_signals:6d}')
-    click.secho(f'    rate       {long_rate*100:6.2f}  {short_rate*100:6.2f}')
+    y_pred_final = np.zeros(len(df_signals), dtype=int)
+    y_pred_final[df_signals['pred_short'] == 1] = 0
+    y_pred_final[df_signals['pred_neutral'] == 1] = 1
+    y_pred_final[df_signals['pred_long'] == 1] = 2
+
+    # Die echte 3x3 Konfusionsmatrix berechnen
+    cm = confusion_matrix(df_signals['target'], y_pred_final, labels=[0, 1, 2])
+
+    # 1. Definiere lesbare Labels für die Achsen
+    labels = ['short', 'neutral', 'long']
+
+    # 2. Erstelle das DataFrame aus deiner berechneten Matrix 'cm'
+    df_cm = pd.DataFrame(cm, index=labels, columns=labels)
+    df_cm.index.name = "reality"
+    df_cm['total'] = df_cm.sum(axis=1)
+    df_cm.loc['total'] = df_cm.sum(axis=0)
+
+    precision_row = []
+    for label in labels:
+        hit = df_cm.loc[label, label]
+        total = df_cm.loc['total',  label]
+        precision = (hit / total) * 100 if total > 0 else 0.0
+        precision_row.append(f"{precision:.2f}")
+
+    total_hit = df_cm.iloc[0, 0] + df_cm.iloc[1, 1] + df_cm.iloc[2, 2]
+    total_samples = df_cm.loc['total', 'total']
+    total_precision = (total_hit / total_samples) * 100 if total_samples > 0 else 0.0
+    precision_row.append(f"{total_precision:.2f}")
+    df_cm.loc["precision [%]"] = precision_row
+
+    print()
+    print(df_cm.to_string())
+    print()
 
 
 @click.command('eval')

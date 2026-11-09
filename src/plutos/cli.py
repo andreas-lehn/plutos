@@ -26,6 +26,7 @@ plutos.add_command(hephaistos.prepare_cmd)
 plutos.add_command(hephaistos.fit_cmd)
 plutos.add_command(hephaistos.predict_cmd)
 plutos.add_command(hephaistos.eval_cmd)
+plutos.add_command(hephaistos.prec_recall)
 
 if __name__ == "__main__":
     plutos()
