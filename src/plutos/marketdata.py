@@ -16,7 +16,8 @@ from zoneinfo import ZoneInfo
 
 import databento as db
 
-from .trade import Trade
+from .sample import Sample, VolumeProfile
+
 
 SECONDS_OF_DAY = 86400
 
@@ -78,52 +79,90 @@ def download_trades(symbol: str, start: str, end: str): # pragma: no cover
         end=end,
     )
 
-class TradesReader:
-    """ reads trades from dbn file """
 
-    def __init__(self, data: db.DBNStore, start: int = 0, duration: int = sys.maxsize, n = sys.maxsize):
-        self.data = data
-        self.start = start # start time in ns
-        self.duration = duration # duration in ns
-        self.n = n  # amount of trades that should be readed
-        self.i = 0  # amount of trades already read
+class SampleBuilder:
+    """ builds 1 sec samples from databento records """
+
+    SAMPLE_RATE = 1 * 10**9 # 1 sec
+    """ sample rate in nano seconds """
+
+    @classmethod
+    def from_file(cls, path: str | Path, start_offset: int = 0, duration: int = sys.maxsize):
+        """ delivers Samples form databento file
+        
+        path  source of Trades e.g, marketdata.from_file()
+        start_offset    start offest in seconds: 
+                        the timestamp of the first trade used to build a sample
+                        must be 'start_offset' seconds greater than the timestamp of the first trade received
+        duration        duration in seconds:
+                        the timestamp of the last trade to be used to build a sample
+                        is not longer away as 'duration' from the first trade used to build samples
+        """
+        return SampleBuilder(path, start_offset, duration)
+
+    def __init__(self, path, start_offset: int = 0, duration: int = sys.maxsize):
+        self.records = db.DBNStore.from_file(path)
+        self.start_offset = start_offset
+        self.end_offset = self.start_offset + duration
+
+        self.timestamp_offset: int = 0
+        self.timestamp: int = None
+        self.sample = None
 
     def __iter__(self):
-        start_timestamp = self.data.metadata.start + self.start
-        end_timestamp = start_timestamp + self.duration
-        for record in self.data:
-            if self.i == self.n:
-                break
-            if record.ts_event < start_timestamp:
-                continue
-            if record.ts_event > end_timestamp:
-                break
-
+        """ iterates of the trades and yields samples """
+        for record in self.records:
             price = record.price // 250_000_000
             volume = record.size
-            timestamp = record.ts_event
-            yield Trade(
-                timestamp=timestamp,
-                price=price,
-                volume=volume,
-                )
-            self.i += 1
+            timestamp = record.ts_event // SampleBuilder.SAMPLE_RATE # timestamp is now in sample units
+            if self.timestamp is None:
+                # this is the very first sample
+                self.timestamp_offset = timestamp
+                self.timestamp = 0
 
-    @classmethod
-    def from_file(cls, file: str | Path, start: int = 0, duration: int = sys.maxsize, n = sys.maxsize):
-        return TradesReader.from_data(db.DBNStore.from_file(file), start, duration, n)
+            timestamp -= self.timestamp_offset # timestamp is now relative to the start
 
-    @classmethod
-    def from_data(cls, data: db.DBNStore, start: int = 0, duration: int = sys.maxsize, n = sys.maxsize):
-        return cls(data, start, duration, n)
+            if timestamp < self.start_offset:
+                continue
+            elif timestamp > self.end_offset:
+                return
+
+            if self.sample is None:
+                # this is the first sample sample of the candle
+                self.sample = Sample(record.ts_event, VolumeProfile())
+                self.timestamp = timestamp
+
+            if timestamp > self.timestamp:
+                # sample is ready to be delivered...
+                yield self.sample
+                # wir schicken das aktuelle sample erst ab, wenn ein neuer trade da ist.
+                # damit verpassen wir einen Trade.
+                # Obwohl wir diesen Trade schon empfangen haben,
+                # verwenden wir ihn in unser darauffolgenden verarbeitung nicht.
+                # Alternative: den Trade, der das verschiecken auslöst,
+                # noch mit in das aktuelle Sample aufnehmen, obwohl es eigentlich zum nächsten gehört.
+                # Dann fließt dieser Trade schon mit ein in die Kauf/Verkauf-Entscheidung.
+                #
+                # Für die Simulation ist das jetzt egal, aber im Live-System muss das so gemacht werden.
+                # Deshalb muss das hier nochmal umgebaut werden.
+                self.timestamp = timestamp
+                self.sample = Sample(record.ts_event, VolumeProfile())
+
+            self.sample.volumes[price] += volume
+            self.sample.timestamp = max(self.sample.timestamp, record.ts_event) # timestamp of the sample is the timestamp of the last trade in the sample
+
+        if self.sample and self.sample.volumes.volume > 0:
+            # there is a sample left...
+            yield self.sample
+
+        # prepare to start again
+        self.timestamp_offset: int = 0
+        self.timestamp: int = None
+        self.sample = None
 
 
-def from_file(file: str | Path, start: int = 0, duration: int = sys.maxsize, n = sys.maxsize):
-    return TradesReader.from_file(file, start, duration, n)
-
-
-def data_from_file(file: str | Path) -> db.DBNStore:
-    return db.DBNStore.from_file(file)
+def from_file(file: str | Path, start: int = 0, duration: int = SECONDS_OF_DAY) -> SampleBuilder:
+    return SampleBuilder.from_file(file, start, duration)
 
 
 def from_live_stream(): # pragma: no cover
@@ -199,35 +238,41 @@ def assemble_path(parts: dict) -> Path:
 
     return parent / f"{parts['symbol']}_{d.isoformat()}_{range_str}{parts['content']}{parts['suffix']}" 
 
+
+#
+# samples command
+#
 @click.command()
 @click.argument('file', type=click.Path(exists=True, dir_okay=False), help='path to .dbn file')
-@click.option('-s', '--start', type=float, help="start offest in seconds")
-@click.option('-d', '--duration', type=float, help="duration in seconds")
-def trades(file: Path, start: float, duration: float): # pragma: no cover
-    """ list trades contained in a Databento file (*.dbn -> *_trades.csv) """
+@click.option('-s', '--start', type=int, default=0, help="start offest in seconds")
+@click.option('-d', '--duration', type=int, default=SECONDS_OF_DAY, help="duration in seconds")
+def samples(file, start: int, duration: int): # pragma: no cover
+    """ creates samples form a Datebento file (*.dbn -> *_samples.csv) """
 
-    click.echo(f"reading trades from file '{file}'")
-    reader = TradesReader.from_file(file, start * 10**9, duration * 10**9)
+    click.echo(f"reading form file '{file}'")
+    reader = from_file(file, start, duration)
+
     file_parts = parse_path(file)
     file_parts['parent'] = '.'
-    file_parts['suffix'] = ".csv"
+    file_parts['content'] = 'samples'
+    file_parts['suffix'] = '.csv'
     file_parts['range'] = (start, start + duration)
     out_file = assemble_path(file_parts)
-    n_trades = 0
+
+    n_samples = 0
     with open(out_file, 'w', encoding='utf-8') as out:
-        writer = csv.DictWriter(out, fieldnames=['timestamp', 'date', 'price', 'volume'])
+        writer = csv.DictWriter(out, fieldnames=Sample.FIELDNAMES)
         writer.writeheader()
-        for trade in reader:
-            writer.writerow({
-                'timestamp': trade.timestamp,
-                'date': datetime.fromtimestamp(trade.timestamp / 10**9).isoformat(),
-                'price': trade.price,
-                'volume': trade.volume,
-            })
-            n_trades += 1
-    click.echo(f"{n_trades} trades written to file '{out_file}'")
+        for sample in reader:
+            writer.writerow(sample.to_dict())
+            n_samples += 1
+
+    click.echo(f"{n_samples} samples written to file '{out_file}'")
 
 
+#
+# info command
+#
 @click.command()
 @click.argument('file', type=click.Path(exists=True, dir_okay=False), help='path to .dbn file')
 def info(file: Path): # pragma: no cover
@@ -242,6 +287,9 @@ def info(file: Path): # pragma: no cover
     click.echo(f"    {start_date.isoformat()} ({start}) - {end_date.isoformat()} ({end})")
 
 
+#
+# download command 
+#
 @click.command('download')
 @click.option('-p', '--product-code', type=str, default='MNQ', help="product code e.g., NQ, MNQ, ES,...)")
 @click.argument('date', type=click.DateTime(formats=["%Y-%m-%d"]), required=True, help="date of session in ISO format")

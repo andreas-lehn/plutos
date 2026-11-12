@@ -15,7 +15,7 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from .trade import Trade
-from .sample import VolumeProfile, Sample, SampleBuilder
+from .sample import VolumeProfile, Sample
 
 
 class Candle:
@@ -305,9 +305,8 @@ class MarketModel:
         self.charts = []
         self.time = 0
 
-    def feed_with_trades(self, trades: Iterable[Trade]):
-        builder = SampleBuilder(trades)
-        for sample in builder:
+    def feed_with_samples(self, samples: Iterable[Sample]):
+        for sample in samples:
             self.time += 1
             for chart in self.charts:
                 chart.append(sample)
@@ -339,9 +338,8 @@ class MarketModel:
         if duration == 0:
             duration = marketdata.SECONDS_OF_DAY
 
-        NANO_SECONDS = 10**9
-        reader = marketdata.from_file(file, duration=duration * NANO_SECONDS)
-        self.feed_with_trades(tqdm(
+        reader = marketdata.from_file(file, duration=duration)
+        self.feed_with_samples(tqdm(
             reader, 
             desc=f"Processing file {file}",
             bar_format="{desc}: {n} records read [{elapsed}, {rate_fmt}]")

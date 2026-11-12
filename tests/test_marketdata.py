@@ -2,7 +2,10 @@ from pathlib import Path
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
+import pandas as pd
+import databento as db
 import pytest
+
 from plutos import marketdata
 
 
@@ -10,11 +13,13 @@ from plutos import marketdata
 def dbn_path():
     return Path(__file__).resolve().parent / "test_trades.dbn"
 
+
 def test_symbol_code():
     assert marketdata.symbol_code('mnq', date(2024,  3,  1)) == 'MNQH4'
     assert marketdata.symbol_code( 'NQ', date(2025,  6,  1)) == 'NQM5'
     assert marketdata.symbol_code( 'es', date(2026,  9,  1)) == 'ESU6'
     assert marketdata.symbol_code('MNQ', date(2023, 12,  1)) == 'MNQZ3'
+
 
 def test_rollover_day_of_month():
     assert marketdata.rollover_day(date(2026,  1, 1)) == datetime(2026,  3, 16)
@@ -30,6 +35,7 @@ def test_rollover_day_of_month():
     assert marketdata.rollover_day(date(2026, 11, 1)) == datetime(2026, 12, 14)
     assert marketdata.rollover_day(date(2026, 12, 1)) == datetime(2026, 12, 14)
 
+
 def test_active_symbol():
     assert marketdata.active_symbol('nq', date(2026,  1,  1)) == "NQH6"
     assert marketdata.active_symbol('nq', date(2026,  3, 15)) == "NQH6"
@@ -41,40 +47,6 @@ def test_active_symbol():
     assert marketdata.active_symbol('nq', date(2026, 12, 13)) == "NQZ6"
     assert marketdata.active_symbol('nq', date(2026, 12, 14)) == "NQH7"
 
-def test_from_file(dbn_path):
-    reader = marketdata.from_file(dbn_path)
-    all_trades = [trade for trade in reader]
-    assert len(all_trades) == 1759
-
-    reader = marketdata.from_file(dbn_path, n = 10)
-    trades = [trade for trade in reader]
-    assert len(trades) == 10
-
-    start_offset = 5 * 10**9 # 5 sec offset
-    offset_trades = [trade for trade in marketdata.from_file(dbn_path, start=start_offset, duration=1)]
-    start_timestamp = trades[0].timestamp + start_offset
-    for trade in offset_trades:
-        assert trade[0].timestamp == start_timestamp
-
-    no_trades = [trade for trade in marketdata.from_file(dbn_path, start=start_offset, duration=0)]
-    assert len(no_trades) == 0
-
-    no_trades = [trade for trade in marketdata.from_file(dbn_path, start=start_offset, n=0)]
-    assert len(no_trades) == 0
-
-    start_offset = marketdata.SECONDS_OF_DAY * 10**9
-    no_trades = [trade for trade in marketdata.from_file(dbn_path, start=start_offset)]
-    assert len(no_trades) == 0
-
-    too_long_trades = [trade for trade in marketdata.from_file(dbn_path, duration=start_offset)]
-    assert len(too_long_trades) == 1759
-
-
-def test_data_from_file(dbn_path):
-    data = marketdata.data_from_file(dbn_path)
-    TIMESTAMP_SESSION_START = 1791504000000000000
-    assert data.metadata.start == TIMESTAMP_SESSION_START
-    assert data.metadata.end   >  TIMESTAMP_SESSION_START
 
 def test_CME_session():
     d = date(2026, 10, 1)
@@ -84,6 +56,7 @@ def test_CME_session():
     (s, e) = marketdata.CME_session(d) 
     assert s == start
     assert e == end
+
 
 def test_parse_path():
     parts = marketdata.parse_path("/data/bento/MNQZ6_2026-10-26_trades.dbn")
@@ -133,3 +106,34 @@ def test_assemble_path():
         'suffix': '.csv',
     })
     assert path == Path('./MNQZ6_2026-10-16_trades.csv')
+
+
+def test_sample_builder_from_file(dbn_path):
+    """ create samples form .dbn file and compare them with Samples created with Pandas in a independent path """
+
+    def dump_record(record: db.DBNRecord):
+        """ helper function to convert a record in a dict """
+        return {
+            "group": record.ts_event // 10**9,
+            "timestamp": record.ts_event,
+            "data": datetime.fromtimestamp(record.ts_event / 10**9),
+            "price": record.price // 250_000_000,
+            "volume": record.size,
+        }
+
+    data = db.DBNStore.from_file(dbn_path)
+    df = pd.DataFrame([dump_record(record) for record in data])
+    df = df.groupby("group").agg(
+        timestamp=('timestamp', 'last'),
+        low=('price',  min),
+        high=('price', max),
+        volume=('volume', sum),
+    )
+    # df contains the reference samples
+    # now we build the samples with SampleBuilder and assert that they are equal.
+    builder = marketdata.from_file(dbn_path)
+    for sample in builder:
+        ref = df.loc[sample.timestamp // 10**9]
+        assert ref.low == sample.low
+        assert ref.high == sample.high
+        assert ref.timestamp == sample.timestamp

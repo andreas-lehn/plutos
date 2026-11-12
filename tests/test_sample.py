@@ -1,13 +1,9 @@
 from pathlib import Path
 import sys
 import pytest
-import databento as db
-import pandas as pd
-from datetime import datetime
 
 from plutos.trade import Trade
-from plutos.sample import VolumeProfile, Sample, SampleBuilder, SampleReader
-from plutos import marketdata
+from plutos.sample import VolumeProfile, Sample, SampleReader
 
 @pytest.fixture
 def csv_path():
@@ -249,49 +245,6 @@ def test_VolumeProfile_type_errors():
         s -= "bla"
 
 
-def test_sample_builder_streaming(trade_list_40):
-    builder = SampleBuilder.from_trades(trade_list_40)
-    samples = [sample for sample in builder]
-    assert len(samples) == 8
-    assert samples[0].low  == 122243
-    assert samples[0].high == 122247
-    assert samples[1].low  == 122248
-    assert samples[1].high == 122252
-    assert samples[2].low  == 122253
-    assert samples[7].high == 122282
-
-    d = samples[0].to_dict()
-    d['timestamp'] == 1790632800800000000
-    d['date'] == datetime(2026, 9, 29, 0, 0)
-    d['low']  == 122243
-    d['high'] == 122247
-
-
-def test_sample_builder_start_duration(trade_list_40):
-    builder = SampleBuilder.from_trades(trade_list_40, start_offset=2, duration=2)
-    samples = [sample.volumes for sample in builder]
-    assert len(samples) == 2
-    assert samples[0].high == 122257
-    assert samples[1].low  == 122258    
-
-
-def test_sample_builder_reread(trade_list_40):
-    builder = SampleBuilder.from_trades(trade_list_40)
-    samples = [s.volumes for s in builder ]
-    assert len(samples) == 8
-
-    #read is a second time
-    samples = [s.volumes for s in builder ]
-    assert len(samples) == 8
-    s0 = samples[0]
-    assert samples[0].low  == 122243
-    assert samples[0].high == 122247
-    assert samples[1].low  == 122248
-    assert samples[1].high == 122252
-    assert samples[2].low  == 122253
-    assert samples[7].high == 122282
-
-
 def test_sample_reader(csv_path):
     reader = SampleReader.from_file(csv_path)
     samples = [sample.volumes for sample in reader]
@@ -313,37 +266,6 @@ def test_sample_reader_timestamp(csv_path):
         assert timestamp == timestamp
         timestamp += TIME_INCREMENT
 
-def test_sample_builder_from_file(dbn_path):
-    """ create samples form .dbn file and compare them with Samples created with Pandas in a independent path """
-
-    def dump_record(record: db.DBNRecord):
-        """ helper function to convert a record in a dict """
-        return {
-            "group": record.ts_event // SampleBuilder.SAMPLE_RATE,
-            "timestamp": record.ts_event,
-            "data": datetime.fromtimestamp(record.ts_event / 10**9),
-            "price": record.price // 250_000_000,
-            "volume": record.size,
-        }
-
-    data = db.DBNStore.from_file(dbn_path)
-    df = pd.DataFrame([dump_record(record) for record in data])
-    df = df.groupby("group").agg(
-        timestamp=('timestamp', 'last'),
-        low=('price',  min),
-        high=('price', max),
-        volume=('volume', sum),
-    )
-    # df contains the reference samples
-    # now we build the samples with SampleBuilder and assert that they are equal.
-    reader = marketdata.from_file(dbn_path)
-    builder = SampleBuilder(reader)
-    for sample in builder:
-        ref = df.loc[sample.timestamp // 10**9]
-        assert ref.low == sample.low
-        assert ref.high == sample.high
-        assert ref.timestamp == sample.timestamp
-
 
 @pytest.fixture
 def some_samples():
@@ -353,6 +275,19 @@ def some_samples():
         Sample(18200000000, VolumeProfile.from_dict({'low': 102, 'high': 104, 'volumes': [         1, 2, 4]})),
         Sample(18700000000, VolumeProfile.from_dict({'low': 99,  'high': 104, 'volumes': [4, 3, 2, 1, 1, 2]})),
     ]                                                       # [4, 7, 8, 5, 4, 6]  
+
+def test_sample():
+    s = Sample(17100000000, VolumeProfile.from_dict({'low': 99, 'volumes': [1, 2, 3, 1]}))
+    assert s.timestamp == 17100000000
+    assert s.low == 99
+    assert s.high == 102
+    assert s.average == s.volumes.average
+    assert s.volume == 7
+
+    d = s.to_dict()
+    assert d['timestamp'] == 17100000000
+    assert d['low'] == 99
+    assert d['high'] == 102
 
 
 def test_volume_profile_copy(some_samples):
