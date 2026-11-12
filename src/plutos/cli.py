@@ -7,8 +7,9 @@ from . import findcontracts
 from . import visu
 from . import chartsim
 from . import marketdata
-from . import model
+from . import chart
 from . import hephaistos
+from . import sample
 
 @click.group()
 def plutos():
@@ -20,8 +21,8 @@ plutos.add_command(chartsim.sim)
 plutos.add_command(marketdata.download_session)
 plutos.add_command(marketdata.info)
 plutos.add_command(marketdata.trades)
-plutos.add_command(model.chart_cmd)
-plutos.add_command(model.samples)
+plutos.add_command(chart.chart_cmd)
+plutos.add_command(sample.samples)
 plutos.add_command(hephaistos.prepare_cmd)
 plutos.add_command(hephaistos.fit_cmd)
 plutos.add_command(hephaistos.predict_cmd)

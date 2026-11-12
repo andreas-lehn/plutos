@@ -3,10 +3,6 @@ from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 import pytest
-import csv
-from click.testing import CliRunner
-
-from plutos.model import Trade
 from plutos import marketdata
 
 

@@ -1,11 +1,10 @@
 #
-# test_brockersim.py
+# test_chartsim.py
 #
 
 import pytest
-from typing import Iterable
 from plutos.chartsim import BrokerProxy
-from plutos.model import Trade
+from plutos.trade import Trade
 
 @pytest.fixture
 def trades():
