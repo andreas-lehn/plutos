@@ -100,6 +100,16 @@ def test_assemble_path():
     assert path == Path('data/bento/MNQZ6_2026-10-17_[12:14]_candles.dbn')
 
     path = marketdata.assemble_path({
+        'parent': 'data/bento',
+        'symbol': 'MNQZ6',
+        'date': date(2026, 10, 17),
+        'range': (0, marketdata.SECONDS_OF_DAY),
+        'content': 'candles',
+        'suffix': '.dbn',
+    })
+    assert path == Path('data/bento/MNQZ6_2026-10-17_candles.dbn')
+
+    path = marketdata.assemble_path({
         'symbol': 'MNQZ6',
         'date': datetime(2026, 10, 16).timestamp(),
         'content': 'trades',
@@ -137,3 +147,16 @@ def test_sample_builder_from_file(dbn_path):
         assert ref.low == sample.low
         assert ref.high == sample.high
         assert ref.timestamp == sample.timestamp
+
+def test_sample_builder_with_range(dbn_path):
+    """ create samples form .dbn file with start offset and duration """
+
+    builder = marketdata.from_file(dbn_path, start=0, duration=3)
+    ref_sample = [sample for sample in builder]
+    assert len(ref_sample) == 3
+
+    start_secound = ref_sample[0].timestamp // 10**9
+    builder = marketdata.from_file(dbn_path, start=1, duration=2)
+    samples = [sample for sample in builder]  
+    assert len(samples) == 2
+    assert samples[0].timestamp // 10**9 == start_secound + 1

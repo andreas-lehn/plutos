@@ -2,6 +2,7 @@
 # Hephaistos is the AI Trader of Plutos
 #
 
+import os
 import csv
 import click
 from pathlib import Path
@@ -11,6 +12,10 @@ import numpy as np
 import xgboost as xgb
 import matplotlib.pyplot as plt
 from sklearn.metrics import precision_recall_curve, confusion_matrix
+
+from . import marketdata
+from . import datasetcategory
+
 
 MAX_LOSS = 100
 START_OFFSET = 48 # don't begin trading bevor this offset in seconds since start of the session
@@ -134,15 +139,18 @@ class DataCollector:
         if len(self.data) >= offset:
             self.data[-offset]['target'] = candle.close - chart[-offset+1].open
 
-    def data_path(file: Path) -> Path:
-        """ generates the path for training data file from a source file (.dbn) """
-        name = file.stem
-        parts = name.split('_')
-        if len(parts) != 3 or parts[2] != 'trades':
-            raise ValueError(
-                f"data_path(): file name ‘{name}' is violating naming convention '<SYMBOL>_<DATE>_trades.dbn'"
-            )
-        return Path(f'{parts[0]}_{parts[1]}_hephaistos.csv')
+    def data_path(file: Path, dir: Path) -> Path:
+        """ generates the path for feature data file from a source file path
+
+        Home directory of file ist 'dir'/[training | eval | test] 
+        File name content will be changed to 'features' and suffix to '.csv'
+        """
+        parts = marketdata.parse_path(file)
+        parts['parent'] = dir / datasetcategory.category_path(parts['date'])
+        parts['content'] = 'features'
+        parts['suffix'] = '.csv'
+        return marketdata.assemble_path(parts)
+
 
 def drop_special_phases(df: pd.DataFrame, candle_size: int = 36):
     # der beginn und das ende einer CME session
@@ -214,13 +222,13 @@ def fit_cmd(training_dir: tuple[Path], eval_dir: tuple[Path], model_file: str, q
     """ fit the model to training data """
     print('Fitting a model to training data...')
 
-    training_files = tuple(f for f in training_dir.glob("*_hephaistos.csv") if f.is_file())
+    training_files = tuple(f for f in training_dir.glob("*_features.csv") if f.is_file())
     df_training = load_files(training_files)
     short, long = find_quantile(df_training, quantile=quantile)
     print('quantile values:', short, long)
     X_train, y_train = split_target(df_training, short, long)
 
-    eval_files = tuple(f for f in eval_dir.glob("*_hephaistos.csv") if f.is_file())
+    eval_files = tuple(f for f in eval_dir.glob("*_features.csv") if f.is_file())
     df_eval = load_files(eval_files)
     X_eval, y_eval = split_target(df_eval, short, long)
 
@@ -244,8 +252,13 @@ def fit_cmd(training_dir: tuple[Path], eval_dir: tuple[Path], model_file: str, q
         drop=True
     )
     print()
-    print(df_features.to_string(index=False, float_format="{:.2f}%".format))
-
+    print("Top 10 most important features:")
+    print(df_features.head(10).to_string(index=False, float_format="{:.2f}%".format))
+    print()
+    print("Top 10 least important features:")
+    print(df_features.tail(10).to_string(index=False, float_format="{:.2f}%".format))
+    print()
+    
 
 @click.command()
 @click.argument('files', nargs=-1, type=click.Path(exists=True, path_type=Path), help='eval files to compute precision recall for long')
@@ -297,6 +310,14 @@ def prec_recall(files: list[Path], model_file: str, direction: str, classificati
 def prepare_cmd(files: list[Path], dir: Path, candle_size: int):  #pragma: no cover
     """ prepare training data from historical data """
     click.echo(f'Generating training data...')
+
+    if not dir:
+        dir = Path(os.environ.get('HEPHAISTOS_DIR', '.'))
+    click.echo(f'Output directory: {dir}')
+
+    for path in datasetcategory.CATEGORY:
+        (dir / path).mkdir(parents=True, exist_ok=True)
+    
     for path in files:
         collector = DataCollector()
         main_chart = Chart(candle_size=candle_size)
@@ -305,7 +326,7 @@ def prepare_cmd(files: list[Path], dir: Path, candle_size: int):  #pragma: no co
         model.charts.append(main_chart)
         model.simulate_file(path)
 
-        with open(DataCollector.data_path(path), "w", newline="", encoding="utf-8") as f:
+        with open(DataCollector.data_path(path, dir), "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=collector.data[0].keys())
             writer.writeheader()
             writer.writerows(collector.data)
