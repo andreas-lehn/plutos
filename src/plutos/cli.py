@@ -9,7 +9,7 @@ from . import chartsim
 from . import marketdata
 from . import chart
 from . import hephaistos
-from . import sample
+from . import datasetcategory
 
 @click.group()
 def plutos():
@@ -27,6 +27,7 @@ plutos.add_command(hephaistos.fit_cmd)
 plutos.add_command(hephaistos.predict_cmd)
 plutos.add_command(hephaistos.eval_cmd)
 plutos.add_command(hephaistos.prec_recall)
+plutos.add_command(datasetcategory.category)
 
 if __name__ == "__main__":
     plutos()

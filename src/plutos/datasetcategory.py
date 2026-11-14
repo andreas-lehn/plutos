@@ -2,14 +2,17 @@
 # split market data into training, eval and test set
 #
 
-from datetime import datetime
+from datetime import date, datetime
 import click
 
 START_OF_PLUTOS_EPOCHE = datetime(2026, 8, 31)
 CATEGORY = ['training', 'training', 'eval', 'training', 'training', 'test']
 
-def category_index(date: datetime) -> str:
-    delta_days = (date - START_OF_PLUTOS_EPOCHE).days
+def category_index(d: date | datetime) -> str:
+    if isinstance(d, date):
+        d = datetime(d.year, d.month, d.day)
+
+    delta_days = (d - START_OF_PLUTOS_EPOCHE).days
     weeks = delta_days // 7
     delta_week_days = delta_days - weeks * 2
     return delta_week_days % 6
