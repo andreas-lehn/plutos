@@ -179,6 +179,7 @@ class Sample:
 
     def __init__(self, timestamp: int = 0, volumes: VolumeProfile = None):
         self.timestamp = timestamp
+        self.index = 0 # index of the sample in its CME session
         self.volumes = volumes
 
     @property
@@ -204,6 +205,7 @@ class Sample:
 
     def to_dict(self) -> dict:
         result = self.volumes.to_dict()
+        result['index'] = self.index
         result['timestamp'] = self.timestamp
         result['date'] = datetime.fromtimestamp(self.timestamp).isoformat()
         return result
