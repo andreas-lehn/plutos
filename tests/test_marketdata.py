@@ -2,6 +2,7 @@ from pathlib import Path
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
+import math
 import pandas as pd
 import databento as db
 import pytest
@@ -125,7 +126,7 @@ def test_sample_builder_from_file(dbn_path):
         """ helper function to convert a record in a dict """
         return {
             "group": record.ts_event // 10**9,
-            "timestamp": record.ts_event,
+            "timestamp": record.ts_event / 10**9,
             "data": datetime.fromtimestamp(record.ts_event / 10**9),
             "price": record.price // 250_000_000,
             "volume": record.size,
@@ -143,10 +144,11 @@ def test_sample_builder_from_file(dbn_path):
     # now we build the samples with SampleBuilder and assert that they are equal.
     builder = marketdata.from_file(dbn_path)
     for sample in builder:
-        ref = df.loc[sample.timestamp // 10**9]
+        ref = df.loc[math.floor(sample.timestamp)]
         assert ref.low == sample.low
         assert ref.high == sample.high
         assert ref.timestamp == sample.timestamp
+
 
 def test_sample_builder_with_range(dbn_path):
     """ create samples form .dbn file with start offset and duration """
@@ -155,8 +157,8 @@ def test_sample_builder_with_range(dbn_path):
     ref_sample = [sample for sample in builder]
     assert len(ref_sample) == 3
 
-    start_secound = ref_sample[0].timestamp // 10**9
+    start_secound = math.floor(ref_sample[0].timestamp)
     builder = marketdata.from_file(dbn_path, start=1, duration=2)
     samples = [sample for sample in builder]  
     assert len(samples) == 2
-    assert samples[0].timestamp // 10**9 == start_secound + 1
+    assert math.floor(samples[0].timestamp) == start_secound + 1

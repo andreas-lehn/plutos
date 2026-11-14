@@ -26,7 +26,7 @@ def show(chart_file: io.TextIOWrapper, profile_file: io.TextIOWrapper, start:int
     df_sticks['average'] = df_sticks['average'] / 4
     df_sticks['high'] = df_sticks['high'] / 4
     df_sticks['close'] = df_sticks['close'] / 4
-    df_sticks['Date'] = pd.to_datetime(df_sticks['timestamp']//10**9, unit='s')
+    df_sticks['Date'] = pd.to_datetime(df_sticks['timestamp'], unit='s')
     df_sticks.set_index('Date', inplace=True)
     df_sticks.sort_index(inplace=True)
     df_sticks.rename(columns={

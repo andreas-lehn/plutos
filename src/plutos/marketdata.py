@@ -83,7 +83,7 @@ def download_trades(symbol: str, start: str, end: str): # pragma: no cover
 class SampleBuilder:
     """ builds 1 sec samples from databento records """
 
-    SAMPLE_RATE = 1 * 10**9 # 1 sec
+    SAMPLE_RATE = 1 * 10**9 # 1 sec in nano seconds
     """ sample rate in nano seconds """
 
     @classmethod
@@ -114,6 +114,7 @@ class SampleBuilder:
         for record in self.records:
             price = record.price // 250_000_000
             volume = record.size
+            rec_stamp = record.ts_event / 10**9 # record timestamp in seconds
             timestamp = record.ts_event // SampleBuilder.SAMPLE_RATE # timestamp is now in sample units
             if self.timestamp is None:
                 # this is the very first sample
@@ -129,7 +130,7 @@ class SampleBuilder:
 
             if self.sample is None:
                 # this is the first sample sample of the candle
-                self.sample = Sample(record.ts_event, VolumeProfile())
+                self.sample = Sample(rec_stamp, VolumeProfile())
                 self.timestamp = timestamp
 
             if timestamp > self.timestamp:
@@ -146,10 +147,10 @@ class SampleBuilder:
                 # Für die Simulation ist das jetzt egal, aber im Live-System muss das so gemacht werden.
                 # Deshalb muss das hier nochmal umgebaut werden.
                 self.timestamp = timestamp
-                self.sample = Sample(record.ts_event, VolumeProfile())
+                self.sample = Sample(rec_stamp, VolumeProfile())
 
             self.sample.volumes[price] += volume
-            self.sample.timestamp = max(self.sample.timestamp, record.ts_event) # timestamp of the sample is the timestamp of the last trade in the sample
+            self.sample.timestamp = max(self.sample.timestamp, rec_stamp) # timestamp of the sample is the timestamp of the last trade in the sample
 
         if self.sample and self.sample.volumes.volume > 0:
             # there is a sample left...
@@ -283,7 +284,7 @@ def info(file: Path): # pragma: no cover
     click.echo(f"    {meta.dataset} {meta.schema}")
     click.echo(f"    {', '.join(meta.symbols)}")
     start, end = meta.start, meta.end
-    start_date, end_date = datetime.fromtimestamp(start // 10**9), datetime.fromtimestamp(end // 10**9)
+    start_date, end_date = datetime.fromtimestamp(start), datetime.fromtimestamp(end)
     click.echo(f"    {start_date.isoformat()} ({start}) - {end_date.isoformat()} ({end})")
 
 

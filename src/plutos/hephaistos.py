@@ -72,7 +72,7 @@ class Hephaistos:
         model.charts.append(main_chart)
         trader = Hephaistos(model_path, threshold)
         main_chart.register_callback(trader.on_candle)
-        model.simulate_file(file, num_candles * candle_size if num_candles else 24*60*60*10**9)
+        model.simulate_file(file, num_candles * candle_size if num_candles else 24*60*60)
         return main_chart
 
 

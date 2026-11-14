@@ -205,7 +205,7 @@ class Sample:
     def to_dict(self) -> dict:
         result = self.volumes.to_dict()
         result['timestamp'] = self.timestamp
-        result['date'] = datetime.fromtimestamp(self.timestamp / 10**9).isoformat()
+        result['date'] = datetime.fromtimestamp(self.timestamp).isoformat()
         return result
 
     def __repr__(self): # pragma: no cover

@@ -60,9 +60,9 @@ class TradePair():
 
     def to_dict(self) -> dict:
         return {
-            'open_time': self.open_time, #datetime.fromtimestamp(self.open_time // 10**9, tz=timezone.utc),
+            'open_time': self.open_time,
             'open_price': self.open_price,
-            'close_time': self.close_time, #datetime.fromtimestamp(self.close_time // 10**9, tz=timezone.utc),
+            'close_time': self.close_time,
             'close_price': self.close_price,
             'size': self.size,
         }

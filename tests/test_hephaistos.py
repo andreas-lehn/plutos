@@ -31,13 +31,10 @@ def test_fill_past_data():
 
 
 def test_data_path():
+    dir =  Path('another/path')
     correct = Path('my_path/SYM_1968-05-08_trades.dbn')
-    assert DataCollector.data_path(correct) == Path('SYM_1968-05-08_hephaistos.csv')
+    assert DataCollector.data_path(correct, dir) == dir/Path('training/SYM_1968-05-08_features.csv')
 
-    incorrect_1 = Path('my_path/SYM_2005-04-10_candles.dbn')
+    incorrect = Path('my_path/SYM_2005-04-10.dbn')
     with pytest.raises(ValueError):
-        DataCollector.data_path(incorrect_1)
-
-    incorrect_2 = Path('another/path/SYM_2008-03-14.dbn')
-    with pytest.raises(ValueError):
-        DataCollector.data_path(incorrect_2)
+        DataCollector.data_path(incorrect, dir)
