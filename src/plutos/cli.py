@@ -10,11 +10,13 @@ from . import marketdata
 from . import chart
 from . import hephaistos
 from . import datasetcategory
+from . import labeler
 
 @click.group()
 def plutos():
     pass
 
+plutos.add_command(labeler.label_cmd)
 plutos.add_command(findcontracts.find_contracts)
 plutos.add_command(visu.show)
 plutos.add_command(chartsim.sim)

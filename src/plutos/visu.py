@@ -47,14 +47,25 @@ def show(chart_file: io.TextIOWrapper, start:int, num_candles: int):
 
     if 'contracts' in df_sticks.columns:
         additional_plots.append(mpf.make_addplot(df_sticks['contracts'], type='bar', width=0.5, panel=2))
-        df_sticks["long"]  = np.where(df_sticks["contracts"] > 0, df_sticks["Low"] - 2, np.nan)
+
+    if 'profit_chance' in df_sticks.columns:
+        df_sticks["long"]  = np.where(df_sticks["profit_chance"] == 'long', df_sticks["Low"] - 2, np.nan)
         if df_sticks["long"].notna().any():
             additional_plots.append(mpf.make_addplot(df_sticks["long"].values, type="scatter", marker="^", color="white", edgecolors="black", linewidths=0.5, markersize=4*markersize, panel=0))
 
-        df_sticks["short"] = np.where(df_sticks["contracts"] < 0, df_sticks["High"] + 2, np.nan)
+        df_sticks["short"] = np.where(df_sticks["profit_chance"] == 'short', df_sticks["High"] + 2, np.nan)
         if df_sticks["short"].notna().any():
             additional_plots.append(mpf.make_addplot(df_sticks["short"], type="scatter", marker="v", color="black", edgecolors="black", linewidths=0.5, markersize=4*markersize, panel=0))
 
+    if 'trend_start' in df_sticks.columns:
+        df_sticks["up"]  = np.where(df_sticks["trend_start"] == 'up', df_sticks["average"], np.nan)
+        if df_sticks["up"].notna().any():
+            additional_plots.append(mpf.make_addplot(df_sticks["up"].values, type="scatter", marker="o", color="red", edgecolors="black", linewidths=0.5, markersize=4*markersize, panel=0))
+
+        df_sticks["down"] = np.where(df_sticks["trend_start"] == 'down', df_sticks["average"], np.nan)
+        if df_sticks["down"].notna().any():
+            additional_plots.append(mpf.make_addplot(df_sticks["down"], type="scatter", marker="o", color="red", edgecolors="black", linewidths=0.5, markersize=4*markersize, panel=0))
+        
     if 'prediction' in df_sticks.columns:
         additional_plots.append(mpf.make_addplot(df_sticks['prediction'], width=0.5, panel=3))
 
