@@ -369,24 +369,35 @@ class MarketModel:
 @click.argument('file', type=click.Path(), help='name of marked data file (.dbn)')
 @click.option('-s', '--candle-size', type=int, default=36, help="size of candle in seconds")
 @click.option('-n', '--num', type=int, default=0, help='number of candles')
-@click.option('-o', '--ohlc-file', type=click.File('w', encoding='utf-8'), help="chart file")
-@click.option('-p', '--profile-file', type=click.File('w', encoding='utf-8'), help="volume profile file")
-def chart_cmd(file: Path, candle_size: int, num: int, ohlc_file: io.TextIOWrapper, profile_file: io.TextIOWrapper): # pragma: no cover
+@click.option('-p', '--volume-profile', is_flag=True, help="output volume profile")
+def chart_cmd(file: Path, candle_size: int, num: int, volume_profile: bool): # pragma: no cover
     """ create a chart from market data """
     main_chart = Chart(candle_size=candle_size)
     model = MarketModel()
     model.charts.append(main_chart)
     model.simulate_file(file, num * candle_size)
 
-    if ohlc_file:    
-        fieldnames = ['timestamp', 'open', 'low', 'average', 'high', 'close', 'volume', 'ema_fast', 'ema_slow']
-        writer = csv.DictWriter(ohlc_file, fieldnames=fieldnames)
+    from . import marketdata
+    file_parts = marketdata.parse_path(file)
+    file_parts['parent'] = '.'
+    file_parts['suffix'] = '.csv'
+    file_parts['content'] = 'chart'
+
+    fieldnames = ['timestamp', 'open', 'low', 'average', 'high', 'close', 'volume', 'ema_fast', 'ema_slow']
+    chart_file = marketdata.assemble_path(file_parts)
+    with open(chart_file, 'w', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows([candle.to_filtered_dict(fieldnames) for candle in main_chart])
+    click.echo(f"chart written to '{chart_file}'")
 
-    if profile_file:
-        writer = csv.DictWriter(profile_file, fieldnames=['price', "volume", 'smooth_volume'])
-        writer.writeheader()
-        smoothed_volumes = main_chart.volumes.convolute(main_chart.average_range() // 2)
-        for p, v in main_chart.volumes:
-            writer.writerow({'price': p, 'volume': v, 'smooth_volume': smoothed_volumes[p]})
+    if volume_profile:
+        file_parts['content'] = 'volume-profile'
+        profile_file = marketdata.assemble_path(file_parts)
+        with open(profile_file, 'w', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=['price', "volume", 'smooth_volume'])
+            writer.writeheader()
+            smoothed_volumes = main_chart.volumes.convolute(main_chart.average_range() // 2)
+            for p, v in main_chart.volumes:
+                writer.writerow({'price': p, 'volume': v, 'smooth_volume': smoothed_volumes[p]})
+        click.echo(f"volume profile written to '{profile_file}'")

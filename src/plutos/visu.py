@@ -6,13 +6,13 @@ import matplotlib.pyplot as plt
 from scipy.signal import find_peaks
 import io
 import click
+from . import marketdata
 
 @click.command()
 @click.argument('chart_file', type=click.File('r', encoding='utf-8'), help="chart file")
-@click.option('-p', '--profile-file', type=click.File('r', encoding='utf-8'), help="file with volume profile")
 @click.option('-s', '--start', type=int, default=0, help="start offset (sec) of candle in charts file")
 @click.option('-n', '--num-candles', type=int, help="number of candles to be drawn into chart")
-def show(chart_file: io.TextIOWrapper, profile_file: io.TextIOWrapper, start:int, num_candles: int): 
+def show(chart_file: io.TextIOWrapper, start:int, num_candles: int): 
     """ show chart diagram """
 
     df_sticks = pd.read_csv(chart_file)
@@ -82,64 +82,70 @@ def show(chart_file: io.TextIOWrapper, profile_file: io.TextIOWrapper, start:int
     ax_overlay.get_xaxis().set_visible(False)
 
     # 2. ZWEITE CSV: Volumen-Profil (Volumen pro Preis) laden
-    if profile_file:
-        df_prof = pd.read_csv(profile_file)
-        df_prof['price'] = df_prof['price'] / 4
-        max_vol_wert = df_prof['volume'].max()
+    click.echo(f"chart file is '{chart_file}'")
+    file_parts = marketdata.parse_path(chart_file.name)
+    file_parts['content'] = 'volume-profile'
+    profile_file = marketdata.assemble_path(file_parts)
+    if profile_file.exists():
+        click.echo(f"profile file is '{profile_file}'")
+        with open(profile_file, 'r', encoding='utf-8'):
+            df_prof = pd.read_csv(profile_file)
+            df_prof['price'] = df_prof['price'] / 4
+            max_vol_wert = df_prof['volume'].max()
 
 
-        # 4. BREITE DER HORIZONTALEN BALKEN SKALIEREN
-        # Wir ermitteln die zeitliche Breite des Charts, damit die Balken nicht zu lang werden
-        x_min, x_max = ax_main.get_xlim()
-        chart_breite = x_max - x_min
-        offset_ratio = abs(x_min) /chart_breite
-        max_vol_limit = max_vol_wert * 10 # Balken nehmen maximal 25% der Chartbreite ein
-        offset = 0 # -(max_vol_limit * offset_ratio) / 2
-        ax_overlay.set_xlim(offset, max_vol_limit)
+            # 4. BREITE DER HORIZONTALEN BALKEN SKALIEREN
+            # Wir ermitteln die zeitliche Breite des Charts, damit die Balken nicht zu lang werden
+            x_min, x_max = ax_main.get_xlim()
+            chart_breite = x_max - x_min
+            offset_ratio = abs(x_min) /chart_breite
+            max_vol_limit = max_vol_wert * 10 # Balken nehmen maximal 25% der Chartbreite ein
+            offset = 0 # -(max_vol_limit * offset_ratio) / 2
+            ax_overlay.set_xlim(offset, max_vol_limit)
 
-        # 5. DIE HORIZONTALEN BALKEN AUS DER ZWEITEN CSV EINZEICHNEN
-        # Wir bestimmen die Höhe eines einzelnen Balkens dynamisch aus den Preisabständen
-        if len(df_prof) > 1:
-            balken_hoehe = (df_prof['price'].iloc[1] - df_prof['price'].iloc[0]) # * 0.8
-        else:
-            balken_hoehe = 0.5
+            # 5. DIE HORIZONTALEN BALKEN AUS DER ZWEITEN CSV EINZEICHNEN
+            # Wir bestimmen die Höhe eines einzelnen Balkens dynamisch aus den Preisabständen
+            if len(df_prof) > 1:
+                balken_hoehe = (df_prof['price'].iloc[1] - df_prof['price'].iloc[0]) # * 0.8
+            else:
+                balken_hoehe = 0.5
 
-        ax_overlay.barh(
-            y=df_prof['price'],             # Y-Position: Die Preise aus der zweiten CSV
-            width=df_prof['volume'],       # X-Länge: Das skalierte Volumen
-            height=balken_hoehe,            # Dicke der Balken
-            color='#1f77b4',
-            alpha=0.5,                     # Transparent, damit die Kerzen sichtcandle bleiben
-            align='center',
-        )
-        ax_overlay.plot(df_prof['smooth_volume'], df_prof['price'], color='#1f77b4', linewidth=1)
-
-        # ==========================================
-        # 4.5 PEAK DETECTION & S/R-LINIEN EINZEICHNEN
-        # ==========================================
-
-        # 1. Mathematische Peaks (HVNs) auf der geglätteten Kurve finden
-        # distance=5 verhindert, dass Linien zu nah beieinanderliegen
-        # prominence filtert das Rauschen (nur Peaks, die mind. 5% des Max-Volumens herausragen)
-        smoothed_volumes = df_prof['smooth_volume']
-        prices = df_prof['price']
-
-        min_prominence = smoothed_volumes.max() * 0.05
-        peaks, _ = find_peaks(smoothed_volumes, distance=5, prominence=min_prominence)
-
-        # Die exakten Preise der Peaks extrahieren
-        sr_levels = prices[peaks]
-
-        # 2. Die Linien direkt in das Candlestick-Diagramm (ax_candles) zeichnen
-        for level in sr_levels:
-            # axhline zieht eine Linie quer über die gesamte Breite der Kerzen-Achse
-            ax_main.axhline(
-                y=level, 
+            ax_overlay.barh(
+                y=df_prof['price'],             # Y-Position: Die Preise aus der zweiten CSV
+                width=df_prof['volume'],       # X-Länge: Das skalierte Volumen
+                height=balken_hoehe,            # Dicke der Balken
                 color='#1f77b4',
-                linestyle='--',           # Gestrichelte Linie
-                linewidth=1,            # Dezente Linienstärke
-                alpha=0.5,
+                alpha=0.5,                     # Transparent, damit die Kerzen sichtcandle bleiben
+                align='center',
             )
+            ax_overlay.plot(df_prof['smooth_volume'], df_prof['price'], color='#1f77b4', linewidth=1)
+
+            # ==========================================
+            # 4.5 PEAK DETECTION & S/R-LINIEN EINZEICHNEN
+            # ==========================================
+
+            # 1. Mathematische Peaks (HVNs) auf der geglätteten Kurve finden
+            # distance=5 verhindert, dass Linien zu nah beieinanderliegen
+            # prominence filtert das Rauschen (nur Peaks, die mind. 5% des Max-Volumens herausragen)
+            smoothed_volumes = df_prof['smooth_volume']
+            prices = df_prof['price']
+
+            min_prominence = smoothed_volumes.max() * 0.05
+            peaks, _ = find_peaks(smoothed_volumes, distance=5, prominence=min_prominence)
+
+            # Die exakten Preise der Peaks extrahieren
+            sr_levels = prices[peaks]
+
+            # 2. Die Linien direkt in das Candlestick-Diagramm (ax_candles) zeichnen
+            for level in sr_levels:
+                # axhline zieht eine Linie quer über die gesamte Breite der Kerzen-Achse
+                ax_main.axhline(
+                    y=level, 
+                    color='#1f77b4',
+                    linestyle='--',           # Gestrichelte Linie
+                    linewidth=1,            # Dezente Linienstärke
+                    alpha=0.5,
+                )
             
     # Den fertig modifizierten Chart anzeigen
     plt.show()
