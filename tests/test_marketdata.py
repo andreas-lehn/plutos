@@ -118,3 +118,15 @@ def test_sample_builder_with_range(dbn_path):
     samples = [sample for sample in builder]  
     assert len(samples) == 2
     assert math.floor(samples[0].timestamp) == start_secound + 1
+
+
+def test_make_sample():
+    session_date = "2026-10-15"
+    sample = marketdata.make_sample(session_date, 5, 100, [1, 2, 3])
+    start, _ = marketdata.cme.session(datetime.fromisoformat(session_date))
+    assert sample.timestamp == start.timestamp() + 5
+    assert sample.index == 5
+    assert sample.low == 100
+    assert sample.volumes[100] == 1
+    assert sample.volumes[101] == 2
+    assert sample.volumes[102] == 3

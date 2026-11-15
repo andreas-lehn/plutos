@@ -14,26 +14,38 @@ from collections import deque
 from collections.abc import Iterable
 from pathlib import Path
 
-from .trade import Trade
 from .sample import VolumeProfile, Sample
 
 
 class Candle:
     """ accumulates multipe samples """
 
-    def __init__(self):
-        super().__init__()
-        self._timestamp: int = 0
-        self._samples: Iterable[VolumeProfile] = deque()
-        self._volumes: Iterable[int] = VolumeProfile()
-
+    def __init__(self, size: int = 36):
+        if size <= 0:
+            raise ValueError(f"Candle(): 'size' must be greater than zero")
+        
+        self._timestamp: int = None
+        self._index: int = None
+        self._volumes: VolumeProfile = VolumeProfile()
+        self._open: int = None
+        self._high: int = None
+        self._size: int = size
+    
     @property
     def timestamp(self) -> int:
         return self._timestamp
+
+    @property
+    def index(self) -> int:
+        return self._index 
+
+    @property
+    def size(self) -> int:
+        return self._size
     
     @property
     def open(self) -> int:
-        return self._samples[0].average if len(self._samples) > 0 else None
+        return self._open
 
     @property
     def low(self) -> int:
@@ -49,7 +61,7 @@ class Candle:
 
     @property
     def close(self) -> int:
-        return self._samples[-1].average if len(self._samples) > 0 else None
+        return self._close
 
     @property
     def volume(self) -> int:
@@ -66,69 +78,73 @@ class Candle:
     @property
     def delta(self) -> int:
         return self.close - self.open
-
+        
     def tangent(self, price: int, n: int = 1) -> int:
         return self.volumes.tangent(price, n) # pragma: no cover
     
-    def __len__(self):
-        return len(self._samples)
-    
     def to_dict(self) -> dict:
         return {
+            'index': self.index,
             'timestamp': self.timestamp,
+            'size': self._size,
             'open': self.open,
             'low': self.low,
             'average': self.average,
             'high': self.high,
             'close': self.close,
             'volume': self.volume,
-            'len': len(self),
             'volumes': [self._volumes[p] for p in range (self.low, self.high + 1)]
         }
 
     OHLC_FIELDNAMES = ['timestamp', 'open', 'low', 'average', 'high', 'close', 'volume']
 
+
     def to_filtered_dict(self, keys: Iterable[str]) -> dict:
         return {key: getattr(self, key) for key in keys}
 
-    def append(self, sample: Sample | VolumeProfile):
-        if isinstance(sample, Sample):
-            self._timestamp = sample.timestamp
-            sample = sample.volumes
-        self._samples.append(sample)
-        self._volumes += sample
 
-    def popleft(self) -> VolumeProfile:
-        sample = self._samples.popleft()
-        self._volumes -= sample
-        return sample
+    def append(self, sample: Sample):
+        if self._index is None:
+            self._index = sample.index // self._size
+        elif sample.index // self._size != self._index:
+            raise ValueError(f"sample index {sample.index} does not match candle index {self._index}")
+        self._timestamp = sample.timestamp
+        if self._open is None:
+            self._open = sample.average
+        self._close = sample.average
+        self._volumes += sample.volumes
 
-    @classmethod
-    def from_sample(cls, sample: VolumeProfile | Sample):
-        candle = Candle()
-        candle.append(sample)
-        return candle
-    
-    @classmethod
-    def from_samples(cls, samples: Iterable[VolumeProfile | Sample]):
-        candle = Candle()
-        for sample in samples:
-            candle.append(sample)
-        return candle
-    
-    def __iter__(self):
-        return self._samples.__iter__()
+
+    def accepts(self, sample: Sample) -> bool:
+        """ returns True if sample can be added to candle """
+        if self._index is None:
+            return True
+        return sample.index // self._size == self._index    
+
+    @property
+    def sample_index_range(self) -> int:
+        """ returns the range of indices for the samples of candle """
+        return range(self.index * self._size, (self.index + 1) * self._size)
+
+
+    @property
+    def last_sample_index(self) -> int:
+        """ returns the index of the last sample of candle """
+        return (self.index + 1) * self._size - 1
+
 
     def __repr__(self): # pragma: no cover
         return (
             "Candle("
+                f"index={self.index},"
+                f"timestamp={self.timestamp},"
+                f"size={self.size},"
                 f"open={self.open},"
                 f"low={self.low},"
                 f"avg={self.average},"
                 f"high={self.high},"
                 f"close={self.close},"
-                f"vol={self.volume},"
-                f"len={len(self)}"
+                f"vol={self.volume}"
             ")"
         )
 
@@ -143,7 +159,7 @@ class Chart():
 
     def __init__(self, candle_size: int, maxlen: int = None):
         self._candle_size = candle_size
-        self._current_candle = Candle()
+        self._current_candle = Candle(candle_size)
         self._maxlen = maxlen if maxlen else sys.maxsize
         self._candles = deque()
         self._volumes = VolumeProfile()
@@ -173,24 +189,17 @@ class Chart():
             sum_range += candle.range
         return round(sum_range / n)
 
-#    def delta(self, n: int = 5) -> int:
-#        return self[-1].average - self[-1 - n].average
-
-#    def moving_average(self, n: int = 5) -> int:
-#        sum = 0
-#        for i in range(-n - 1, -1):
-#            sum += self[i].average
-#        return round(sum / n)
-
     @property
     def volumes(self) -> VolumeProfile:
         return self._volumes
 
-    def from_samples(samples, candle_size, maxlen=None):
-        chart = Chart(candle_size, maxlen)
-        for sample in samples:
-            chart.append(sample)
-        return chart
+
+    #def from_samples(samples, candle_size, maxlen=None):
+    #    chart = Chart(candle_size, maxlen)
+    #    for sample in samples:
+    #        chart.append(sample)
+    #    return chart
+
 
     def append(self, sample: Sample):
         """ appends sample to a chart
@@ -207,15 +216,15 @@ class Chart():
          * `direction`  direction, in which the candle is moving expressed as a positiv/negative number showing the strength in ticks
         
         """
-        self._current_candle.append(sample)
         self._volumes += sample.volumes
-        if len(self._current_candle) >= self._candle_size:
+        if self._current_candle.accepts(sample):
+            self._current_candle.append(sample)
+            if self._current_candle.last_sample_index <= sample.index:
+                self._commit_current_candle()
+        else:
             self._commit_current_candle()
-            if len(self._candles) > self._maxlen:
-                # chart is full, remove an old one
-                self.popleft()            
-            self._notify_listeners(self._current_candle)
-            self._current_candle = Candle()
+            self._current_candle.append(sample)
+
 
     def popleft(self) -> Candle:
         candle = self._candles.popleft()
@@ -263,7 +272,10 @@ class Chart():
                 dir = 0
         return dir
     
+
     def _commit_current_candle(self):
+        """ add the current candle to the chart, calculate its properties, notifies listener and starts a new candle """
+
         candle = self._current_candle
         last_candle = None
         if len(self._candles) == 0:
@@ -276,6 +288,13 @@ class Chart():
             candle.ema_slow = Chart._exp_moving_avg(candle.average, last_candle.ema_slow, Chart.EMA_SLOW_FACTOR)
             candle.direction = Chart._direction(candle, last_candle)
         self._candles.append(candle)
+        if len(self._candles) > self._maxlen:
+            # chart is full, remove an old one
+            trash_candle = self.popleft()
+            self._volumes -= trash_candle.volumes       
+        self._notify_listeners(self._current_candle)
+        self._current_candle = Candle(self._candle_size)
+
 
     def to_file(self, file: str | Path, fieldnames = Candle.OHLC_FIELDNAMES): # pragma: no cover
         with open(file, "w", newline="", encoding="utf-8") as f:

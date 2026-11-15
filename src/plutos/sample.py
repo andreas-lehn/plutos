@@ -72,13 +72,18 @@ class VolumeProfile():
 
     @classmethod
     def from_dict(cls, data):
+        return cls.make(data['low'], data['volumes'])
+
+    @classmethod
+    def make(cls, low: int, volumes: list[int]):
+        """ creates a volume profile from a low price and a list of volumes """
         sample = cls()
-        sample._low = data['low']
-        for i, vol in enumerate(data['volumes']):
-            price = sample._low + i
+        sample._low = low
+        for i, vol in enumerate(volumes):
+            price = low + i
             sample[price] = vol
         return sample
-
+        
     def copy(self):
         return VolumeProfile.from_dict(self.to_dict())
 
@@ -201,17 +206,16 @@ class Sample:
     def from_dict(d: dict):
         return Sample(d['timestamp'], VolumeProfile.from_dict(d))
 
-    FIELDNAMES = ['timestamp', 'date'] + VolumeProfile.FIELDNAMES
+    FIELDNAMES = ['index', 'timestamp'] + VolumeProfile.FIELDNAMES
 
     def to_dict(self) -> dict:
         result = self.volumes.to_dict()
         result['index'] = self.index
         result['timestamp'] = self.timestamp
-        result['date'] = datetime.fromtimestamp(self.timestamp).isoformat()
         return result
 
     def __repr__(self): # pragma: no cover
-        return 'Sample(timestamp:' + self.timestamp + ',' + self.volumes.__repr__ + ')'
+        return 'Sample(index:' + str(self.index) + ',timestamp:' + str(self.timestamp) + ',' + self.volumes.__repr__() + ')'
 
 
 class SampleReader:

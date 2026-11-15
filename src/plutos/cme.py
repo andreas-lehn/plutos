@@ -44,7 +44,7 @@ def active_symbol(symbol: str, date: date):
     return symbol_code(symbol, rollover)
 
 
-def session(dt: datetime) -> (datetime, datetime):
+def session(dt: datetime) -> tuple[datetime, datetime]:
     """ calculate start and end time of a CME session based on a given date """
     end_date = datetime(dt.year, dt.month, dt.day, 17, 0, tzinfo=ZoneInfo("America/Chicago"))
     start_date = end_date - timedelta(days=1)

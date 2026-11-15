@@ -136,6 +136,14 @@ def from_file(file: str | Path, start: int = 0, duration: int = SECONDS_OF_DAY) 
     return SampleBuilder.from_file(file, start, duration)
 
 
+def make_sample(date: str, index: int, low: int, volumes: list[int]) -> Sample:
+    """ creates a sample from the given parameters """
+    start, _ = cme.session(datetime.fromisoformat(date))
+    sample = Sample(start.timestamp() + index, VolumeProfile.make(low, volumes))
+    sample.index = index
+    return sample
+
+
 def from_live_stream(): # pragma: no cover
     """ streams live market data """
     pass
