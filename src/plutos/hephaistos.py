@@ -347,11 +347,11 @@ def predict_cmd(files: tuple[Path,...], model_file: Path, probability: float): #
     model_long.load_model(model_file + '_long.json')
     proba_short = model_short.predict_proba(X)[:,1]
     proba_long  = model_long.predict_proba(X)[:,1]
+    proba_flat  = 1 - (proba_long + proba_short)
 
-    df_proba = pd.DataFrame({'short': proba_short, 'long': proba_long})
-    df_proba['flat'] = 1 - (df_proba['short'] + df_proba['long'])
-    print("distribution of probabilities:")
-    print(df_proba.describe(percentiles=[0.5, 0.75, 0.90, 0.95, 0.99]))
+    df_proba = pd.DataFrame({'short': proba_short, 'neutral': proba_flat, 'long': proba_long})
+    click.secho("distribution of probabilities:", bold=True)
+    click.echo(df_proba.describe(percentiles=[0.5, 0.75, 0.90, 0.95, 0.99]))
 
     # using probability as threshold
     raw_short = proba_short >= probability
@@ -395,13 +395,10 @@ def predict_cmd(files: tuple[Path,...], model_file: Path, probability: float): #
     precision_row.append(f"{total_precision:.2f}")
     df_cm.loc["precision [%]"] = precision_row
 
-    print()
-    if probability:
-        print(f'prediction for probability {probability:.2f}')
-    else:
-        print('prediction for maximum of probabilities')
-    print(df_cm.to_string())
-    print()
+    click.echo()
+    click.secho(f'prediction for probability {probability:.2f}', bold=True)
+    click.echo(df_cm.to_string())
+    click.echo()
 
 
 @click.command('eval')
