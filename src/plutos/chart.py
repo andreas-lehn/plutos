@@ -78,7 +78,15 @@ class Candle:
     @property
     def delta(self) -> int:
         return self.close - self.open
-        
+
+    @property
+    def body(self) -> int:
+        return abs(self.delta)
+
+    @property
+    def ema_spread(self) -> int:
+        return self.ema_fast - self.ema_slow
+
     def tangent(self, price: int, n: int = 1) -> int:
         return self.volumes.tangent(price, n) # pragma: no cover
     
@@ -277,21 +285,26 @@ class Chart():
         """ add the current candle to the chart, calculate its properties, notifies listener and starts a new candle """
 
         candle = self._current_candle
-        last_candle = None
         if len(self._candles) == 0:
-            candle.ema_fast = self._current_candle.average
-            candle.ema_slow = self._current_candle.average
+            candle.ema_fast = candle.average
+            candle.ema_slow = candle.average
             candle.direction = candle.delta
         else:
             last_candle = self[-1]
             candle.ema_fast = Chart._exp_moving_avg(candle.average, last_candle.ema_fast, Chart.EMA_FAST_FACTOR)
             candle.ema_slow = Chart._exp_moving_avg(candle.average, last_candle.ema_slow, Chart.EMA_SLOW_FACTOR)
             candle.direction = Chart._direction(candle, last_candle)
+
         self._candles.append(candle)
         if len(self._candles) > self._maxlen:
             # chart is full, remove an old one
             trash_candle = self.popleft()
             self._volumes -= trash_candle.volumes       
+
+        candle.global_high = self.volumes.high
+        candle.global_low = self.volumes.low
+        candle.atr = self.average_range(9)
+
         self._notify_listeners(self._current_candle)
         self._current_candle = Candle(self._candle_size)
 

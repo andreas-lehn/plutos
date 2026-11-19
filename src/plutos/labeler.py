@@ -93,11 +93,16 @@ def label_profit_chances(chart: Chart, risk: int, profit: int, window_size):  # 
             short_chance = is_short_chance(open[0], risk, profit, high)
             long_chance = is_long_chance(open[0], risk, profit, low)
             if short_chance and long_chance:
-                chart[i - window_size].profit_chance = 'both'
+                raise ValueError(f"label_profit_chances(): short and long chance detected.")
             elif short_chance:
                 chart[i - window_size].profit_chance = 'short'
             elif long_chance:
                 chart[i - window_size].profit_chance = 'long'
+
+def label(chart: Chart, trend_length, risk, profit, window_size):
+    """ labels a chart """
+    label_trends(chart, trend_length)
+    label_profit_chances(chart, risk, profit, window_size)
 
 
 @click.command('label')
@@ -108,9 +113,9 @@ def label_profit_chances(chart: Chart, risk: int, profit: int, window_size):  # 
 @click.option('-p', '--profit', type=int, default=48, help="profit to be achieved (in ticks)")
 @click.option('-w', '--window-size', type=int, default=12, help="size of tripple barrier window in candles")
 def label_cmd(file: Path, candle_size: int, trend_length: int, risk: int, profit: int, window_size: int): # pragma: no cover
+    """ create a labeled chart """
     chart = generate_chart(file, candle_size)
-    label_trends(chart, trend_length)
-    label_profit_chances(chart, risk, profit, window_size)
+    label(chart, trend_length, risk, profit, window_size)
 
     file_parts = marketdata.parse_path(file)
     file_parts['parent'] = '.'

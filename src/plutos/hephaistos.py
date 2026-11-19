@@ -11,133 +11,130 @@ import pandas as pd
 import numpy as np
 import xgboost as xgb
 import matplotlib.pyplot as plt
-from sklearn.metrics import precision_recall_curve, confusion_matrix
+from sklearn.metrics import precision_recall_curve, confusion_matrix, average_precision_score
 
 from . import marketdata
 from . import datasetcategory
+from . import labeler
 
 
-MAX_LOSS = 100
-START_OFFSET = 48 # don't begin trading bevor this offset in seconds since start of the session
+START_OFFSET = 10 * 60 # don't begin trading bevor this offset in seconds since start of the session
 
 class Hephaistos:
 
     FIELDNAMES = ['contracts', 'stop_loss', 'p_short', 'p_long']
 
-    def __init__(self, model_path: Path, threshold: int):
+    def __init__(self, model_path: Path):
         self.model = xgb.XGBClassifier()
         self.model.load_model(model_path)
-        self.threshold = threshold / 100
-        self.data = []
+
  
-    def contract_size(direction: int, candle: Candle) -> (int, int):
-        """ calculates contract size and stop loss of a contract """
-        if direction < 0:
-            stop_loss = 100
-            max_contracts = MAX_LOSS // stop_loss
-            return -max_contracts, stop_loss
-        elif direction > 0:
-            stop_loss = 100
-            max_contracts = MAX_LOSS // stop_loss
-            return max_contracts, stop_loss
-        else:
-            return 0, 0 # pragma: no cover
-
     def on_candle(self, candle: Candle, chart: Chart):
-        contracts, stop_loss, p_long, p_short = 0, 0, 0.0, 0.0
+        """ predict probalities for long, neutral, short """
+        p_long, p_flat, p_short = 0.0, 0.0, 0.0
 
-        if len(chart) > START_OFFSET:
-            data = DataCollector.data_set(candle, chart)
-            DataCollector.fill_past_data(data, self.data)
-            data['time'] = len(chart) - 1
-            self.data.append(data)
-            
-            df = pd.DataFrame([data])
-            p_short, _, p_long = self.model.predict_proba(df)[0]
+        if candle.index > START_OFFSET // candle.size:
+            feature_set = FeatureGenerator.feature_set(candle, chart)
+            df = pd.DataFrame([feature_set])
+            p_short, p_flat, p_long = self.model.predict_proba(df)[0]
 
-            if p_long > self.threshold:
-                contracts, stop_loss = Hephaistos.contract_size(1, candle)
-            elif p_short > self.threshold:
-                contracts, stop_loss = Hephaistos.contract_size(-1, candle)
-    
-        candle.contracts = contracts
-        candle.stop_loss = stop_loss
         candle.p_short = p_short
-        candle.p_long = p_long
+        candle.p_flat  = p_flat
+        candle.p_long  = p_long
 
 
-    def simulate(file, model_path: Path, candle_size: int = 36, num_candles: int = None, threshold: int = 20): # pragma: no cover
+    def simulate(file, model_path: Path, candle_size: int = 36, num_candles: int = None): # pragma: no cover
         main_chart = Chart(candle_size)
         model = MarketModel()
         model.charts.append(main_chart)
-        trader = Hephaistos(model_path, threshold)
+        trader = Hephaistos(model_path)
         main_chart.register_callback(trader.on_candle)
         model.simulate_file(file, num_candles * candle_size if num_candles else 24*60*60)
         return main_chart
 
 
-class DataCollector:
-    """ delivers a data set for each candle """
+class FeatureGenerator:
+    """ delivers a feature set for each candle in a chart """
 
-    def __init__(self):
-        self.time = 0
-        self.data = []
- 
-    def data_set(candle: Candle, chart: Chart):
-        data = dict()
+    def __init__(self, chart: Chart):
+        self.chart = chart
 
-        average_0 = chart[0].average
-        data['open'] = candle.open - average_0
-        data['low'] = candle.low - average_0
-        data['average'] = candle.average - average_0
-        data['high'] = candle.high - average_0
-        data['close'] = candle.close - average_0
-        data['ema_fast'] = candle.ema_fast - average_0
-        data['ema_slow'] = candle.ema_slow - average_0
+    def feature_set(candle: Candle, chart: Chart):
+        """ creates feature set of a candle """
+        if candle.index <= START_OFFSET // candle.size:
+            """ no feature set will be calculated before START_OFFSET in seconds """
+            return None
 
+        candle_1 = chart[-2]
+        candle_2 = chart[-3]
         average = candle.average
-        data['delta_open']  = candle.open - average 
-        data['delta_low']   = candle.low - average
-        data['delta_high']  = candle.high - average
-        data['delta_close'] = candle.close - average
-        data['delta_ema_fast'] = candle.ema_fast - average
-        data['delta_ema_slow'] = candle.ema_slow - average
-        data['delta_ema'] = candle.ema_slow - candle.ema_fast
 
-        data['wick_top'] = candle.high - max(candle.open, candle.close)
-        data['wick_low'] = min(candle.open, candle.close) - candle.low
-        data['delta']    = candle.delta
-        data['range']    = candle.range
-        data['atr']      = chart.average_range(9)
-        data['volume']   = candle.volume
+        data = dict()
+        #data['index'] = candle.index
+        data['low'] = (candle.low - average) / average
+        data['high'] = (candle.high - average) / average
+        data['open'] = (candle.open - average) / average
+        data['close'] = (candle.close - average) / average
+        data['global_high'] = (candle.global_high - average) / average
+        data['global_low'] = (candle.global_low - average) / average
+        data['ema_fast'] = (candle.ema_fast - average) / average
+        data['ema_slow'] = (candle.ema_slow - average) / average
+        data['ema_spread'] = candle.ema_spread / candle.average
+        data['range'] = candle.range / average
+        data['body'] = candle.body / average
+        data['delta'] = candle.delta / average
+        data['atr']    = candle.atr / average
+        data['volume'] = candle.volume
+        
+        data['open_1']  = (candle.open - candle_1.open) / average 
+        data['low_1']   = (candle.low - candle_1.low) / average
+        data['average_1'] = (candle.average - candle_1.average) / average
+        data['high_1']  = (candle.high - candle_1.high) / average
+        data['close_1'] = (candle.close - candle_1.close) / average
+        data['ema_fast_1'] = (candle.ema_fast - candle_1.ema_fast) / average
+        data['ema_slow_1'] = (candle.ema_slow - candle_1.ema_slow) / average
+        data['ema_spread_1'] = (candle.ema_spread - candle_1.ema_spread) / average
+        data['volume_1'] = (candle.volume - candle_1.volume) / candle.volume
+
+        data['low_2']   = (candle.low - candle_2.low) / average
+        data['average_2'] = (candle.average - candle_2.average) / average
+        data['high_2']  = (candle.high - candle_2.high) / average
+        data['ema_fast_2'] = (candle.ema_fast - candle_2.ema_fast) / average
+        data['ema_slow_2'] = (candle.ema_slow - candle_2.ema_slow) / average
+        data['ema_spread_2'] = (candle.ema_spread - candle_2.ema_spread) / average
+        data['volume_2'] = (candle.volume - candle_2.volume) / candle.volume
+
+        data['average_accel'] = data['average_1'] - data['average_2']
+        data['ema_fast_accel'] = data['ema_fast_1'] - data['ema_fast_2']
+        data['ema_slow_accel'] = data['ema_slow_1'] - data['ema_slow_2']
+        data['ema_spread_accel'] = data['ema_spread_1'] - data['ema_spread_2']
+        data['volume_accel'] = data['volume_1'] - data['volume_2']
         return data
 
-    def fill_past_data(data, past_data: list):
-        FIELD_NAMES = [key for key in data.keys()]
-        MAX_LOOK_BACK = 9
-        for i in range(1, MAX_LOOK_BACK + 1):
-            pd = data
-            if len(past_data) > 0:            
-                pd = past_data[-min(i, len(past_data))]
-            for field in FIELD_NAMES:
-                field_n = field + '_' + str(i)
-                data[field_n] = data[field] - pd[field]
-        return data
+    FEATURE_FIELDNAMES = [
+       #'index',
+       'open', 'low', 'high', 'close', 'global_high', 'global_low', 'ema_fast', 'ema_slow', 'ema_spread', 'range', 'body', 'delta', 'atr', 'volume',
+       'open_1', 'low_1', 'average_1', 'high_1', 'close_1', 'ema_fast_1', 'ema_slow_1', 'ema_spread_1', 'volume_1',
+       'low_2', 'average_2', 'high_2', 'ema_fast_2', 'ema_slow_2', 'ema_spread_2', 'volume_2',
+       'average_accel', 'ema_fast_accel', 'ema_slow_accel', 'ema_spread_accel', 'volume_accel',
+    ]
 
-    LOOK_AHEAD = 3
+    def append_targets(feature_set: dict, candle: Candle):
+        """ append target values to feature set """
+        feature_set['profit_chance'] = candle.profit_chance
+        feature_set['trend_start'] = candle.trend_start
 
-    def on_candle(self, candle: Candle, chart: Chart):
-        data = DataCollector.data_set(candle, chart)
-        DataCollector.fill_past_data(data, self.data)
-        data['time'] = self.time
-        data['target'] = None
-        self.data.append(data)
-        self.time += 1
+    TARGET_FIELDNAMES = ['profit_chance', 'trend_start']
 
-        # set target value in past data sets
-        offset = DataCollector.LOOK_AHEAD + 1
-        if len(self.data) >= offset:
-            self.data[-offset]['target'] = candle.close - chart[-offset+1].open
+    def __iter__(self):
+        """ iterate through the chart and yield features sets """
+        for candle in self.chart:
+            feature_set = FeatureGenerator.feature_set(candle, self.chart)
+            if not feature_set:
+                continue
+            FeatureGenerator.append_targets(feature_set, candle)
+            yield feature_set
+
 
     def data_path(file: Path, dir: Path) -> Path:
         """ generates the path for feature data file from a source file path
@@ -186,22 +183,35 @@ def load_files(files) -> pd.DataFrame: # pragma: no cover
         frames.append(df)
     return pd.concat(frames, axis=0)
 
-def split_target(df: pd.DataFrame, short: int = -24, long: int = 24, target_col: str = 'target'): # pragma: no cover
-    feature_cols = [col for col in df.columns if col != target_col]
-    X = df[feature_cols]
 
-    conditions = [
-        (df[target_col] < short),
-        (df[target_col] >= short) & (df[target_col] <= long),
-        (df[target_col] > long)
-    ]
-    y = np.select(conditions, [0, 1, 2])
-    return X, y
+def split_target(df: pd.DataFrame): # pragma: no cover
+    """ split target columns from feature values """
+    x = df[FeatureGenerator.FEATURE_FIELDNAMES]
+    y_short = (df[FeatureGenerator.TARGET_FIELDNAMES[0]] == 'short').astype(int)
+    y_long  = (df[FeatureGenerator.TARGET_FIELDNAMES[0]] == 'long').astype(int)
 
-def find_quantile(df: pd.DataFrame, target_col: str = 'target', quantile: float = 0.25):
-    short = df[target_col].quantile(quantile)
-    long  = df[target_col].quantile(1 - quantile)
-    return short, long
+    #target = FeatureGenerator.TARGET_FIELDNAMES[1]
+    #y_up = (target == 'up').astype(int)
+    #y_down = (target == 'down'.astype(int))
+    return x, y_short, y_long
+
+def fit_target(model_file_name: str, target_name: str, X_train, y_train, X_eval, y_eval):
+    click.echo(f"fitting model for target '{target_name}'...")
+    model = xgb.XGBClassifier(
+        eval_metric='aucpr',
+        scale_pos_weight=2.0,
+        early_stopping_rounds=25,
+        n_estimators = 1500,
+        learning_rate = 0.01,
+        max_depth = 4,
+        random_state = 42,
+    )
+    model.fit(X_train, y_train, eval_set=[(X_eval, y_eval)], verbose=True)
+    file_name = model_file_name + '_' + target_name + '.json'
+    model.save_model(file_name)
+    click.echo(f"model written to '{file_name}'\n")
+    return model
+
 
 @click.command('fit')
 @click.option(
@@ -216,98 +226,87 @@ def find_quantile(df: pd.DataFrame, target_col: str = 'target', quantile: float 
     default='eval',
     help="directory with evaluation files (*_hephaistos.csv), default='eval'",
 )
-@click.option('-m', '--model-file', type=str, default='hephaistos-model.json', help="model file, default='hephaistos-model.json'")
-@click.option('-q', '--quantile', type=float, default=0.25, help="quantile value for target classification")
-def fit_cmd(training_dir: tuple[Path], eval_dir: tuple[Path], model_file: str, quantile: float): #pragma: no cover
+@click.option('-m', '--model-file', type=str, default='hephaistos-model', help="prefix of model file, default='hephaistos-model'")
+def fit_cmd(training_dir: tuple[Path], eval_dir: tuple[Path], model_file: str): #pragma: no cover
     """ fit the model to training data """
     print('Fitting a model to training data...')
 
     training_files = tuple(f for f in training_dir.glob("*_features.csv") if f.is_file())
     df_training = load_files(training_files)
-    short, long = find_quantile(df_training, quantile=quantile)
-    print('quantile values:', short, long)
-    X_train, y_train = split_target(df_training, short, long)
+    X_train, y_short, y_long = split_target(df_training)
 
     eval_files = tuple(f for f in eval_dir.glob("*_features.csv") if f.is_file())
     df_eval = load_files(eval_files)
-    X_eval, y_eval = split_target(df_eval, short, long)
+    X_eval, y_eval_short, y_eval_long = split_target(df_eval)
 
-    model = xgb.XGBClassifier(
-        objective='multi:softprob',
-        num_class=3,
-        eval_metric='mlogloss',
-        early_stopping_rounds=25,
-        n_estimators = 1500,
-        learning_rate = 0.03,
-        max_depth = 4,
-        random_state = 42,
-    )
-    model.fit(X_train, y_train, eval_set=[(X_eval, y_eval)], verbose=True)
-    model.save_model(model_file)
-    print(f"model written to '{model_file}'")
+    model_short = fit_target(model_file, 'short', X_train, y_short, X_eval, y_eval_short)
+    model_long = fit_target(model_file, 'long', X_train, y_long, X_eval, y_eval_long)
 
-    importances = model.feature_importances_
-    df_features = pd.DataFrame({"feature": X_train.columns, "importance [%]": importances * 100})
-    df_features = df_features.sort_values(by="importance [%]", ascending=False).reset_index(
+    df_features = pd.DataFrame({
+        "feature": X_train.columns, 
+        "short [%]": model_short.feature_importances_ * 100,
+        "long [%]":  model_long.feature_importances_ * 100,
+    })
+    df_features['max [%]'] = df_features[['short [%]', 'long [%]']].max(axis=1)
+    df_features = df_features.sort_values(by="max [%]", ascending=False).reset_index(
         drop=True
     )
-    print()
-    print("Top 10 most important features:")
-    print(df_features.head(10).to_string(index=False, float_format="{:.2f}%".format))
-    print()
-    print("Top 10 least important features:")
-    print(df_features.tail(10).to_string(index=False, float_format="{:.2f}%".format))
-    print()
-    
+    click.secho("Feature importance:", bold=True)
+    click.echo(df_features.to_string(index=False, float_format="{:.2f}%".format))
+    click.echo()
+
 
 @click.command()
-@click.argument('files', nargs=-1, type=click.Path(exists=True, path_type=Path), help='eval files to compute precision recall for long')
-@click.option('-d', '--direction', type=click.Choice(['long', 'short']), default='long', help="long or short")
-@click.option('-m', '--model-file', type=str, default='hephaistos-model.json', help="model file, default='hephaistos-model.json'")
-@click.option('-c', '--classification', type=int, default=24, help="threshold for target classification (in ticks)")
-def prec_recall(files: list[Path], model_file: str, direction: str, classification: int):
+@click.argument('files', nargs=-1, type=click.Path(exists=True, path_type=Path), required=True, help='eval files to compute precision recall for long')
+@click.option('-m', '--model-file', type=str, default='hephaistos-model', help="model file, default='hephaistos-model'")
+def prec_recall(files: list[Path], model_file: str):
     """ calculate precision reacall for long signals """
     """ predict based on a given model """
-    click.echo(f"Predicting based on model '{model_file}'...")
+    click.echo(f"Precision recall based on model '{model_file}' with files {[f.name for f in files]}")
 
     df = load_files(files)
-    X, y = split_target(df, -classification, classification)
+    X, y_short, y_long = split_target(df)
 
-    model = xgb.XGBClassifier()
-    model.load_model(model_file)
-    probs = model.predict_proba(X)
-    signal = 0 if direction == 'short' else 2
-    proba = probs[:,signal]
-    y_binary = (y == signal).astype(int)
+    model_short, model_long = xgb.XGBClassifier(), xgb.XGBClassifier()
+    model_short.load_model(model_file + '_short.json')
+    model_long.load_model(model_file + '_long.json')
+    proba_short = model_short.predict_proba(X)[:,1]
+    proba_long = model_long.predict_proba(X)[:,1]
 
     # Precision und Recall für alle möglichen Schwellenwerte berechnen
-    precisions, recalls, thresholds = precision_recall_curve(y_binary, proba)
-    plt.figure(figsize=(8, 5))
-    # Wir plotten Precision gegen die Schwellenwerte (thresholds)
-    # Hinweis: thresholds ist 1 Element kürzer als precisions/recalls, daher das [:-1]
-    plt.plot(thresholds, precisions[:-1], label='precision', color='green', lw=2)
-    plt.plot(thresholds, recalls[:-1], label='recall', color='blue', lw=2)
+    prec_short, _, thres_short = precision_recall_curve(y_short, proba_short)
+    prec_long, _, thres_long = precision_recall_curve(y_long, proba_long)
+    ap_short = average_precision_score(y_short, proba_short)
+    ap_long = average_precision_score(y_long, proba_long)
 
-    plt.xlabel('Konfidenz-Schwelle des Modells (0.0 bis 1.0)')
-    plt.ylabel('Prozentwert')
-    plt.title(f'trade-off {direction} trades')
+    plt.figure(figsize=(9, 6))
+    plt.plot(thres_short, prec_short[:-1], label=f'short precision', color='red', linewidth=2)
+    plt.plot(thres_long,  prec_long[:-1],  label=f'long precision', color='green', linewidth=2)
+
+    # Optional: Zufalls-Baselines (Anteil der positiven Labels im Testset)
+    plt.axhline(y_short.mean(), color='red', linestyle='--', alpha=0.4, label=f'Short Baseline ({y_short.mean():.2%})')
+    plt.axhline(y_long.mean(), color='green', linestyle='--', alpha=0.4, label=f'Long Baseline ({y_long.mean():.2%})')
+
+    plt.title('precision recall curve')
+    plt.xlabel('recall')
+    plt.ylabel('precision')
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
     plt.legend()
     plt.grid(True)
+    plt.tight_layout()
     plt.show()
-
-    # --- Übersichtliche Tabelle zum Ablesen des Sweet-Spots ---
-    df_tradeoff = pd.DataFrame({
-        'Schwelle': thresholds,
-        'Trefferquote (Precision)': precisions[:-1],
-        'Gefundene Chancen (Recall)': recalls[:-1]
-    })
 
 
 @click.command('prepare')
-@click.argument('files', nargs=-1, type=click.Path(exists=True, path_type=Path), help='files with historical data in Databento native file (.dbn)')
+@click.argument('files', nargs=-1, type=click.Path(exists=True, path_type=Path), required=True, help='files with historical data in Databento native file (.dbn)')
 @click.option('-d', '--dir', type=click.Path(), help="directory where to put the output files")
 @click.option('-s', '--candle-size', type=int, default=36, help="size of a candle (default=36s)")
-def prepare_cmd(files: list[Path], dir: Path, candle_size: int):  #pragma: no cover
+@click.option('-l', '--trend-length', type=int, default=5, help="length of trend (in candles) to be labeled")
+@click.option('-r', '--risk', type=int, default=24, help="maximum risk to be taken (in ticks)")
+@click.option('-p', '--profit', type=int, default=48, help="profit to be achieved (in ticks)")
+@click.option('-w', '--window-size', type=int, default=12, help="size of tripple barrier window in candles")
+def prepare_cmd(files: list[Path], dir: Path, candle_size: int, trend_length: int, risk: int, profit: int, window_size: int):  #pragma: no cover
     """ prepare training data from historical data """
     click.echo(f'Generating training data...')
 
@@ -319,58 +318,60 @@ def prepare_cmd(files: list[Path], dir: Path, candle_size: int):  #pragma: no co
         (dir / path).mkdir(parents=True, exist_ok=True)
     
     for path in files:
-        collector = DataCollector()
         main_chart = Chart(candle_size=candle_size)
-        main_chart.register_callback(collector.on_candle)
         model = MarketModel()
         model.charts.append(main_chart)
         model.simulate_file(path)
-
-        with open(DataCollector.data_path(path, dir), "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=collector.data[0].keys())
+        labeler.label(main_chart, trend_length, risk, profit, window_size)
+        features = FeatureGenerator(main_chart)
+        with open(FeatureGenerator.data_path(path, dir), "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=FeatureGenerator.FEATURE_FIELDNAMES + FeatureGenerator.TARGET_FIELDNAMES)
             writer.writeheader()
-            writer.writerows(collector.data)
+            for feature_set in features:
+                writer.writerow(feature_set)
 
 
 @click.command('predict')
-@click.argument('files', nargs=-1, type=click.Path(exists=True, path_type=Path), help='files with test data (.csv)')
-@click.option('-m', '--model-file', type=click.Path(exists=True, path_type=Path), default='hephaistos-model.json', help='model file')
-@click.option('-p', '--probability', type=float, default=0.5, help="threshold probability for trades")
-@click.option('-c', '--classification', type=int, default=24, help="classification threshold for target value")
-def predict_cmd(files: tuple[Path,...], model_file: Path, probability, classification): # pragma: no cover
+@click.argument('files', nargs=-1, type=click.Path(exists=True, path_type=Path), required=True, help='files with test data (.csv)')
+@click.option('-m', '--model-file', type=str, default='hephaistos-model', help='model file prefix')
+@click.option('-p', '--probability', type=float, default=0.30, help="threshold probability for trades")
+def predict_cmd(files: tuple[Path,...], model_file: Path, probability: float): # pragma: no cover
     """ predict based on a given model """
     click.echo(f"Predicting based on model '{model_file}'...")
 
     df = load_files(files)
-    X, y = split_target(df, -classification, classification)
+    X, y_short, y_long = split_target(df)
 
-    model = xgb.XGBClassifier()
-    model.load_model(model_file)
-    proba = model.predict_proba(X)
-    prob_short = proba[:, 0] # probability for short
-    prob_long  = proba[:, 2] # probability for long
+    model_short, model_long = xgb.XGBClassifier(), xgb.XGBClassifier()
+    model_short.load_model(model_file + '_short.json')
+    model_long.load_model(model_file + '_long.json')
+    proba_short = model_short.predict_proba(X)[:,1]
+    proba_long  = model_long.predict_proba(X)[:,1]
 
-    raw_short = prob_short >= probability
-    raw_long = prob_long >= probability
+    df_proba = pd.DataFrame({'short': proba_short, 'long': proba_long})
+    df_proba['flat'] = 1 - (df_proba['short'] + df_proba['long'])
+    print("distribution of probabilities:")
+    print(df_proba.describe(percentiles=[0.5, 0.75, 0.90, 0.95, 0.99]))
+
+    # using probability as threshold
+    raw_short = proba_short >= probability
+    raw_long = proba_long >= probability
+
     both_active = raw_short & raw_long
     final_short = np.where(both_active, False, raw_short).astype(int)
     final_long = np.where(both_active, False, raw_long).astype(int)
     final_neutral = np.where((final_short == 0) & (final_long == 0), 1, 0)
 
-    df_signals = pd.DataFrame({
-        'pred_short': final_short,
-        'pred_neutral': final_neutral,
-        'pred_long': final_long,
-        'target': y
-    })    
+    y_pred_final = np.zeros(len(X), dtype=int)
+    y_pred_final[final_short == 1] = 0
+    y_pred_final[final_neutral == 1] = 1
+    y_pred_final[final_long == 1] = 2
 
-    y_pred_final = np.zeros(len(df_signals), dtype=int)
-    y_pred_final[df_signals['pred_short'] == 1] = 0
-    y_pred_final[df_signals['pred_neutral'] == 1] = 1
-    y_pred_final[df_signals['pred_long'] == 1] = 2
-
+    target = np.ones(len(X))
+    target[y_short == 1] = 0
+    target[y_long == 1] = 2
     # Die echte 3x3 Konfusionsmatrix berechnen
-    cm = confusion_matrix(df_signals['target'], y_pred_final, labels=[0, 1, 2])
+    cm = confusion_matrix(target, y_pred_final, labels=[0, 1, 2])
 
     # 1. Definiere lesbare Labels für die Achsen
     labels = ['short', 'neutral', 'long']
@@ -395,7 +396,10 @@ def predict_cmd(files: tuple[Path,...], model_file: Path, probability, classific
     df_cm.loc["precision [%]"] = precision_row
 
     print()
-    print(f'prediction for probability {probability:.2f}, target classification {classification} ticks')
+    if probability:
+        print(f'prediction for probability {probability:.2f}')
+    else:
+        print('prediction for maximum of probabilities')
     print(df_cm.to_string())
     print()
 
