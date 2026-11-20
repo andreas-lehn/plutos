@@ -100,30 +100,39 @@ def label_profit_chances(chart: Chart, risk: int, profit: int, window_size):  # 
                 chart[i - window_size].profit_chance = 'long'
 
 
-def is_trend(values: list[int]) -> int:
-    pass
-
-
-def label_in_trend(chart, trend_length: int):
-    """ labels a candle the is in the middle of a trend with length >= trend_length """
-    averages = deque(maxlen=trend_length)
-
+def label_profit_trade(chart: Chart, trend_length: int, profit: int):
+    """ labels trade """
     for i, candle in enumerate(chart):
         candle.profit_chance = 'none'
-        averages.append(candle.average)
-        if (len(averages) == trend_length):
-            trend =  is_trend(averages)
-            if trend < 0:
-                chart[i - trend_length // 2].profit_chance = 'short'
-            elif trend > 0: 
-                chart[i - trend_length // 2].profit_chance = 'long'
+        if i <= trend_length: continue
+
+        candle_to_label = chart[i - trend_length]
+        start_candle = chart[i - trend_length + 1]
+        open = start_candle.open
+        close = candle.close
+        if close < open - profit:
+            stopped = False
+            for j in range(i - trend_length + 1, i + 1):
+                if chart[j].high > candle_to_label.high:
+                    stopped = True
+                    break
+            if not stopped:
+                candle_to_label.profit_chance = 'short'
+        if close > open + profit: 
+            stopped = False
+            for j in range(i - trend_length + 1, i + 1):
+                if chart[j].low < candle_to_label.low:
+                    stopped = True
+                    break
+            if not stopped:
+                candle_to_label.profit_chance = 'long'
 
 
 def label(chart: Chart, trend_length, risk, profit, window_size):
     """ labels a chart """
     label_trend_starts(chart, trend_length)
-    label_profit_chances(chart, risk, profit, window_size)
-    #label_in_trend(chart, trend_length)
+    #label_profit_chances(chart, risk, profit, window_size)
+    label_profit_trade(chart, trend_length, profit)
 
 
 @click.command('label')
