@@ -20,7 +20,7 @@ def generate_chart(file: Path, candle_size: int) -> Chart:  # pragma: no cover
     return main_chart
 
 
-def is_trend(averages: list[int]):
+def is_trend_start(averages: list[int]):
     """ test if a trend starts at 'average[1]' """
     deltas = [averages[i] - averages[i - 1] for i in range(1, len(averages))]
     trend = 0
@@ -34,14 +34,14 @@ def is_trend(averages: list[int]):
     return trend
 
 
-def label_trends(chart: Chart, length):  # pragma: no cover
+def label_trend_starts(chart: Chart, length):  # pragma: no cover
     """ label in chart trend starts of a given length """
     averages = deque(maxlen=length + 2)
     for i, candle in enumerate(chart):
         candle.trend_start = 'none'
         averages.append(candle.average)
         if len(averages) == length + 2:
-            trend = is_trend(averages)
+            trend = is_trend_start(averages)
             if trend > 0:
                 chart[i - length].trend_start = 'up'
             elif trend < 0:
@@ -99,10 +99,31 @@ def label_profit_chances(chart: Chart, risk: int, profit: int, window_size):  # 
             elif long_chance:
                 chart[i - window_size].profit_chance = 'long'
 
+
+def is_trend(values: list[int]) -> int:
+    pass
+
+
+def label_in_trend(chart, trend_length: int):
+    """ labels a candle the is in the middle of a trend with length >= trend_length """
+    averages = deque(maxlen=trend_length)
+
+    for i, candle in enumerate(chart):
+        candle.profit_chance = 'none'
+        averages.append(candle.average)
+        if (len(averages) == trend_length):
+            trend =  is_trend(averages)
+            if trend < 0:
+                chart[i - trend_length // 2].profit_chance = 'short'
+            elif trend > 0: 
+                chart[i - trend_length // 2].profit_chance = 'long'
+
+
 def label(chart: Chart, trend_length, risk, profit, window_size):
     """ labels a chart """
-    label_trends(chart, trend_length)
+    label_trend_starts(chart, trend_length)
     label_profit_chances(chart, risk, profit, window_size)
+    #label_in_trend(chart, trend_length)
 
 
 @click.command('label')

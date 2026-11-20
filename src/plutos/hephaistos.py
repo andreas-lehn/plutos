@@ -6,16 +6,15 @@ import os
 import csv
 import click
 from pathlib import Path
-from .chart import Candle, Chart, MarketModel
 import pandas as pd
 import numpy as np
 import xgboost as xgb
 import matplotlib.pyplot as plt
-from sklearn.metrics import precision_recall_curve, confusion_matrix, average_precision_score
-
+from sklearn.metrics import precision_recall_curve,  average_precision_score, confusion_matrix
 from . import marketdata
 from . import datasetcategory
 from . import labeler
+from .chart import Candle, Chart, MarketModel
 
 
 START_OFFSET = 10 * 60 # don't begin trading bevor this offset in seconds since start of the session
@@ -65,11 +64,12 @@ class FeatureGenerator:
             """ no feature set will be calculated before START_OFFSET in seconds """
             return None
 
-        candle_1 = chart[-2]
-        candle_2 = chart[-3]
-        average = candle.average
-
         data = dict()
+        average = candle.average
+        ema_fast = candle.ema_fast
+        ema_slow = candle.ema_slow
+        ema_spread = candle.ema_spread
+        volume = candle.volume
         #data['index'] = candle.index
         data['low'] = (candle.low - average) / average
         data['high'] = (candle.high - average) / average
@@ -77,46 +77,91 @@ class FeatureGenerator:
         data['close'] = (candle.close - average) / average
         data['global_high'] = (candle.global_high - average) / average
         data['global_low'] = (candle.global_low - average) / average
-        data['ema_fast'] = (candle.ema_fast - average) / average
-        data['ema_slow'] = (candle.ema_slow - average) / average
-        data['ema_spread'] = candle.ema_spread / candle.average
+        data['ema_fast'] = (ema_fast - average) / average
+        data['ema_slow'] = (ema_slow - average) / average
+        data['ema_spread'] = candle.ema_spread / candle.ema_slow
         data['range'] = candle.range / average
         data['body'] = candle.body / average
         data['delta'] = candle.delta / average
         data['atr']    = candle.atr / average
-        data['volume'] = candle.volume
-        
-        data['open_1']  = (candle.open - candle_1.open) / average 
-        data['low_1']   = (candle.low - candle_1.low) / average
-        data['average_1'] = (candle.average - candle_1.average) / average
-        data['high_1']  = (candle.high - candle_1.high) / average
-        data['close_1'] = (candle.close - candle_1.close) / average
-        data['ema_fast_1'] = (candle.ema_fast - candle_1.ema_fast) / average
-        data['ema_slow_1'] = (candle.ema_slow - candle_1.ema_slow) / average
-        data['ema_spread_1'] = (candle.ema_spread - candle_1.ema_spread) / average
-        data['volume_1'] = (candle.volume - candle_1.volume) / candle.volume
 
-        data['low_2']   = (candle.low - candle_2.low) / average
-        data['average_2'] = (candle.average - candle_2.average) / average
-        data['high_2']  = (candle.high - candle_2.high) / average
-        data['ema_fast_2'] = (candle.ema_fast - candle_2.ema_fast) / average
-        data['ema_slow_2'] = (candle.ema_slow - candle_2.ema_slow) / average
-        data['ema_spread_2'] = (candle.ema_spread - candle_2.ema_spread) / average
-        data['volume_2'] = (candle.volume - candle_2.volume) / candle.volume
+        candle_1 = chart[-2]
+        average_1 = candle_1.average
+        ema_fast_1 = candle_1.ema_fast
+        ema_slow_1 = candle_1.ema_slow
+        ema_spread_1 = candle_1.ema_spread
+        volume_1 = candle_1.volume
+        data['open_1']  = (candle.open - candle_1.open) / candle_1.open 
+        data['low_1']   = (candle.low - candle_1.low) / candle_1.low
+        data['average_1'] = (average - average_1) / average_1
+        data['high_1']  = (candle.high - candle_1.high) / candle_1.high
+        data['close_1'] = (candle.close - candle_1.close) / candle_1.close
+        data['ema_fast_1'] = (ema_fast - ema_fast_1) / ema_fast_1
+        data['ema_slow_1'] = (ema_slow - ema_slow_1) / ema_slow_1
+        data['ema_spread_1'] = (ema_spread - ema_spread_1) / ema_slow_1
+        data['volume_1'] = (volume - volume_1) / volume_1
 
-        data['average_accel'] = data['average_1'] - data['average_2']
-        data['ema_fast_accel'] = data['ema_fast_1'] - data['ema_fast_2']
-        data['ema_slow_accel'] = data['ema_slow_1'] - data['ema_slow_2']
-        data['ema_spread_accel'] = data['ema_spread_1'] - data['ema_spread_2']
-        data['volume_accel'] = data['volume_1'] - data['volume_2']
+        candle_2 = chart[-3]
+        average_2 = candle_2.average
+        ema_fast_2 = candle_2.ema_fast
+        ema_slow_2 = candle_2.ema_slow
+        ema_spread_2 =candle_2.ema_spread
+        volume_2 = candle_2.volume
+        data['low_2']   = (candle.low - candle_2.low) / candle_2.low
+        data['average_2'] = (average - average_2) / average_2
+        data['high_2']  = (candle.high - candle_2.high) / candle_2.high
+        data['ema_fast_2'] = (ema_fast - ema_fast_2) / ema_fast_2
+        data['ema_slow_2'] = (ema_slow - ema_slow_2) / ema_slow_2
+        data['ema_spread_2'] = (ema_spread - ema_spread_2) / ema_slow_2
+        data['volume_2'] = (candle.volume - volume_2) / volume_2
+
+        data['average_accel'] = ((average - average_1) - (average_1 - average_2)) / average
+        data['ema_fast_accel'] = ((ema_fast - ema_fast_1) - (ema_fast_1 - ema_fast_2)) / ema_fast
+        data['ema_slow_accel'] = ((ema_slow - ema_slow_1) - (ema_slow_1 - ema_slow_2)) / ema_slow
+        data['ema_spread_accel'] = ((ema_spread - ema_spread_1) - (ema_spread_1 - ema_spread_2)) / ema_slow
+        data['volume_accel'] = ((volume - volume_1) - (volume_1 - volume_2)) / volume
+
+        candle_3 = chart[-4]
+        average_3 = candle_3.average
+        ema_fast_3 = candle_3.ema_fast
+        ema_slow_3 = candle_3.ema_slow
+        ema_spread_3 = candle_3.ema_spread
+        data['average_3'] = (average - average_3) / average_3
+        data['ema_fast_3'] = (ema_fast - ema_fast_3) / ema_fast_3 
+        data['ema_slow_3'] = (ema_slow - ema_slow_3) / ema_slow_3 
+        data['ema_spread_3'] = (ema_spread - ema_spread_3) / ema_slow_3 
+
+        candle_5 = chart[-6]
+        average_5 = candle_5.average
+        ema_fast_5 = candle_5.ema_fast
+        ema_slow_5 = candle_5.ema_slow
+        ema_spread_5 = candle_5.ema_spread
+        data['average_5'] = (average - average_5) / average_5
+        data['ema_fast_5'] = (ema_fast - ema_fast_5) / ema_fast_5 
+        data['ema_slow_5'] = (ema_slow - ema_slow_5) / ema_slow_5 
+        data['ema_spread_5'] = (ema_spread - ema_spread_5) / ema_slow_5 
+
+        candle_9 = chart[-10]
+        average_9 = candle_9.average
+        ema_fast_9 = candle_9.ema_fast
+        ema_slow_9 = candle_9.ema_slow
+        ema_spread_9 = candle_9.ema_spread
+        data['average_9'] = (average - average_9) / average_9
+        data['ema_fast_9'] = (ema_fast - ema_fast_9) / ema_fast_9 
+        data['ema_slow_9'] = (ema_slow - ema_slow_9) / ema_slow_9 
+        data['ema_spread_9'] = (ema_spread - ema_spread_9) / ema_slow_9 
+
         return data
 
     FEATURE_FIELDNAMES = [
        #'index',
-       'open', 'low', 'high', 'close', 'global_high', 'global_low', 'ema_fast', 'ema_slow', 'ema_spread', 'range', 'body', 'delta', 'atr', 'volume',
+       'open', 'low', 'high', 'close', 'global_high', 'global_low', 'ema_fast', 'ema_slow', 'ema_spread', 'range', 'body', 'delta', 'atr',
        'open_1', 'low_1', 'average_1', 'high_1', 'close_1', 'ema_fast_1', 'ema_slow_1', 'ema_spread_1', 'volume_1',
        'low_2', 'average_2', 'high_2', 'ema_fast_2', 'ema_slow_2', 'ema_spread_2', 'volume_2',
        'average_accel', 'ema_fast_accel', 'ema_slow_accel', 'ema_spread_accel', 'volume_accel',
+       'average_3', 'ema_fast_3', 'ema_slow_3', 'ema_spread_3',
+       'average_5', 'ema_fast_5', 'ema_slow_5', 'ema_spread_5',
+       'average_9', 'ema_fast_9', 'ema_slow_9', 'ema_spread_9',
     ]
 
     def append_targets(feature_set: dict, candle: Candle):
@@ -199,7 +244,7 @@ def fit_target(model_file_name: str, target_name: str, X_train, y_train, X_eval,
     click.echo(f"fitting model for target '{target_name}'...")
     model = xgb.XGBClassifier(
         eval_metric='aucpr',
-        scale_pos_weight=2.0,
+        #scale_pos_weight=2.0,
         early_stopping_rounds=25,
         n_estimators = 1500,
         learning_rate = 0.01,
