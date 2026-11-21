@@ -21,25 +21,31 @@ START_OFFSET = 10 * 60 # don't begin trading bevor this offset in seconds since 
 
 class Hephaistos:
 
-    FIELDNAMES = ['contracts', 'stop_loss', 'p_short', 'p_long']
+    FIELDNAMES = ['p_trade', 'p_short', 'p_long']
 
     def __init__(self, model_path: Path):
-        self.model = xgb.XGBClassifier()
-        self.model.load_model(model_path)
+        self.model_long = xgb.XGBClassifier()
+        self.model_short = xgb.XGBClassifier()
+        self.model_no_trade = xgb.XGBClassifier()
+        self.model_long.load_model(model_path + '_long.json')
+        self.model_short.load_model(model_path + '_short.json')
+        self.model_trade.load_model(model_path + '_trade.json')
 
  
     def on_candle(self, candle: Candle, chart: Chart):
         """ predict probalities for long, neutral, short """
-        p_long, p_flat, p_short = 0.0, 0.0, 0.0
+        p_long, p_short, p_no_trade = 0.0, 0.0, 0.0
 
         if candle.index > START_OFFSET // candle.size:
             feature_set = FeatureGenerator.feature_set(candle, chart)
             df = pd.DataFrame([feature_set])
-            p_short, p_flat, p_long = self.model.predict_proba(df)[0]
+            p_short = self.model_short.predict_proba(df)[0][1]
+            p_long  = self.model_long.predict_proba(df)[0][1]
+            p_trade = self.model_trade.predict_proba(df)[0][1]
 
         candle.p_short = p_short
-        candle.p_flat  = p_flat
         candle.p_long  = p_long
+        candle.p_trade = p_trade
 
 
     def simulate(file, model_path: Path, candle_size: int = 36, num_candles: int = None): # pragma: no cover
@@ -167,9 +173,9 @@ class FeatureGenerator:
     def append_targets(feature_set: dict, candle: Candle):
         """ append target values to feature set """
         feature_set['profit_chance'] = candle.profit_chance
-        feature_set['trend_start'] = candle.trend_start
+        feature_set['trade'] = candle.trade
 
-    TARGET_FIELDNAMES = ['profit_chance', 'trend_start']
+    TARGET_FIELDNAMES = ['profit_chance', 'trade']
 
     def __iter__(self):
         """ iterate through the chart and yield features sets """
@@ -234,11 +240,10 @@ def split_target(df: pd.DataFrame): # pragma: no cover
     x = df[FeatureGenerator.FEATURE_FIELDNAMES]
     y_short = (df[FeatureGenerator.TARGET_FIELDNAMES[0]] == 'short').astype(int)
     y_long  = (df[FeatureGenerator.TARGET_FIELDNAMES[0]] == 'long').astype(int)
+    y_trade = (df[FeatureGenerator.TARGET_FIELDNAMES[1]]).astype(int)
 
-    #target = FeatureGenerator.TARGET_FIELDNAMES[1]
-    #y_up = (target == 'up').astype(int)
-    #y_down = (target == 'down'.astype(int))
-    return x, y_short, y_long
+    return x, y_short, y_long, y_trade
+
 
 def fit_target(model_file_name: str, target_name: str, X_train, y_train, X_eval, y_eval):
     click.echo(f"fitting model for target '{target_name}'...")
@@ -278,21 +283,23 @@ def fit_cmd(training_dir: tuple[Path], eval_dir: tuple[Path], model_file: str): 
 
     training_files = tuple(f for f in training_dir.glob("*_features.csv") if f.is_file())
     df_training = load_files(training_files)
-    X_train, y_short, y_long = split_target(df_training)
+    X_train, y_short, y_long, y_trade = split_target(df_training)
 
     eval_files = tuple(f for f in eval_dir.glob("*_features.csv") if f.is_file())
     df_eval = load_files(eval_files)
-    X_eval, y_eval_short, y_eval_long = split_target(df_eval)
+    X_eval, y_eval_short, y_eval_long, y_eval_trade = split_target(df_eval)
 
     model_short = fit_target(model_file, 'short', X_train, y_short, X_eval, y_eval_short)
-    model_long = fit_target(model_file, 'long', X_train, y_long, X_eval, y_eval_long)
+    model_long  = fit_target(model_file, 'long',  X_train, y_long,  X_eval, y_eval_long)
+    model_trade = fit_target(model_file, 'trade', X_train, y_trade, X_eval, y_eval_trade)
 
     df_features = pd.DataFrame({
         "feature": X_train.columns, 
         "short [%]": model_short.feature_importances_ * 100,
         "long [%]":  model_long.feature_importances_ * 100,
+        "trade [%]": model_trade.feature_importances_ * 100,
     })
-    df_features['max [%]'] = df_features[['short [%]', 'long [%]']].max(axis=1)
+    df_features['max [%]'] = df_features[['short [%]', 'long [%]', 'trade [%]']].max(axis=1)
     df_features = df_features.sort_values(by="max [%]", ascending=False).reset_index(
         drop=True
     )
@@ -310,27 +317,33 @@ def prec_recall(files: list[Path], model_file: str):
     click.echo(f"Precision recall based on model '{model_file}' with files {[f.name for f in files]}")
 
     df = load_files(files)
-    X, y_short, y_long = split_target(df)
+    X, y_short, y_long, y_trade = split_target(df)
 
-    model_short, model_long = xgb.XGBClassifier(), xgb.XGBClassifier()
+    model_short, model_long, model_trade = xgb.XGBClassifier(), xgb.XGBClassifier(), xgb.XGBClassifier()
     model_short.load_model(model_file + '_short.json')
     model_long.load_model(model_file + '_long.json')
+    model_trade.load_model(model_file + '_trade.json')
     proba_short = model_short.predict_proba(X)[:,1]
     proba_long = model_long.predict_proba(X)[:,1]
+    proba_trade = model_trade.predict_proba(X)[:,1]
 
     # Precision und Recall für alle möglichen Schwellenwerte berechnen
     prec_short, _, thres_short = precision_recall_curve(y_short, proba_short)
     prec_long, _, thres_long = precision_recall_curve(y_long, proba_long)
+    prec_trade, _, thres_trade = precision_recall_curve(y_trade, proba_trade)
     ap_short = average_precision_score(y_short, proba_short)
     ap_long = average_precision_score(y_long, proba_long)
+    ap_trade = average_precision_score(y_long, proba_trade)
 
     plt.figure(figsize=(9, 6))
     plt.plot(thres_short, prec_short[:-1], label=f'short precision', color='red', linewidth=2)
-    plt.plot(thres_long,  prec_long[:-1],  label=f'long precision', color='green', linewidth=2)
+    plt.plot(thres_long,  prec_long[:-1],  label=f'long precision',  color='green', linewidth=2)
+    plt.plot(thres_trade, prec_trade[:-1],  label=f'trade precision', color='blue', linewidth=2)
 
     # Optional: Zufalls-Baselines (Anteil der positiven Labels im Testset)
     plt.axhline(y_short.mean(), color='red', linestyle='--', alpha=0.4, label=f'Short Baseline ({y_short.mean():.2%})')
     plt.axhline(y_long.mean(), color='green', linestyle='--', alpha=0.4, label=f'Long Baseline ({y_long.mean():.2%})')
+    plt.axhline(y_trade.mean(), color='blue', linestyle='--', alpha=0.4, label=f'trade baseline ({y_trade.mean():.2%})')
 
     plt.title('precision recall curve')
     plt.xlabel('recall')
@@ -385,16 +398,18 @@ def predict_cmd(files: tuple[Path,...], model_file: Path, probability: float): #
     click.echo(f"Predicting based on model '{model_file}'...")
 
     df = load_files(files)
-    X, y_short, y_long = split_target(df)
+    X, y_short, y_long, y_trades = split_target(df)
 
-    model_short, model_long = xgb.XGBClassifier(), xgb.XGBClassifier()
+    model_short, model_long, model_trade = xgb.XGBClassifier(), xgb.XGBClassifier(), xgb.XGBClassifier()
     model_short.load_model(model_file + '_short.json')
     model_long.load_model(model_file + '_long.json')
+    model_trade.load_model(model_file + '_trade.json')
+    proba_trade = model_trade.predict_proba(X)[:,1]
     proba_short = model_short.predict_proba(X)[:,1]
     proba_long  = model_long.predict_proba(X)[:,1]
     proba_flat  = 1 - (proba_long + proba_short)
 
-    df_proba = pd.DataFrame({'short': proba_short, 'neutral': proba_flat, 'long': proba_long})
+    df_proba = pd.DataFrame({'short': proba_short, 'neutral': proba_flat, 'long': proba_long, 'trade': proba_trade})
     click.secho("distribution of probabilities:", bold=True)
     click.echo(df_proba.describe(percentiles=[0.5, 0.75, 0.90, 0.95, 0.99]))
 

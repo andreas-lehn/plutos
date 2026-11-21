@@ -66,6 +66,11 @@ def show(chart_file: io.TextIOWrapper, start:int, num_candles: int):
         if df_sticks["down"].notna().any():
             additional_plots.append(mpf.make_addplot(df_sticks["down"], type="scatter", marker="o", color="red", edgecolors="black", linewidths=0.5, markersize=4*markersize, panel=0))
         
+    if 'trade' in df_sticks.columns:
+        df_sticks["trade"]  = np.where(df_sticks["trade"], df_sticks["average"], np.nan)
+        if df_sticks["trade"].notna().any():
+            additional_plots.append(mpf.make_addplot(df_sticks["trade"].values, type="scatter", marker="o", color="red", edgecolors="black", linewidths=0.5, markersize=4*markersize, panel=0))
+        
     if 'prediction' in df_sticks.columns:
         additional_plots.append(mpf.make_addplot(df_sticks['prediction'], width=0.5, panel=3))
 

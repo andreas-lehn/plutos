@@ -48,6 +48,18 @@ def label_trend_starts(chart: Chart, length):  # pragma: no cover
                 chart[i - length].trend_start = 'down'
 
 
+def label_no_trade(chart: Chart, length: int):
+    """ label a sidewards movment """
+    for i, candle in enumerate(chart):
+        candle.trade = True
+        if len(chart) > length:
+            candle_to_label = chart[i - length]
+            if (   (candle.low < candle_to_label.high and candle.low > candle_to_label.low)
+                or (candle.high < candle_to_label.high and candle.high > candle_to_label.low)):
+                continue
+            candle_to_label.trade = False
+
+
 def tripple_barrier(low: int, high: int, values: list[int]) -> int:
     """ executes a tripple barrier check
     
@@ -130,18 +142,19 @@ def label_profit_trade(chart: Chart, trend_length: int, profit: int):
 
 def label(chart: Chart, trend_length, risk, profit, window_size):
     """ labels a chart """
-    label_trend_starts(chart, trend_length)
+    #label_trend_starts(chart, trend_length)
     #label_profit_chances(chart, risk, profit, window_size)
     label_profit_trade(chart, trend_length, profit)
+    label_no_trade(chart, window_size)
 
 
 @click.command('label')
 @click.argument('file', type=click.Path(), help='name of market data file (.dbn)')
 @click.option('-s', '--candle-size', type=int, default=36, help="size of candle in seconds")
-@click.option('-l', '--trend-length', type=int, default=5, help="length of trend (in candles) to be labeled")
-@click.option('-r', '--risk', type=int, default=24, help="maximum risk to be taken (in ticks)")
-@click.option('-p', '--profit', type=int, default=48, help="profit to be achieved (in ticks)")
-@click.option('-w', '--window-size', type=int, default=12, help="size of tripple barrier window in candles")
+@click.option('-l', '--trend-length', type=int, default=3, help="length of trend (in candles) to be labeled")
+@click.option('-r', '--risk', type=int, default=6, help="maximum risk to be taken (in ticks)")
+@click.option('-p', '--profit', type=int, default=12, help="profit to be achieved (in ticks)")
+@click.option('-w', '--window-size', type=int, default=5, help="size of tripple barrier window in candles")
 def label_cmd(file: Path, candle_size: int, trend_length: int, risk: int, profit: int, window_size: int): # pragma: no cover
     """ create a labeled chart """
     chart = generate_chart(file, candle_size)
@@ -153,7 +166,7 @@ def label_cmd(file: Path, candle_size: int, trend_length: int, risk: int, profit
     file_parts['content'] = 'labeled-chart'
     chart_file = marketdata.assemble_path(file_parts)
 
-    fieldnames = ['index', 'timestamp', 'open', 'low', 'average', 'high', 'close', 'volume', 'ema_fast', 'ema_slow', 'trend_start', 'profit_chance']
+    fieldnames = ['index', 'timestamp', 'open', 'low', 'average', 'high', 'close', 'volume', 'ema_fast', 'ema_slow', 'trade', 'profit_chance']
     with open(chart_file, 'w', encoding='utf-8') as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
