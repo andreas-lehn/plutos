@@ -3,7 +3,7 @@
 #
 
 import pandas as pd
-from plutos.hephaistos import FeatureGenerator
+from plutos.hephaistos.core import FeatureGenerator
 from pathlib import Path
 import pytest
 

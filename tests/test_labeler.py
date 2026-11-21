@@ -4,16 +4,16 @@
 
 import pytest
 
-from plutos.labeler import is_trend, is_long_chance, is_short_chance, tripple_barrier
+from plutos.hephaistos.labeler import is_trend_start, is_long_chance, is_short_chance, tripple_barrier
 
 def test_is_trend():
-    assert is_trend([10, 11, 12, 13, 14]) == 0
-    assert is_trend([12, 11, 12, 13, 14]) > 0
-    assert is_trend([11, 11, 12, 13, 14]) > 0
-    assert is_trend([12, 11, 11, 13, 14]) == 0
-    assert is_trend([12, 11, 12, 11, 14]) == 0
-    assert is_trend([12, 11, 12, 13, 13]) == 0
-    assert is_trend([12, 13, 12, 11, 10]) < 0
+    assert is_trend_start([10, 11, 12, 13, 14]) == 0
+    assert is_trend_start([12, 11, 12, 13, 14]) > 0
+    assert is_trend_start([11, 11, 12, 13, 14]) > 0
+    assert is_trend_start([12, 11, 11, 13, 14]) == 0
+    assert is_trend_start([12, 11, 12, 11, 14]) == 0
+    assert is_trend_start([12, 11, 12, 13, 13]) == 0
+    assert is_trend_start([12, 13, 12, 11, 10]) < 0
 
 def test_tripple_barrier():
     assert tripple_barrier(10, 20, [10, 15, 20]) == 0
