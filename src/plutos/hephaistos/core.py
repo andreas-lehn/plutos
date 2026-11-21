@@ -11,10 +11,12 @@ import numpy as np
 import xgboost as xgb
 import matplotlib.pyplot as plt
 from sklearn.metrics import precision_recall_curve,  average_precision_score, confusion_matrix
-from . import marketdata
+
+from .. import marketdata
+from ..chart import Candle, Chart, MarketModel
+
 from . import datasetcategory
 from . import labeler
-from .chart import Candle, Chart, MarketModel
 
 
 START_OFFSET = 10 * 60 # don't begin trading bevor this offset in seconds since start of the session

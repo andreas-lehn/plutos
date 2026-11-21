@@ -7,8 +7,8 @@ import click
 from pathlib import Path
 from collections import deque
 
-from . import marketdata
-from .chart import MarketModel, Chart, Candle
+from .. import marketdata
+from ..chart import MarketModel, Chart, Candle
 
 
 def generate_chart(file: Path, candle_size: int) -> Chart:  # pragma: no cover
