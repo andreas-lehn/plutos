@@ -22,7 +22,7 @@ from . import config
 
 class Hephaistos:
 
-    FIELDNAMES = ['p_trade', 'p_short', 'p_long']
+    FIELDNAMES = ['p_trade', 'p_short', 'p_long', 'signal_trade', 'signal_short', 'signal_long']
 
     def __init__(self):
         self.model_long, self.model_short, self.model_trade = load_models()
@@ -31,6 +31,7 @@ class Hephaistos:
     def on_candle(self, candle: Candle, chart: Chart):
         """ predict probalities for long, neutral, short """
         p_long, p_short, p_trade = 0.0, 0.0, 0.0
+        signal_short, signal_long, signal_trade = False, False, False
 
         if candle.index > config.START_OFFSET // candle.size:
             feature_set = FeatureGenerator.feature_set(candle, chart)
@@ -42,7 +43,9 @@ class Hephaistos:
         candle.p_short = p_short
         candle.p_long  = p_long
         candle.p_trade = p_trade
-
+        candle.signal_short = p_short >= config.P_THRESHOLD_SHORT
+        candle.signal_long  = p_long  >= config.P_THRESHOLD_LONG
+        candle.signal_trade = p_trade >= config.P_THRESHOLD_TRADE
 
     def simulate(file, num_candles: int = None): # pragma: no cover
         main_chart = Chart(config.CANDLE_SIZE)
@@ -168,10 +171,11 @@ class FeatureGenerator:
 
     def append_targets(feature_set: dict, candle: Candle):
         """ append target values to feature set """
-        feature_set['profit_chance'] = candle.profit_chance
-        feature_set['trade'] = candle.trade
+        feature_set['target_short'] = candle.target_short
+        feature_set['target_long']  = candle.target_long
+        feature_set['target_trade'] = candle.target_trade
 
-    TARGET_FIELDNAMES = ['profit_chance', 'trade']
+    TARGET_FIELDNAMES = ['target_short', 'target_long', 'target_trade']
 
     def __iter__(self):
         """ iterate through the chart and yield features sets """
@@ -234,10 +238,9 @@ def load_feature_files(files) -> pd.DataFrame: # pragma: no cover
 def split_target(df: pd.DataFrame): # pragma: no cover
     """ split target columns from feature values """
     x = df[FeatureGenerator.FEATURE_FIELDNAMES]
-    y_short = (df[FeatureGenerator.TARGET_FIELDNAMES[0]] == 'short').astype(int)
-    y_long  = (df[FeatureGenerator.TARGET_FIELDNAMES[0]] == 'long').astype(int)
-    y_trade = (df[FeatureGenerator.TARGET_FIELDNAMES[1]]).astype(int)
-
+    y_short = (df[FeatureGenerator.TARGET_FIELDNAMES[0]]).astype(int)
+    y_long  = (df[FeatureGenerator.TARGET_FIELDNAMES[1]]).astype(int)
+    y_trade = (df[FeatureGenerator.TARGET_FIELDNAMES[2]]).astype(int)
     return x, y_short, y_long, y_trade
 
 
@@ -401,7 +404,7 @@ def prepare_cmd(source_dir: Path, out_dir: Path):  #pragma: no cover
         model = MarketModel()
         model.charts.append(main_chart)
         model.simulate_file(path)
-        labeler.label(main_chart, config.TREND_LENGTH, config.RISK, config.PROFIT, config.WINDOW_SIZE)
+        labeler.label(main_chart)
         features = FeatureGenerator(main_chart)
         with open(FeatureGenerator.data_path(path, out_dir), "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=FeatureGenerator.FEATURE_FIELDNAMES + FeatureGenerator.TARGET_FIELDNAMES)
@@ -437,8 +440,8 @@ def predict_cmd(test_dir: Path): # pragma: no cover
     click.echo(df_proba.describe(percentiles=[0.5, 0.75, 0.90, 0.95, 0.99]))
 
     # using probability as threshold
-    raw_short = proba_short >= config.PROBABILITY_THRESHOLD
-    raw_long = proba_long >= config.PROBABILITY_THRESHOLD
+    raw_short = proba_short >= config.P_THRESHOLD_SHORT
+    raw_long = proba_long >= config.P_THRESHOLD_LONG
 
     both_active = raw_short & raw_long
     final_short = np.where(both_active, False, raw_short).astype(int)
@@ -479,7 +482,7 @@ def predict_cmd(test_dir: Path): # pragma: no cover
     df_cm.loc["precision [%]"] = precision_row
 
     click.echo()
-    click.secho(f'prediction for probability {config.PROBABILITY_THRESHOLD:.2f}', bold=True)
+    click.secho(f'prediction short/longfor probability {config.P_THRESHOLD_SHORT:.2f}/{config.P_THRESHOLD_LONG:.2f}', bold=True)
     click.echo(df_cm.to_string())
     click.echo()
 
@@ -491,12 +494,11 @@ def predict_cmd(test_dir: Path): # pragma: no cover
 @click.option('-o', '--out-file', type=click.Path(writable=True, path_type=Path), help="output file name")
 def sim(file: Path, num_candles: int, label: bool, out_file: Path): # pragma; no cover
     """ evaluate a trades file with Hephaistos """
-    click.echo(f"Simulating file '{file}'")
-    
+
     chart = Hephaistos.simulate(file, num_candles)
-    fieldnames = fieldnames=Candle.OHLC_FIELDNAMES + Hephaistos.FIELDNAMES
+    fieldnames = Candle.OHLC_FIELDNAMES + Hephaistos.FIELDNAMES
     if label:
-        labeler.label(chart, config.TREND_LENGTH, config.RISK, config.PROFIT, config.WINDOW_SIZE)
+        labeler.label(chart)
         fieldnames += FeatureGenerator.TARGET_FIELDNAMES
 
     if not out_file:

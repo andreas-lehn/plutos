@@ -45,39 +45,38 @@ def show(chart_file: io.TextIOWrapper, start:int, num_candles: int):
     if 'average' in df_sticks.columns:
         additional_plots.append(mpf.make_addplot(df_sticks['average'], type='scatter', color='grey', marker='o', markersize=markersize, panel=0))
 
-    if 'contracts' in df_sticks.columns:
-        additional_plots.append(mpf.make_addplot(df_sticks['contracts'], type='bar', width=0.5, panel=2))
-
-    if 'profit_chance' in df_sticks.columns:
-        df_sticks["long"]  = np.where(df_sticks["profit_chance"] == 'long', df_sticks["Low"] - 2, np.nan)
-        if df_sticks["long"].notna().any():
-            additional_plots.append(mpf.make_addplot(df_sticks["long"].values, type="scatter", marker="^", color="white", edgecolors="black", linewidths=0.5, markersize=4*markersize, panel=0))
-
-        df_sticks["short"] = np.where(df_sticks["profit_chance"] == 'short', df_sticks["High"] + 2, np.nan)
-        if df_sticks["short"].notna().any():
-            additional_plots.append(mpf.make_addplot(df_sticks["short"], type="scatter", marker="v", color="black", edgecolors="black", linewidths=0.5, markersize=4*markersize, panel=0))
-
-    if 'trend_start' in df_sticks.columns:
-        df_sticks["up"]  = np.where(df_sticks["trend_start"] == 'up', df_sticks["average"], np.nan)
-        if df_sticks["up"].notna().any():
-            additional_plots.append(mpf.make_addplot(df_sticks["up"].values, type="scatter", marker="o", color="red", edgecolors="black", linewidths=0.5, markersize=4*markersize, panel=0))
-
-        df_sticks["down"] = np.where(df_sticks["trend_start"] == 'down', df_sticks["average"], np.nan)
-        if df_sticks["down"].notna().any():
-            additional_plots.append(mpf.make_addplot(df_sticks["down"], type="scatter", marker="o", color="red", edgecolors="black", linewidths=0.5, markersize=4*markersize, panel=0))
-        
-    if 'trade' in df_sticks.columns:
-        df_sticks["trade"]  = np.where(df_sticks["trade"], df_sticks["average"], np.nan)
-        if df_sticks["trade"].notna().any():
-            additional_plots.append(mpf.make_addplot(df_sticks["trade"].values, type="scatter", marker="o", color="red", edgecolors="black", linewidths=0.5, markersize=4*markersize, panel=0))
-        
-    if 'prediction' in df_sticks.columns:
-        additional_plots.append(mpf.make_addplot(df_sticks['prediction'], width=0.5, panel=3))
-
     for average in ['ema_fast', 'ema_slow']:
         if average in df_sticks.columns:
             df_sticks[average] = df_sticks[average] / 4
             additional_plots.append(mpf.make_addplot(df_sticks[average], width=0.6, panel=0))
+
+    if 'contracts' in df_sticks.columns:
+        additional_plots.append(mpf.make_addplot(df_sticks['contracts'], type='bar', width=0.5, panel=2))
+
+    if 'target_long' in df_sticks.columns:
+        df_sticks["long"]  = np.where(df_sticks["target_long"], df_sticks["Low"] - 2, np.nan)
+        if df_sticks["long"].notna().any():
+            additional_plots.append(mpf.make_addplot(df_sticks["long"].values, type="scatter", marker="^", color="white", edgecolors="black", linewidths=0.5, markersize=4*markersize, panel=0))
+
+    if 'target_short' in df_sticks.columns:
+        df_sticks["short"] = np.where(df_sticks["target_short"], df_sticks["High"] + 2, np.nan)
+        if df_sticks["short"].notna().any():
+            additional_plots.append(mpf.make_addplot(df_sticks["short"], type="scatter", marker="v", color="black", edgecolors="black", linewidths=0.5, markersize=4*markersize, panel=0))
+        
+    if 'target_trade' in df_sticks.columns:
+        df_sticks["trade"]  = np.where(df_sticks["target_trade"] == False, df_sticks["average"], np.nan)
+        if df_sticks["trade"].notna().any():
+            additional_plots.append(mpf.make_addplot(df_sticks["trade"].values, type="scatter", marker="o", color="red", edgecolors="black", linewidths=0.5, markersize=4*markersize, panel=0))
+        
+    if 'signal_long' in df_sticks.columns:
+        df_sticks["s_long"]  = np.where(df_sticks["signal_long"], df_sticks["Low"] - 4, np.nan)
+        if df_sticks["s_long"].notna().any():
+            additional_plots.append(mpf.make_addplot(df_sticks["s_long"].values, type="scatter", marker="^", color="green", edgecolors="black", linewidths=0.5, markersize=4*markersize, panel=0))
+
+    if 'signal_short' in df_sticks.columns:
+        df_sticks["s_short"] = np.where(df_sticks["signal_short"], df_sticks["High"] + 4, np.nan)
+        if df_sticks["s_short"].notna().any():
+            additional_plots.append(mpf.make_addplot(df_sticks["s_short"], type="scatter", marker="v", color="red", edgecolors="black", linewidths=0.5, markersize=4*markersize, panel=0))
 
     # 3. Candlestick-Basisplot erstellen und Achsen abfangen
     fig, axlist = mpf.plot(

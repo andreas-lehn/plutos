@@ -104,7 +104,7 @@ class Candle:
             'volumes': [self._volumes[p] for p in range (self.low, self.high + 1)]
         }
 
-    OHLC_FIELDNAMES = ['timestamp', 'open', 'low', 'average', 'high', 'close', 'volume']
+    OHLC_FIELDNAMES = ['index', 'timestamp', 'open', 'low', 'average', 'high', 'close', 'volume']
 
 
     def to_filtered_dict(self, keys: Iterable[str]) -> dict:
