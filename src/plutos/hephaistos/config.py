@@ -13,9 +13,9 @@ RISK         = 24 # maximum risk to be taken (in ticks)
 PROFIT       = 48 # profit to be achieved (in ticks)
 WINDOW_SIZE  = 12 # size of tripple barrier window in candles
 
-DATABENTO_DIR  = Path(os.environ.get('DATABENTO_DIR'))
+DATABENTO_DIR  = Path(os.environ.get('DATABENTO_DIR', '.'))
 
-HEPHAISTOS_DIR = Path(os.environ.get('HEPHAISTOS_DIR'))
+HEPHAISTOS_DIR = Path(os.environ.get('HEPHAISTOS_DIR', '.'))
 TRAINING_DIR   = HEPHAISTOS_DIR/'training'
 EVAL_DIR       = HEPHAISTOS_DIR/'eval'
 TEST_DIR       = HEPHAISTOS_DIR/'test'
