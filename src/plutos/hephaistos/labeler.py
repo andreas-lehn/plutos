@@ -140,7 +140,7 @@ def label_profit_trade(chart: Chart, trend_length: int, profit: int):
                 candle_to_label.profit_chance = 'long'
 
 
-def label(chart: Chart, trend_length, risk, profit, window_size):
+def label(chart: Chart, trend_length: int, risk: int, profit: int, window_size: int):
     """ labels a chart """
     #label_trend_starts(chart, trend_length)
     #label_profit_chances(chart, risk, profit, window_size)

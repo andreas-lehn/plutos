@@ -15,7 +15,7 @@ hephaistos.add_command(labeler.label_cmd)
 hephaistos.add_command(core.prepare_cmd)
 hephaistos.add_command(core.fit_cmd)
 hephaistos.add_command(core.predict_cmd)
-hephaistos.add_command(core.eval_cmd)
+hephaistos.add_command(core.sim)
 hephaistos.add_command(core.prec_recall)
 hephaistos.add_command(datasetcategory.category)
 

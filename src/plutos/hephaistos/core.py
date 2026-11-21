@@ -17,28 +17,22 @@ from ..chart import Candle, Chart, MarketModel
 
 from . import datasetcategory
 from . import labeler
+from . import config
 
-
-START_OFFSET = 10 * 60 # don't begin trading bevor this offset in seconds since start of the session
 
 class Hephaistos:
 
     FIELDNAMES = ['p_trade', 'p_short', 'p_long']
 
-    def __init__(self, model_path: Path):
-        self.model_long = xgb.XGBClassifier()
-        self.model_short = xgb.XGBClassifier()
-        self.model_no_trade = xgb.XGBClassifier()
-        self.model_long.load_model(model_path + '_long.json')
-        self.model_short.load_model(model_path + '_short.json')
-        self.model_trade.load_model(model_path + '_trade.json')
+    def __init__(self):
+        self.model_long, self.model_short, self.model_trade = load_models()
 
  
     def on_candle(self, candle: Candle, chart: Chart):
         """ predict probalities for long, neutral, short """
-        p_long, p_short, p_no_trade = 0.0, 0.0, 0.0
+        p_long, p_short, p_trade = 0.0, 0.0, 0.0
 
-        if candle.index > START_OFFSET // candle.size:
+        if candle.index > config.START_OFFSET // candle.size:
             feature_set = FeatureGenerator.feature_set(candle, chart)
             df = pd.DataFrame([feature_set])
             p_short = self.model_short.predict_proba(df)[0][1]
@@ -50,13 +44,13 @@ class Hephaistos:
         candle.p_trade = p_trade
 
 
-    def simulate(file, model_path: Path, candle_size: int = 36, num_candles: int = None): # pragma: no cover
-        main_chart = Chart(candle_size)
+    def simulate(file, num_candles: int = None): # pragma: no cover
+        main_chart = Chart(config.CANDLE_SIZE)
         model = MarketModel()
         model.charts.append(main_chart)
-        trader = Hephaistos(model_path)
-        main_chart.register_callback(trader.on_candle)
-        model.simulate_file(file, num_candles * candle_size if num_candles else 24*60*60)
+        hephaistos = Hephaistos()
+        main_chart.register_callback(hephaistos.on_candle)
+        model.simulate_file(file, num_candles * config.CANDLE_SIZE if num_candles else marketdata.SECONDS_OF_DAY)
         return main_chart
 
 
@@ -68,7 +62,7 @@ class FeatureGenerator:
 
     def feature_set(candle: Candle, chart: Chart):
         """ creates feature set of a candle """
-        if candle.index <= START_OFFSET // candle.size:
+        if candle.index <= config.START_OFFSET // candle.size:
             """ no feature set will be calculated before START_OFFSET in seconds """
             return None
 
@@ -79,9 +73,9 @@ class FeatureGenerator:
         ema_spread = candle.ema_spread
         volume = candle.volume
         #data['index'] = candle.index
+        data['open'] = (candle.open - average) / average
         data['low'] = (candle.low - average) / average
         data['high'] = (candle.high - average) / average
-        data['open'] = (candle.open - average) / average
         data['close'] = (candle.close - average) / average
         data['global_high'] = (candle.global_high - average) / average
         data['global_low'] = (candle.global_low - average) / average
@@ -228,7 +222,7 @@ def drop_special_phases(df: pd.DataFrame, candle_size: int = 36):
     df.drop(df.index[drop_rows], inplace=True)
 
 
-def load_files(files) -> pd.DataFrame: # pragma: no cover
+def load_feature_files(files) -> pd.DataFrame: # pragma: no cover
     frames = []
     for file in files:
         df = pd.read_csv(file)
@@ -247,7 +241,21 @@ def split_target(df: pd.DataFrame): # pragma: no cover
     return x, y_short, y_long, y_trade
 
 
-def fit_target(model_file_name: str, target_name: str, X_train, y_train, X_eval, y_eval):
+def save_model(model: xgb.XGBClassifier, target_name: str) -> Path:
+    """ saves a model in models package with target_name as name """
+    file_name = config.MODEL_PATH/(target_name + '.json')
+    model.save_model(file_name)
+    return file_name
+
+
+def load_model(model: xgb.XGBClassifier, target_name: str) -> Path:
+    """ loads a model from models package with target_name as name """
+    file_name = config.MODEL_PATH/(target_name + '.json')
+    model.load_model(file_name)
+    return file_name
+
+
+def fit_target(target_name: str, X_train, y_train, X_eval, y_eval):
     click.echo(f"fitting model for target '{target_name}'...")
     model = xgb.XGBClassifier(
         eval_metric='aucpr',
@@ -259,8 +267,7 @@ def fit_target(model_file_name: str, target_name: str, X_train, y_train, X_eval,
         random_state = 42,
     )
     model.fit(X_train, y_train, eval_set=[(X_eval, y_eval)], verbose=True)
-    file_name = model_file_name + '_' + target_name + '.json'
-    model.save_model(file_name)
+    file_name = save_model(model, target_name)
     click.echo(f"model written to '{file_name}'\n")
     return model
 
@@ -269,31 +276,36 @@ def fit_target(model_file_name: str, target_name: str, X_train, y_train, X_eval,
 @click.option(
     '-t', '--training-dir',
     type=click.Path(file_okay=False, dir_okay=True, exists=True, path_type=Path),
-    default='training',
     help="directory with training files (*_hephaistos.csv), default='training'",
 )
 @click.option(
     '-e', '--eval-dir',
     type=click.Path(file_okay=False, dir_okay=True, exists=True, path_type=Path),
-    default='eval',
     help="directory with evaluation files (*_hephaistos.csv), default='eval'",
 )
-@click.option('-m', '--model-file', type=str, default='hephaistos-model', help="prefix of model file, default='hephaistos-model'")
-def fit_cmd(training_dir: tuple[Path], eval_dir: tuple[Path], model_file: str): #pragma: no cover
+def fit_cmd(training_dir: Path, eval_dir: Path): #pragma: no cover
     """ fit the model to training data """
     print('Fitting a model to training data...')
 
-    training_files = tuple(f for f in training_dir.glob("*_features.csv") if f.is_file())
-    df_training = load_files(training_files)
+    if not training_dir:
+        training_dir = config.TRAINING_DIR
+    click.echo(f"training dir: {training_dir}")
+
+    training_files = [f for f in training_dir.glob("*_features.csv") if f.is_file()]
+    df_training = load_feature_files(training_files)
     X_train, y_short, y_long, y_trade = split_target(df_training)
 
-    eval_files = tuple(f for f in eval_dir.glob("*_features.csv") if f.is_file())
-    df_eval = load_files(eval_files)
+    if not eval_dir:
+        eval_dir = config.EVAL_DIR
+    click.echo(f"eval dir: {eval_dir}")
+
+    eval_files = [f for f in eval_dir.glob("*_features.csv") if f.is_file()]
+    df_eval = load_feature_files(eval_files)
     X_eval, y_eval_short, y_eval_long, y_eval_trade = split_target(df_eval)
 
-    model_short = fit_target(model_file, 'short', X_train, y_short, X_eval, y_eval_short)
-    model_long  = fit_target(model_file, 'long',  X_train, y_long,  X_eval, y_eval_long)
-    model_trade = fit_target(model_file, 'trade', X_train, y_trade, X_eval, y_eval_trade)
+    model_short = fit_target('short', X_train, y_short, X_eval, y_eval_short)
+    model_long  = fit_target('long',  X_train, y_long,  X_eval, y_eval_long)
+    model_trade = fit_target('trade', X_train, y_trade, X_eval, y_eval_trade)
 
     df_features = pd.DataFrame({
         "feature": X_train.columns, 
@@ -309,22 +321,30 @@ def fit_cmd(training_dir: tuple[Path], eval_dir: tuple[Path], model_file: str): 
     click.echo(df_features.to_string(index=False, float_format="{:.2f}%".format))
     click.echo()
 
+def load_models():
+    model_short, model_long, model_trade = xgb.XGBClassifier(), xgb.XGBClassifier(), xgb.XGBClassifier()
+    load_model(model_short, 'short')
+    load_model(model_long, 'long')
+    load_model(model_trade, 'trade')
+    return model_short, model_long, model_trade
 
 @click.command()
-@click.argument('files', nargs=-1, type=click.Path(exists=True, path_type=Path), required=True, help='eval files to compute precision recall for long')
-@click.option('-m', '--model-file', type=str, default='hephaistos-model', help="model file, default='hephaistos-model'")
-def prec_recall(files: list[Path], model_file: str):
+@click.option(
+    '-t', '--test-dir',
+    type=click.Path(dir_okay=True, file_okay=False, exists=True, path_type=Path),
+    help='directory with files to compute precision recall'
+)
+def prec_recall(test_dir: Path):
     """ calculate precision reacall for long signals """
-    """ predict based on a given model """
-    click.echo(f"Precision recall based on model '{model_file}' with files {[f.name for f in files]}")
+    if not test_dir:
+        test_dir = config.TEST_DIR
 
-    df = load_files(files)
+    click.echo(f"Precision recall based on models in '{config.MODEL_PATH}' for files in '{test_dir}'")
+
+    df = load_feature_files(test_dir.glob('*_features.csv'))
     X, y_short, y_long, y_trade = split_target(df)
 
-    model_short, model_long, model_trade = xgb.XGBClassifier(), xgb.XGBClassifier(), xgb.XGBClassifier()
-    model_short.load_model(model_file + '_short.json')
-    model_long.load_model(model_file + '_long.json')
-    model_trade.load_model(model_file + '_trade.json')
+    model_short, model_long, model_trade = load_models()
     proba_short = model_short.predict_proba(X)[:,1]
     proba_long = model_long.predict_proba(X)[:,1]
     proba_trade = model_trade.predict_proba(X)[:,1]
@@ -359,32 +379,31 @@ def prec_recall(files: list[Path], model_file: str):
 
 
 @click.command('prepare')
-@click.argument('files', nargs=-1, type=click.Path(exists=True, path_type=Path), required=True, help='files with historical data in Databento native file (.dbn)')
-@click.option('-d', '--dir', type=click.Path(), help="directory where to put the output files")
-@click.option('-s', '--candle-size', type=int, default=36, help="size of a candle (default=36s)")
-@click.option('-l', '--trend-length', type=int, default=5, help="length of trend (in candles) to be labeled")
-@click.option('-r', '--risk', type=int, default=24, help="maximum risk to be taken (in ticks)")
-@click.option('-p', '--profit', type=int, default=48, help="profit to be achieved (in ticks)")
-@click.option('-w', '--window-size', type=int, default=12, help="size of tripple barrier window in candles")
-def prepare_cmd(files: list[Path], dir: Path, candle_size: int, trend_length: int, risk: int, profit: int, window_size: int):  #pragma: no cover
+@click.option('-s', '--source-dir', type=click.Path(exists=True, path_type=Path), help='dir with historical data in Databento native file (.dbn)')
+@click.option('-o', '--out-dir', type=click.Path(), help="directory where to put the output files")
+def prepare_cmd(source_dir: Path, out_dir: Path):  #pragma: no cover
     """ prepare training data from historical data """
     click.echo(f'Generating training data...')
 
-    if not dir:
-        dir = Path(os.environ.get('HEPHAISTOS_DIR', '.'))
-    click.echo(f'Output directory: {dir}')
+    if not source_dir:
+        source_dir = config.DATABENTO_DIR
+    click.echo(f'Source directory: {source_dir}')
+
+    if not out_dir:
+        out_dir = config.HEPHAISTOS_DIR
+    click.echo(f'Output directory: {out_dir}')
 
     for path in datasetcategory.CATEGORY:
-        (dir / path).mkdir(parents=True, exist_ok=True)
-    
-    for path in files:
-        main_chart = Chart(candle_size=candle_size)
+        (out_dir/path).mkdir(parents=True, exist_ok=True)
+
+    for path in source_dir.glob("*.dbn"):
+        main_chart = Chart(candle_size=config.CANDLE_SIZE)
         model = MarketModel()
         model.charts.append(main_chart)
         model.simulate_file(path)
-        labeler.label(main_chart, trend_length, risk, profit, window_size)
+        labeler.label(main_chart, config.TREND_LENGTH, config.RISK, config.PROFIT, config.WINDOW_SIZE)
         features = FeatureGenerator(main_chart)
-        with open(FeatureGenerator.data_path(path, dir), "w", newline="", encoding="utf-8") as f:
+        with open(FeatureGenerator.data_path(path, out_dir), "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=FeatureGenerator.FEATURE_FIELDNAMES + FeatureGenerator.TARGET_FIELDNAMES)
             writer.writeheader()
             for feature_set in features:
@@ -392,20 +411,22 @@ def prepare_cmd(files: list[Path], dir: Path, candle_size: int, trend_length: in
 
 
 @click.command('predict')
-@click.argument('files', nargs=-1, type=click.Path(exists=True, path_type=Path), required=True, help='files with test data (.csv)')
-@click.option('-m', '--model-file', type=str, default='hephaistos-model', help='model file prefix')
-@click.option('-p', '--probability', type=float, default=0.30, help="threshold probability for trades")
-def predict_cmd(files: tuple[Path,...], model_file: Path, probability: float): # pragma: no cover
+@click.option(
+    '-t', '--test-dir',
+    type=click.Path(dir_okay=True, file_okay=False, exists=True, path_type=Path),
+    help='directory with files to compute precision recall'
+)
+def predict_cmd(test_dir: Path): # pragma: no cover
     """ predict based on a given model """
-    click.echo(f"Predicting based on model '{model_file}'...")
 
-    df = load_files(files)
+    if not test_dir:
+        test_dir = config.TEST_DIR
+    click.echo(f"Precision recall based on models in '{config.MODEL_PATH}' for files in '{test_dir}'")
+
+    df = load_feature_files(test_dir.glob('*_features.csv'))
     X, y_short, y_long, y_trades = split_target(df)
 
-    model_short, model_long, model_trade = xgb.XGBClassifier(), xgb.XGBClassifier(), xgb.XGBClassifier()
-    model_short.load_model(model_file + '_short.json')
-    model_long.load_model(model_file + '_long.json')
-    model_trade.load_model(model_file + '_trade.json')
+    model_short, model_long, model_trade = load_models()
     proba_trade = model_trade.predict_proba(X)[:,1]
     proba_short = model_short.predict_proba(X)[:,1]
     proba_long  = model_long.predict_proba(X)[:,1]
@@ -416,8 +437,8 @@ def predict_cmd(files: tuple[Path,...], model_file: Path, probability: float): #
     click.echo(df_proba.describe(percentiles=[0.5, 0.75, 0.90, 0.95, 0.99]))
 
     # using probability as threshold
-    raw_short = proba_short >= probability
-    raw_long = proba_long >= probability
+    raw_short = proba_short >= config.PROBABILITY_THRESHOLD
+    raw_long = proba_long >= config.PROBABILITY_THRESHOLD
 
     both_active = raw_short & raw_long
     final_short = np.where(both_active, False, raw_short).astype(int)
@@ -458,22 +479,31 @@ def predict_cmd(files: tuple[Path,...], model_file: Path, probability: float): #
     df_cm.loc["precision [%]"] = precision_row
 
     click.echo()
-    click.secho(f'prediction for probability {probability:.2f}', bold=True)
+    click.secho(f'prediction for probability {config.PROBABILITY_THRESHOLD:.2f}', bold=True)
     click.echo(df_cm.to_string())
     click.echo()
 
 
-@click.command('eval')
-@click.argument('file', type=str, help="file to be evaluated (.dbn)")
-@click.option('-s', '--candle-size', type=int, default=36, help="size of a candle in sec (default=36)")
-@click.option('-m', '--model-file', type=str, default='hephaistos-model.json', help="model file (default='Hephaistos-model.json')")
-@click.option('-t', '--threshold', type=int, default=65, help='threshold to start a trade (default=65%)')
+@click.command()
+@click.argument('file', type=str, required=True, help="file to be simulated (.dbn)")
 @click.option('-n', '--num-candles', type=int, help='number of candles to simulate')
-@click.option('-o', '--out-file', type=str, required=True, help="name of output file")
-def eval_cmd(file: Path, candle_size:int, model_file: Path, threshold: int, num_candles: int, out_file: Path): # pragma; no cover
+@click.option('-l', '--label', is_flag=True, help="add labels to the output chart")
+@click.option('-o', '--out-file', type=click.Path(writable=True, path_type=Path), help="output file name")
+def sim(file: Path, num_candles: int, label: bool, out_file: Path): # pragma; no cover
     """ evaluate a trades file with Hephaistos """
-    click.echo(f"Evaluating file '{file}' based on '{model_file}'")
+    click.echo(f"Simulating file '{file}'")
     
-    chart = Hephaistos.simulate(file, model_file, candle_size, num_candles, threshold)
-    chart.to_file(out_file, fieldnames=Candle.OHLC_FIELDNAMES + Hephaistos.FIELDNAMES)
+    chart = Hephaistos.simulate(file, num_candles)
+    fieldnames = fieldnames=Candle.OHLC_FIELDNAMES + Hephaistos.FIELDNAMES
+    if label:
+        labeler.label(chart, config.TREND_LENGTH, config.RISK, config.PROFIT, config.WINDOW_SIZE)
+        fieldnames += FeatureGenerator.TARGET_FIELDNAMES
+
+    if not out_file:
+        file_parts = marketdata.parse_path(file)
+        file_parts['parent'] = '.'
+        file_parts['suffix'] = '.csv'
+        file_parts['content'] = 'hephaistos-sim'
+        out_file = marketdata.assemble_path(file_parts)
+    chart.to_file(out_file, fieldnames)
     click.echo(f"candles written to '{out_file}'")
