@@ -30,6 +30,7 @@ dev = [
 
 [project.scripts]
 plutos = "plutos.cli:plutos"
+hephaistos = "plutos.cli:hephaistos"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/plutos"]
