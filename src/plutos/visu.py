@@ -50,6 +50,12 @@ def show(chart_file: io.TextIOWrapper, start:int, num_candles: int):
             df_sticks[average] = df_sticks[average] / 4
             additional_plots.append(mpf.make_addplot(df_sticks[average], width=0.6, panel=0))
 
+    for swing in ['swing_low', 'swing_high']:
+        if swing in df_sticks.columns:
+            marker = '1' if swing == 'swing_high' else '2'
+            df_sticks[swing] = df_sticks[swing] / 4
+            additional_plots.append(mpf.make_addplot(df_sticks[swing], type="scatter", marker=marker, color="grey", linewidths=0.5, panel=0))
+
     if 'contracts' in df_sticks.columns:
         additional_plots.append(mpf.make_addplot(df_sticks['contracts'], type='bar', width=0.5, panel=2))
 

@@ -31,8 +31,8 @@ class Candle:
         self._high: int = None
         self._size: int = size
 
-        self.ema_fast: int = None # fast moving average in ticks
-        self.ema_slow: int = None # slow moving average in ticks
+        self._ema_fast: float = None # fast moving average in ticks
+        self._ema_slow: float = None # slow moving average in ticks
 
         self._swing_low: int = None             # swing low in ticks
         self._swing_low_index: int = None       # index of swing low candle
@@ -53,6 +53,14 @@ class Candle:
         return self._index 
 
     @property
+    def ema_fast(self) -> float:
+        return self._ema_fast if self._ema_fast else self.average
+
+    @property
+    def ema_slow(self) -> float:
+        return self._ema_slow if self._ema_slow else self.average
+    
+    @property
     def swing_low(self) -> int:
         return self._swing_low if self._swing_low else self.low
 
@@ -66,9 +74,10 @@ class Candle:
         dt = self._swing_low_index - self._last_swing_low_index
         return (self._swing_low - self._last_swing_low) / dt if dt != 0 else 0.0
 
-    def set_swing_low(self, low: int, index: int):
+    def set_swing_low(self, low: int, age: int):
+        """ set a new swing low """
         self._last_swing_low, self._last_swing_low_index = self._swing_low, self._swing_low_index
-        self._swing_low, self._swing_low_index = low, index
+        self._swing_low, self._swing_low_index = low, self._index - age
 
     @property
     def swing_high(self) -> int:
@@ -86,7 +95,7 @@ class Candle:
 
     def set_swing_high(self, low: int, age: int):
         self._last_swing_high, self._last_swing_high_index = self._swing_high, self._swing_high_index
-        self._swing_high, self._swing_high_index = low, age
+        self._swing_high, self._swing_high_index = low, self._index - age
 
     @property
     def size(self) -> int:
@@ -129,10 +138,6 @@ class Candle:
         return self.close - self.open
 
     @property
-    def body(self) -> int:
-        return abs(self.delta)
-
-    @property
     def ema_spread(self) -> int:
         return self.ema_fast - self.ema_slow
 
@@ -153,8 +158,7 @@ class Candle:
             'volumes': [self._volumes[p] for p in range (self.low, self.high + 1)]
         }
 
-    OHLC_FIELDNAMES = ['index', 'timestamp', 'open', 'low', 'average', 'high', 'close', 'volume']
-
+    FIELDNAMES = ['index', 'timestamp', 'open', 'low', 'average', 'high', 'close', 'volume', 'ema_slow', 'ema_fast', 'swing_low', 'swing_high']
 
     def to_filtered_dict(self, keys: Iterable[str]) -> dict:
         return {key: getattr(self, key) for key in keys}
@@ -205,6 +209,40 @@ class Candle:
             ")"
         )
 
+class SwingFilter:
+    """ Filters low/high in a given detection time """
+
+    def __init__(self, detection_time: int, operation):
+        self.detection_time = detection_time
+        self.operation = operation
+        self._values = deque(maxlen = 2 * detection_time + 1)
+
+    @property
+    def value(self):
+        return self._values[self.detection_time]
+
+    def append(self, value):
+        self._values.append(value)
+
+    def __bool__(self):
+        return self.compare()
+
+    def compare(self) -> bool:
+        if len(self._values) != self._values.maxlen: return False
+        ref = self.value
+        values  = [self._values[i] for i in range(0, self.detection_time)]
+        values += [self._values[i] for i in range(self.detection_time + 1, self._values.maxlen)]
+        fulfilled = True
+        for v in values:
+            fulfilled = fulfilled and self.operation(v, ref)
+        return fulfilled
+
+    def low(value, reference):
+        return value > reference
+
+    def high(value, reference):
+        return value < reference
+
 
 class Chart():
     """ a chart contains a sequence of Candles all with the same size 
@@ -214,6 +252,8 @@ class Chart():
 
     """
 
+    SWING_DETECTION_TIME = 2
+
     def __init__(self, candle_size: int, maxlen: int = None):
         self._candle_size = candle_size
         self._current_candle = Candle(candle_size)
@@ -221,6 +261,8 @@ class Chart():
         self._candles = deque()
         self._volumes = VolumeProfile()
         self._callbacks = []
+        self._low_filter = SwingFilter(Chart.SWING_DETECTION_TIME, SwingFilter.low)
+        self._high_filter = SwingFilter(Chart.SWING_DETECTION_TIME, SwingFilter.high)
 
     def register_callback(self, callback):
         self._callbacks.append(callback)
@@ -288,29 +330,7 @@ class Chart():
         self._volumes -= candle.volumes
         return candle
 
-    @property
-    def trend_length(self) -> int:
-        """ length of the trend """
-        length = 0
-        direction = None
-        for candle in reversed(self._candles):
-            if direction == None:
-                direction = candle.direction
-            elif (average - candle.average) * direction > 0:
-                length += 1
-            else:
-                break
-            average = candle.average
-        return length
 
-    @property
-    def trend_direction(self) -> int:
-        """ direction of the trend (in ticks)"""
-        direction = 0
-        if len(self._candles) > 0:
-            direction = self._candles[-1].direction
-        return direction
-        
     EMA_FAST_FACTOR = 0.5   # = 2 / (3 + 1)
     EMA_SLOW_FACTOR = EMA_FAST_FACTOR / 5
 
@@ -318,32 +338,28 @@ class Chart():
         """ calculates the exponetial moving average of candle """
         return value * factor + ema * (1 - factor)
 
-    def _direction(candle: Candle, last_candle: Candle):
-        """ calculates the direction of candle """
-        dir = candle.delta
-        if last_candle:
-            dir_last = candle.average - last_candle.average
-            if dir * dir_last > 0:
-                dir = dir_last
-            else:
-                dir = 0
-        return dir
-    
 
     def _commit_current_candle(self):
         """ add the current candle to the chart, calculate its properties, notifies listener and starts a new candle """
 
         candle = self._current_candle
-        if len(self._candles) == 0:
-            candle.ema_fast = candle.average
-            candle.ema_slow = candle.average
-            candle.direction = candle.delta
-        else:
+        self._low_filter.append(candle.low)
+        self._high_filter.append(candle.high)
+        if len(self._candles) > 0:
             last_candle = self[-1]
-            candle.ema_fast = Chart._exp_moving_avg(candle.average, last_candle.ema_fast, Chart.EMA_FAST_FACTOR)
-            candle.ema_slow = Chart._exp_moving_avg(candle.average, last_candle.ema_slow, Chart.EMA_SLOW_FACTOR)
-            candle.direction = Chart._direction(candle, last_candle)
+            candle._ema_fast = Chart._exp_moving_avg(candle.average, last_candle.ema_fast, Chart.EMA_FAST_FACTOR)
+            candle._ema_slow = Chart._exp_moving_avg(candle.average, last_candle.ema_slow, Chart.EMA_SLOW_FACTOR)
 
+            if self._low_filter:
+                candle.set_swing_low(self._low_filter.value, self._high_filter.detection_time)
+            else:
+                candle.set_swing_low(last_candle.swing_low, last_candle.swing_low_age + 1)
+            
+            if self._high_filter:
+                candle.set_swing_high(self._high_filter.value, self._high_filter.detection_time)
+            else:
+                candle.set_swing_high(last_candle.swing_high, last_candle.swing_high_age + 1)
+    
         self._candles.append(candle)
         if len(self._candles) > self._maxlen:
             # chart is full, remove an old one
@@ -358,7 +374,7 @@ class Chart():
         self._current_candle = Candle(self._candle_size)
 
 
-    def to_file(self, file: str | Path, fieldnames = Candle.OHLC_FIELDNAMES): # pragma: no cover
+    def to_file(self, file: str | Path, fieldnames = Candle.FIELDNAMES): # pragma: no cover
         with open(file, "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
@@ -445,12 +461,11 @@ def chart_cmd(file: Path, candle_size: int, num: int, volume_profile: bool): # p
     file_parts['suffix'] = '.csv'
     file_parts['content'] = 'chart'
 
-    fieldnames = ['timestamp', 'open', 'low', 'average', 'high', 'close', 'volume', 'ema_fast', 'ema_slow']
     chart_file = marketdata.assemble_path(file_parts)
     with open(chart_file, 'w', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer = csv.DictWriter(f, fieldnames=Candle.FIELDNAMES)
         writer.writeheader()
-        writer.writerows([candle.to_filtered_dict(fieldnames) for candle in main_chart])
+        writer.writerows([candle.to_filtered_dict(Candle.FIELDNAMES) for candle in main_chart])
     click.echo(f"chart written to '{chart_file}'")
 
     if volume_profile:

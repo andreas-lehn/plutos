@@ -3,7 +3,7 @@ import pytest
 
 from plutos.trade import Trade
 from plutos.sample import VolumeProfile, Sample
-from plutos.chart import Candle, Chart, MarketModel
+from plutos.chart import Candle, Chart, MarketModel, SwingFilter
 from plutos import marketdata
 
 
@@ -85,13 +85,13 @@ def test_candle_swing_low(some_samples):
     assert candle.swing_low_dt == 0.0
 
     candle._index = 12
-    candle.set_swing_low(98, 10)
+    candle.set_swing_low(98, 2)
     assert candle.swing_low == 98
     assert candle.swing_low_age == 2
     assert candle.swing_low_dt == 0.0
 
     candle._index = 24
-    candle.set_swing_low(106, 18)
+    candle.set_swing_low(106, 6)
     assert candle.swing_low == 106
     assert candle.swing_low_age == 6
     assert candle.swing_low_dt == 1.0
@@ -106,18 +106,44 @@ def test_candle_swing_high(some_samples):
     assert candle.swing_high_dt == 0.0
 
     candle._index = 12
-    candle.set_swing_high(106, 10)
+    candle.set_swing_high(106, 2)
     assert candle.swing_high == 106
     assert candle.swing_high_age == 2
     assert candle.swing_high_dt == 0.0
 
     candle._index = 24
-    candle.set_swing_high(98, 18)
+    candle.set_swing_high(98, 6)
     assert candle.swing_high == 98
     assert candle.swing_high_age == 6
     assert candle.swing_high_dt == -1.0
 
-    
+def test_swing_filter():
+    filter = SwingFilter(2, SwingFilter.low)
+    assert not filter
+
+    for v in [10, 9, 8, 7]: filter.append(v)
+    assert not filter
+
+    filter.append(8)
+    assert not filter
+
+    filter.append(9)
+    assert filter
+
+    filter.append(10)
+    assert not filter
+
+    filter = SwingFilter(2, SwingFilter.high)
+    for v in [1, 2, 3, 4, 3]: filter.append(v)
+    assert not filter
+
+    filter.append(2)
+    assert filter
+
+    filter.append(1)
+    assert not filter
+
+
 def test_candle_to_dict(some_samples):
     candle = Candle(size=12)
     candle.append(some_samples[1])
@@ -182,7 +208,6 @@ def test_chart(more_samples):
     candle_0 = chart[0]
     assert candle_0.ema_fast == candle_0.average
     assert candle_0.ema_slow == candle_0.average
-    assert candle_0.direction == candle_0.delta
 
     chart.append(more_samples[2])
     chart.append(more_samples[3])
@@ -222,106 +247,6 @@ def test_chart(more_samples):
 
     for i, candle in enumerate(chart):
         assert candle == chart[i]
-
-
-def test_direction():
-    samples = [
-        marketdata.make_sample("2026-10-15", 14, 30500, [1]),
-        marketdata.make_sample("2026-10-15", 15, 30501, [1]), # 20
-        marketdata.make_sample("2026-10-15", 16, 30501, [1]),
-        marketdata.make_sample("2026-10-15", 17, 30501, [1]), # 30
-        marketdata.make_sample("2026-10-15", 18, 30501, [1]),
-        marketdata.make_sample("2026-10-15", 19, 30503, [1]), # 6０
-        marketdata.make_sample("2026-10-15", 20, 30502, [1]),
-        marketdata.make_sample("2026-10-15", 21, 30504, [1]), # 64
-        marketdata.make_sample("2026-10-15", 22, 30505, [1]),
-        marketdata.make_sample("2026-10-15", 23, 30503, [1]), # 8０
-        marketdata.make_sample("2026-10-15", 24, 30504, [1]),
-        marketdata.make_sample("2026-10-15", 25, 30506, [1]), # 1００
-        marketdata.make_sample("2026-10-15", 26, 30500, [1]), # Ein Trade um as letzte sample abzuschicken..
-    ]
-    
-    chart = Chart(candle_size=2)
-    chart.append(samples[0])
-    chart.append(samples[1])
-    b_0 = chart[0]
-    assert b_0.direction == 1
-    assert chart.trend_direction == 1
-    assert chart.trend_length == 0
-
-    chart.append(samples[2])
-    chart.append(samples[3])
-    assert chart.trend_direction == 0
-    assert chart.trend_length == 0
-
-    chart.append(samples[4])
-    chart.append(samples[5])
-    assert chart.trend_direction == 1
-    assert chart.trend_length == 2
-
-    chart.append(samples[6])
-    chart.append(samples[7])
-    assert chart.trend_direction == 1
-    assert chart.trend_length == 3
-
-    chart.append(samples[8])
-    chart.append(samples[9])
-    assert chart.trend_direction == 0
-    assert chart.trend_length == 0
-
-    chart.append(samples[10])
-    chart.append(samples[11])
-    assert chart.trend_direction == 1
-    assert chart.trend_length == 5
-
-
-def test_direction_mirrowed():
-    samples = [
-        marketdata.make_sample("2026-10-15", 14, 30600, [1]),
-        marketdata.make_sample("2026-10-15", 15, 30599, [1]), # 20
-        marketdata.make_sample("2026-10-15", 16, 30599, [1]),
-        marketdata.make_sample("2026-10-15", 17, 30599, [1]), # 30
-        marketdata.make_sample("2026-10-15", 18, 30599, [1]),
-        marketdata.make_sample("2026-10-15", 19, 30597, [1]), # 6０
-        marketdata.make_sample("2026-10-15", 20, 30598, [1]),
-        marketdata.make_sample("2026-10-15", 21, 30596, [1]), # 64
-        marketdata.make_sample("2026-10-15", 22, 30595, [1]),
-        marketdata.make_sample("2026-10-15", 23, 30597, [1]), # 8０
-        marketdata.make_sample("2026-10-15", 24, 30596, [1]),
-        marketdata.make_sample("2026-10-15", 25, 30594, [1]), # 1００
-        marketdata.make_sample("2026-10-15", 26, 30600, [1]),
-    ]
-
-    chart = Chart(candle_size=2)
-    chart.append(samples[0])
-    chart.append(samples[1])
-    assert chart.trend_direction == -1
-    assert chart.trend_length == 0
-
-    chart.append(samples[2])
-    chart.append(samples[3])
-    assert chart.trend_direction == 0
-    assert chart.trend_length == 0
-
-    chart.append(samples[4])
-    chart.append(samples[5])
-    assert chart.trend_direction == -1
-    assert chart.trend_length == 2
-
-    chart.append(samples[6])
-    chart.append(samples[7])
-    assert chart.trend_direction == -1
-    assert chart.trend_length == 3
-
-    chart.append(samples[8])
-    chart.append(samples[9])
-    assert chart.trend_direction == 0
-    assert chart.trend_length == 0
-
-    chart.append(samples[10])
-    chart.append(samples[11])
-    assert chart.trend_direction == -1
-    assert chart.trend_length == 5
     
 
 def test_average_range(more_samples):
