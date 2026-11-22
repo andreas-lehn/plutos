@@ -76,7 +76,48 @@ def test_candle_range(some_samples):
     with pytest.raises(ValueError):
         candle.append(some_samples[2])
 
+def test_candle_swing_low(some_samples):
+    candle = Candle()
+    candle.append(some_samples[0])
 
+    assert candle.swing_low == 99
+    assert candle.swing_low_age == 0
+    assert candle.swing_low_dt == 0.0
+
+    candle._index = 12
+    candle.set_swing_low(98, 10)
+    assert candle.swing_low == 98
+    assert candle.swing_low_age == 2
+    assert candle.swing_low_dt == 0.0
+
+    candle._index = 24
+    candle.set_swing_low(106, 18)
+    assert candle.swing_low == 106
+    assert candle.swing_low_age == 6
+    assert candle.swing_low_dt == 1.0
+
+    
+def test_candle_swing_high(some_samples):
+    candle = Candle()
+    candle.append(some_samples[0])
+
+    assert candle.swing_high == 102
+    assert candle.swing_high_age == 0
+    assert candle.swing_high_dt == 0.0
+
+    candle._index = 12
+    candle.set_swing_high(106, 10)
+    assert candle.swing_high == 106
+    assert candle.swing_high_age == 2
+    assert candle.swing_high_dt == 0.0
+
+    candle._index = 24
+    candle.set_swing_high(98, 18)
+    assert candle.swing_high == 98
+    assert candle.swing_high_age == 6
+    assert candle.swing_high_dt == -1.0
+
+    
 def test_candle_to_dict(some_samples):
     candle = Candle(size=12)
     candle.append(some_samples[1])

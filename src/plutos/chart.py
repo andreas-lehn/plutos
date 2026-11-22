@@ -30,7 +30,20 @@ class Candle:
         self._open: int = None
         self._high: int = None
         self._size: int = size
-    
+
+        self.ema_fast: int = None # fast moving average in ticks
+        self.ema_slow: int = None # slow moving average in ticks
+
+        self._swing_low: int = None             # swing low in ticks
+        self._swing_low_index: int = None       # index of swing low candle
+        self._last_swing_low: int = None        # last swing low in ticks
+        self._last_swing_low_index: int = None  # index of last swing low candle
+
+        self._swing_high: int = None             # swing high in ticks
+        self._swing_high_index: int = None       # index of swing high candle 
+        self._last_swing_high: int = None        # last swing high in ticks
+        self._last_swing_high_index: int = None  # index of last swing low in candles
+
     @property
     def timestamp(self) -> int:
         return self._timestamp
@@ -38,6 +51,42 @@ class Candle:
     @property
     def index(self) -> int:
         return self._index 
+
+    @property
+    def swing_low(self) -> int:
+        return self._swing_low if self._swing_low else self.low
+
+    @property
+    def swing_low_age(self) -> int:
+        return self._index - self._swing_low_index if self._swing_low_index else 0
+
+    @property
+    def swing_low_dt(self) -> float:
+        if not self._last_swing_low: return 0.0
+        dt = self._swing_low_index - self._last_swing_low_index
+        return (self._swing_low - self._last_swing_low) / dt if dt != 0 else 0.0
+
+    def set_swing_low(self, low: int, index: int):
+        self._last_swing_low, self._last_swing_low_index = self._swing_low, self._swing_low_index
+        self._swing_low, self._swing_low_index = low, index
+
+    @property
+    def swing_high(self) -> int:
+        return self._swing_high if self._swing_high else self.high
+
+    @property
+    def swing_high_age(self) -> int:
+        return self._index - self._swing_high_index if self._swing_high_index else 0
+
+    @property
+    def swing_high_dt(self) -> float:
+        if not self._last_swing_high: return 0.0
+        dt = self._swing_high_index - self._last_swing_high_index
+        return (self._swing_high - self._last_swing_high) / dt if dt != 0 else 0.0
+
+    def set_swing_high(self, low: int, age: int):
+        self._last_swing_high, self._last_swing_high_index = self._swing_high, self._swing_high_index
+        self._swing_high, self._swing_high_index = low, age
 
     @property
     def size(self) -> int:
