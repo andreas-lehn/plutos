@@ -212,11 +212,14 @@ class Candle:
 class SwingFilter:
     """ Filters low/high in a given detection time """
 
-    def __init__(self, detection_time: int, operation):
-        self.detection_time = detection_time
-        self.operation = operation
+    def __init__(self, detection_time):
+        self._detection_time = detection_time
         self._values = deque(maxlen = 2 * detection_time + 1)
 
+    @property
+    def detection_time(self):
+        return self._detection_time
+    
     @property
     def value(self):
         return self._values[self.detection_time]
@@ -224,23 +227,28 @@ class SwingFilter:
     def append(self, value):
         self._values.append(value)
 
-    def __bool__(self):
-        return self.compare()
+    @property
+    def is_low(self):
+        return self.compare(SwingFilter._low)
 
-    def compare(self) -> bool:
+    @property
+    def is_high(self):
+        return self.compare(SwingFilter._high)
+    
+    def compare(self, operation) -> bool:
         if len(self._values) != self._values.maxlen: return False
         ref = self.value
         values  = [self._values[i] for i in range(0, self.detection_time)]
         values += [self._values[i] for i in range(self.detection_time + 1, self._values.maxlen)]
         fulfilled = True
         for v in values:
-            fulfilled = fulfilled and self.operation(v, ref)
+            fulfilled = fulfilled and operation(v, ref)
         return fulfilled
 
-    def low(value, reference):
+    def _low(value, reference):
         return value > reference
 
-    def high(value, reference):
+    def _high(value, reference):
         return value < reference
 
 
@@ -261,8 +269,8 @@ class Chart():
         self._candles = deque()
         self._volumes = VolumeProfile()
         self._callbacks = []
-        self._low_filter = SwingFilter(Chart.SWING_DETECTION_TIME, SwingFilter.low)
-        self._high_filter = SwingFilter(Chart.SWING_DETECTION_TIME, SwingFilter.high)
+        self._low_filter = SwingFilter(Chart.SWING_DETECTION_TIME)
+        self._high_filter = SwingFilter(Chart.SWING_DETECTION_TIME)
 
     def register_callback(self, callback):
         self._callbacks.append(callback)
@@ -350,12 +358,12 @@ class Chart():
             candle._ema_fast = Chart._exp_moving_avg(candle.average, last_candle.ema_fast, Chart.EMA_FAST_FACTOR)
             candle._ema_slow = Chart._exp_moving_avg(candle.average, last_candle.ema_slow, Chart.EMA_SLOW_FACTOR)
 
-            if self._low_filter:
+            if self._low_filter.is_low:
                 candle.set_swing_low(self._low_filter.value, self._high_filter.detection_time)
             else:
                 candle.set_swing_low(last_candle.swing_low, last_candle.swing_low_age + 1)
             
-            if self._high_filter:
+            if self._high_filter.is_high:
                 candle.set_swing_high(self._high_filter.value, self._high_filter.detection_time)
             else:
                 candle.set_swing_high(last_candle.swing_high, last_candle.swing_high_age + 1)

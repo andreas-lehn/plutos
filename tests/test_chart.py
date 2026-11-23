@@ -118,30 +118,30 @@ def test_candle_swing_high(some_samples):
     assert candle.swing_high_dt == -1.0
 
 def test_swing_filter():
-    filter = SwingFilter(2, SwingFilter.low)
-    assert not filter
+    filter = SwingFilter(2)
+    assert not filter.is_low
 
     for v in [10, 9, 8, 7]: filter.append(v)
-    assert not filter
+    assert not filter.is_low
 
     filter.append(8)
-    assert not filter
+    assert not filter.is_low
 
     filter.append(9)
-    assert filter
+    assert filter.is_low
 
     filter.append(10)
-    assert not filter
+    assert not filter.is_low
 
-    filter = SwingFilter(2, SwingFilter.high)
+    filter = SwingFilter(2)
     for v in [1, 2, 3, 4, 3]: filter.append(v)
-    assert not filter
+    assert not filter.is_high
 
     filter.append(2)
-    assert filter
+    assert filter.is_high
 
     filter.append(1)
-    assert not filter
+    assert not filter.is_high
 
 
 def test_candle_to_dict(some_samples):
