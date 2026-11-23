@@ -269,8 +269,9 @@ class Chart():
         self._candles = deque()
         self._volumes = VolumeProfile()
         self._callbacks = []
-        self._low_filter = SwingFilter(Chart.SWING_DETECTION_TIME)
-        self._high_filter = SwingFilter(Chart.SWING_DETECTION_TIME)
+        #self._low_filter = SwingFilter(Chart.SWING_DETECTION_TIME)
+        #self._high_filter = SwingFilter(Chart.SWING_DETECTION_TIME)
+        self._avg_swing_filter = SwingFilter(Chart.SWING_DETECTION_TIME)
 
     def register_callback(self, callback):
         self._callbacks.append(callback)
@@ -351,23 +352,36 @@ class Chart():
         """ add the current candle to the chart, calculate its properties, notifies listener and starts a new candle """
 
         candle = self._current_candle
-        self._low_filter.append(candle.low)
-        self._high_filter.append(candle.high)
+        #self._low_filter.append(candle.low)
+        #self._high_filter.append(candle.high)
+        self._avg_swing_filter.append(candle.average)
         if len(self._candles) > 0:
             last_candle = self[-1]
             candle._ema_fast = Chart._exp_moving_avg(candle.average, last_candle.ema_fast, Chart.EMA_FAST_FACTOR)
             candle._ema_slow = Chart._exp_moving_avg(candle.average, last_candle.ema_slow, Chart.EMA_SLOW_FACTOR)
 
-            if self._low_filter.is_low:
-                candle.set_swing_low(self._low_filter.value, self._high_filter.detection_time)
+            # swing low/high based on low/high values
+            #if self._avg_low_filter.is_low:
+            #    candle.set_swing_low(self._low_filter.value, self._low_filter.detection_time)
+            #else:
+            #    candle.set_swing_low(last_candle.swing_low, last_candle.swing_low_age + 1)
+            #            
+            #if self._high_filter.is_high:
+            #   candle.set_swing_high(self._high_filter.value, self._high_filter.detection_time)
+            #else:
+            #    candle.set_swing_high(last_candle.swing_high, last_candle.swing_high_age + 1)
+    
+            # swing low/high based on average
+            if self._avg_swing_filter.is_low:
+                candle.set_swing_low(self._avg_swing_filter.value, self._avg_swing_filter.detection_time)
             else:
                 candle.set_swing_low(last_candle.swing_low, last_candle.swing_low_age + 1)
-            
-            if self._high_filter.is_high:
-                candle.set_swing_high(self._high_filter.value, self._high_filter.detection_time)
+                        
+            if self._avg_swing_filter.is_high:
+                candle.set_swing_high(self._avg_swing_filter.value, self._avg_swing_filter.detection_time)
             else:
                 candle.set_swing_high(last_candle.swing_high, last_candle.swing_high_age + 1)
-    
+            
         self._candles.append(candle)
         if len(self._candles) > self._maxlen:
             # chart is full, remove an old one
