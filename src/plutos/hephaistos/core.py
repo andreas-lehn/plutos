@@ -22,30 +22,25 @@ from . import config
 
 class Hephaistos:
 
-    FIELDNAMES = ['p_trade', 'p_short', 'p_long', 'signal_trade', 'signal_short', 'signal_long']
+    FIELDNAMES = ['p_short', 'p_long', 'signal_short', 'signal_long']
 
     def __init__(self):
-        self.model_long, self.model_short, self.model_trade = load_models()
+        self.model_long, self.model_short = load_models()
 
  
     def on_candle(self, candle: Candle, chart: Chart):
         """ predict probalities for long, neutral, short """
-        p_long, p_short, p_trade = 0.0, 0.0, 0.0
-        signal_short, signal_long, signal_trade = False, False, False
-
+        p_long, p_short = 0.0, 0.0
         if candle.index > config.START_OFFSET // candle.size:
             feature_set = FeatureGenerator.feature_set(candle, chart)
             df = pd.DataFrame([feature_set])
             p_short = self.model_short.predict_proba(df)[0][1]
             p_long  = self.model_long.predict_proba(df)[0][1]
-            p_trade = self.model_trade.predict_proba(df)[0][1]
 
         candle.p_short = p_short
         candle.p_long  = p_long
-        candle.p_trade = p_trade
         candle.signal_short = p_short >= config.P_THRESHOLD_SHORT
         candle.signal_long  = p_long  >= config.P_THRESHOLD_LONG
-        candle.signal_trade = p_trade >= config.P_THRESHOLD_TRADE
 
     def simulate(file, num_candles: int = None): # pragma: no cover
         main_chart = Chart(config.CANDLE_SIZE)
@@ -55,6 +50,16 @@ class Hephaistos:
         main_chart.register_callback(hephaistos.on_candle)
         model.simulate_file(file, num_candles * config.CANDLE_SIZE if num_candles else marketdata.SECONDS_OF_DAY)
         return main_chart
+
+
+def relative_change(value, base):
+    """ calculates the relative change of value to base """
+    return (value - base) / base if base != 0 else 0
+
+
+def delta_change(v_0, v_1, v_2):
+    """ calculates the acceleration a value """
+    return relative_change(v_0, v_1) - relative_change(v_1, v_2)
 
 
 class FeatureGenerator:
@@ -70,100 +75,125 @@ class FeatureGenerator:
             return None
 
         data = dict()
+        low = candle.low
         average = candle.average
+        high = candle.high
         ema_fast = candle.ema_fast
         ema_slow = candle.ema_slow
         ema_spread = candle.ema_spread
         volume = candle.volume
         #data['index'] = candle.index
-        data['open'] = (candle.open - average) / average
-        data['low'] = (candle.low - average) / average
-        data['high'] = (candle.high - average) / average
-        data['close'] = (candle.close - average) / average
-        data['global_high'] = (candle.global_high - average) / average
-        data['global_low'] = (candle.global_low - average) / average
-        data['ema_fast'] = (ema_fast - average) / average
-        data['ema_slow'] = (ema_slow - average) / average
+        data['open']  = relative_change(candle.open, average)
+        data['low']   = relative_change(candle.low, average)
+        data['high']  = relative_change(candle.high, average)
+        data['close'] = relative_change(candle.close, average)
+
+        data['atr']   = candle.atr / average
+        data['range'] = candle.range / candle.atr
+        data['delta'] = candle.delta / candle.atr
+        
+        data['ema_fast']   = relative_change(ema_fast, average)
+        data['ema_slow']   = relative_change(ema_slow, average)
         data['ema_spread'] = candle.ema_spread / candle.ema_slow
-        data['range'] = candle.range / average
-        data['body'] = candle.body / average
-        data['delta'] = candle.delta / average
-        data['atr']    = candle.atr / average
+        
+        data['swing_low']     = relative_change(candle.swing_low, average)
+        data['swing_low_age'] = candle.swing_low_age
+        data['swing_low_dt']  = candle.swing_low_dt
+        
+        data['swing_high']     = relative_change(candle.swing_high, average)
+        data['swing_high_age'] = candle.swing_high_age
+        data['swing_high_dt']  = candle.swing_high_dt
+
+        data['close_to_swing_low']  = relative_change(candle.swing_low, candle.close)
+        data['close_to_swing_high'] = relative_change(candle.swing_high, candle.close)
+        data['high_to_swing_high']  = relative_change(candle.swing_high, high)
+        data['low_to_swing_low']    = relative_change(candle.swing_low, low)
 
         candle_1 = chart[-2]
+        low_1 = candle_1.low
         average_1 = candle_1.average
+        high_1 = candle_1.high
         ema_fast_1 = candle_1.ema_fast
         ema_slow_1 = candle_1.ema_slow
         ema_spread_1 = candle_1.ema_spread
         volume_1 = candle_1.volume
-        data['open_1']  = (candle.open - candle_1.open) / candle_1.open 
-        data['low_1']   = (candle.low - candle_1.low) / candle_1.low
-        data['average_1'] = (average - average_1) / average_1
-        data['high_1']  = (candle.high - candle_1.high) / candle_1.high
-        data['close_1'] = (candle.close - candle_1.close) / candle_1.close
-        data['ema_fast_1'] = (ema_fast - ema_fast_1) / ema_fast_1
-        data['ema_slow_1'] = (ema_slow - ema_slow_1) / ema_slow_1
-        data['ema_spread_1'] = (ema_spread - ema_spread_1) / ema_slow_1
-        data['volume_1'] = (volume - volume_1) / volume_1
+        data['open_1']       = relative_change(candle.open, candle_1.open) 
+        data['low_1']        = relative_change(low, low_1)
+        data['average_1']    = relative_change(average, average_1)
+        data['high_1']       = relative_change(high, high_1)
+        data['close_1']      = relative_change(candle.close, candle_1.close)
+        data['ema_fast_1']   = relative_change(ema_fast, ema_fast_1)
+        data['ema_slow_1']   = relative_change(ema_slow, ema_slow_1)
+        data['ema_spread_1'] = relative_change(ema_spread, ema_spread_1)
+        data['volume_1']     = relative_change(volume, volume_1)
 
         candle_2 = chart[-3]
+        low_2 = candle_2.low
         average_2 = candle_2.average
+        high_2 = candle_2.high
         ema_fast_2 = candle_2.ema_fast
         ema_slow_2 = candle_2.ema_slow
         ema_spread_2 =candle_2.ema_spread
         volume_2 = candle_2.volume
-        data['low_2']   = (candle.low - candle_2.low) / candle_2.low
-        data['average_2'] = (average - average_2) / average_2
-        data['high_2']  = (candle.high - candle_2.high) / candle_2.high
-        data['ema_fast_2'] = (ema_fast - ema_fast_2) / ema_fast_2
-        data['ema_slow_2'] = (ema_slow - ema_slow_2) / ema_slow_2
-        data['ema_spread_2'] = (ema_spread - ema_spread_2) / ema_slow_2
-        data['volume_2'] = (candle.volume - volume_2) / volume_2
+        data['low_2']        = relative_change(low, low_2)
+        data['average_2']    = relative_change(average, average_2)
+        data['high_2']       = relative_change(high, high_2)
+        data['ema_fast_2']   = relative_change(ema_fast, ema_fast_2)
+        data['ema_slow_2']   = relative_change(ema_slow, ema_slow_2)
+        data['ema_spread_2'] = relative_change(ema_spread, ema_spread_2)
+        data['volume_2']     = relative_change(volume, volume_2)
 
-        data['average_accel'] = ((average - average_1) - (average_1 - average_2)) / average
-        data['ema_fast_accel'] = ((ema_fast - ema_fast_1) - (ema_fast_1 - ema_fast_2)) / ema_fast
-        data['ema_slow_accel'] = ((ema_slow - ema_slow_1) - (ema_slow_1 - ema_slow_2)) / ema_slow
-        data['ema_spread_accel'] = ((ema_spread - ema_spread_1) - (ema_spread_1 - ema_spread_2)) / ema_slow
-        data['volume_accel'] = ((volume - volume_1) - (volume_1 - volume_2)) / volume
+        data['a_low']        = delta_change(low, low_1, low_2)
+        data['a_average']    = delta_change(average, average_1, average_2)
+        data['a_high']       = delta_change(high, high_1, high_2)
+        data['a_ema_fast']   = delta_change(ema_fast, ema_fast_1, ema_fast_2)
+        data['a_ema_slow']   = delta_change(ema_slow, ema_slow_1, ema_slow_2)
+        data['a_ema_spread'] = delta_change(ema_spread, ema_spread_1, ema_spread_2)
+        data['a_volume']     = delta_change(volume, volume_1, volume_2)
 
         candle_3 = chart[-4]
         average_3 = candle_3.average
         ema_fast_3 = candle_3.ema_fast
         ema_slow_3 = candle_3.ema_slow
         ema_spread_3 = candle_3.ema_spread
-        data['average_3'] = (average - average_3) / average_3
-        data['ema_fast_3'] = (ema_fast - ema_fast_3) / ema_fast_3 
-        data['ema_slow_3'] = (ema_slow - ema_slow_3) / ema_slow_3 
-        data['ema_spread_3'] = (ema_spread - ema_spread_3) / ema_slow_3 
+        data['average_3']    = relative_change(average, average_3)
+        data['ema_fast_3']   = relative_change(ema_fast, ema_fast_3) 
+        data['ema_slow_3']   = relative_change(ema_slow, ema_slow_3) 
+        data['ema_spread_3'] = relative_change(ema_spread, ema_spread_3) 
 
         candle_5 = chart[-6]
         average_5 = candle_5.average
         ema_fast_5 = candle_5.ema_fast
         ema_slow_5 = candle_5.ema_slow
         ema_spread_5 = candle_5.ema_spread
-        data['average_5'] = (average - average_5) / average_5
-        data['ema_fast_5'] = (ema_fast - ema_fast_5) / ema_fast_5 
-        data['ema_slow_5'] = (ema_slow - ema_slow_5) / ema_slow_5 
-        data['ema_spread_5'] = (ema_spread - ema_spread_5) / ema_slow_5 
+        data['average_5']    = relative_change(average, average_5)
+        data['ema_fast_5']   = relative_change(ema_fast, ema_fast_5) 
+        data['ema_slow_5']   = relative_change(ema_slow, ema_slow_5) 
+        data['ema_spread_5'] = relative_change(ema_spread, ema_spread_5) 
 
         candle_9 = chart[-10]
         average_9 = candle_9.average
         ema_fast_9 = candle_9.ema_fast
         ema_slow_9 = candle_9.ema_slow
         ema_spread_9 = candle_9.ema_spread
-        data['average_9'] = (average - average_9) / average_9
-        data['ema_fast_9'] = (ema_fast - ema_fast_9) / ema_fast_9 
-        data['ema_slow_9'] = (ema_slow - ema_slow_9) / ema_slow_9 
-        data['ema_spread_9'] = (ema_spread - ema_spread_9) / ema_slow_9 
+        data['average_9']    = relative_change(average, average_9)
+        data['ema_fast_9']   = relative_change(ema_fast, ema_fast_9) 
+        data['ema_slow_9']   = relative_change(ema_slow, ema_slow_9) 
+        data['ema_spread_9'] = relative_change(ema_spread, ema_spread_9) 
 
         return data
 
     FEATURE_FIELDNAMES = [
        #'index',
-       'open', 'low', 'high', 'close', 'global_high', 'global_low', 'ema_fast', 'ema_slow', 'ema_spread', 'range', 'body', 'delta', 'atr',
+       'open', 'low', 'high', 'close',
+       'atr', 'range', 'delta',
+       'ema_fast', 'ema_slow', 'ema_spread',
+       'swing_low', 'swing_low_age', 'swing_low_dt',
+       'swing_high', 'swing_high_age', 'swing_high_dt',
+       'close_to_swing_low', 'close_to_swing_high', 'high_to_swing_high', 'low_to_swing_low',
        'open_1', 'low_1', 'average_1', 'high_1', 'close_1', 'ema_fast_1', 'ema_slow_1', 'ema_spread_1', 'volume_1',
        'low_2', 'average_2', 'high_2', 'ema_fast_2', 'ema_slow_2', 'ema_spread_2', 'volume_2',
-       'average_accel', 'ema_fast_accel', 'ema_slow_accel', 'ema_spread_accel', 'volume_accel',
+       'a_low', 'a_average', 'a_high', 'a_ema_fast', 'a_ema_slow', 'a_ema_spread', 'a_volume',
        'average_3', 'ema_fast_3', 'ema_slow_3', 'ema_spread_3',
        'average_5', 'ema_fast_5', 'ema_slow_5', 'ema_spread_5',
        'average_9', 'ema_fast_9', 'ema_slow_9', 'ema_spread_9',
@@ -171,11 +201,12 @@ class FeatureGenerator:
 
     def append_targets(feature_set: dict, candle: Candle):
         """ append target values to feature set """
+        feature_set['pre_short']    = candle.pre_short
         feature_set['target_short'] = candle.target_short
+        feature_set['pre_long']     = candle.pre_long
         feature_set['target_long']  = candle.target_long
-        feature_set['target_trade'] = candle.target_trade
 
-    TARGET_FIELDNAMES = ['target_short', 'target_long', 'target_trade']
+    TARGET_FIELDNAMES = ['pre_short', 'target_short', 'pre_long', 'target_long']
 
     def __iter__(self):
         """ iterate through the chart and yield features sets """
@@ -230,18 +261,18 @@ def load_feature_files(files) -> pd.DataFrame: # pragma: no cover
     frames = []
     for file in files:
         df = pd.read_csv(file)
-        drop_special_phases(df)
+        #drop_special_phases(df)
         frames.append(df)
     return pd.concat(frames, axis=0)
 
 
 def split_target(df: pd.DataFrame): # pragma: no cover
     """ split target columns from feature values """
+    print(df.head())
     x = df[FeatureGenerator.FEATURE_FIELDNAMES]
-    y_short = (df[FeatureGenerator.TARGET_FIELDNAMES[0]]).astype(int)
-    y_long  = (df[FeatureGenerator.TARGET_FIELDNAMES[1]]).astype(int)
-    y_trade = (df[FeatureGenerator.TARGET_FIELDNAMES[2]]).astype(int)
-    return x, y_short, y_long, y_trade
+    y_short = (df['target_short']).astype(int)
+    y_long  = (df['target_long']).astype(int)
+    return x, y_short, y_long
 
 
 def save_model(model: xgb.XGBClassifier, target_name: str) -> Path:
@@ -261,7 +292,7 @@ def load_model(model: xgb.XGBClassifier, target_name: str) -> Path:
 def fit_target(target_name: str, X_train, y_train, X_eval, y_eval):
     click.echo(f"fitting model for target '{target_name}'...")
     model = xgb.XGBClassifier(
-        eval_metric='aucpr',
+        #eval_metric='aucpr',
         #scale_pos_weight=2.0,
         early_stopping_rounds=25,
         n_estimators = 1500,
@@ -296,7 +327,6 @@ def fit_cmd(training_dir: Path, eval_dir: Path): #pragma: no cover
 
     training_files = [f for f in training_dir.glob("*_features.csv") if f.is_file()]
     df_training = load_feature_files(training_files)
-    X_train, y_short, y_long, y_trade = split_target(df_training)
 
     if not eval_dir:
         eval_dir = config.EVAL_DIR
@@ -304,19 +334,23 @@ def fit_cmd(training_dir: Path, eval_dir: Path): #pragma: no cover
 
     eval_files = [f for f in eval_dir.glob("*_features.csv") if f.is_file()]
     df_eval = load_feature_files(eval_files)
-    X_eval, y_eval_short, y_eval_long, y_eval_trade = split_target(df_eval)
 
+    # fit short
+    X_train, y_short, _ = split_target(df_training[df_training['pre_short']])
+    X_eval, y_eval_short, _ = split_target(df_eval[df_eval['pre_short']])
     model_short = fit_target('short', X_train, y_short, X_eval, y_eval_short)
+
+    # fit long
+    X_train, _, y_long = split_target(df_training[df_training['pre_long']])
+    X_eval, _, y_eval_long = split_target(df_eval[df_eval['pre_long']])
     model_long  = fit_target('long',  X_train, y_long,  X_eval, y_eval_long)
-    model_trade = fit_target('trade', X_train, y_trade, X_eval, y_eval_trade)
 
     df_features = pd.DataFrame({
         "feature": X_train.columns, 
         "short [%]": model_short.feature_importances_ * 100,
         "long [%]":  model_long.feature_importances_ * 100,
-        "trade [%]": model_trade.feature_importances_ * 100,
     })
-    df_features['max [%]'] = df_features[['short [%]', 'long [%]', 'trade [%]']].max(axis=1)
+    df_features['max [%]'] = df_features[['short [%]', 'long [%]']].max(axis=1)
     df_features = df_features.sort_values(by="max [%]", ascending=False).reset_index(
         drop=True
     )
@@ -328,8 +362,7 @@ def load_models():
     model_short, model_long, model_trade = xgb.XGBClassifier(), xgb.XGBClassifier(), xgb.XGBClassifier()
     load_model(model_short, 'short')
     load_model(model_long, 'long')
-    load_model(model_trade, 'trade')
-    return model_short, model_long, model_trade
+    return model_short, model_long
 
 @click.command()
 @click.option(
@@ -344,31 +377,28 @@ def prec_recall(test_dir: Path):
 
     click.echo(f"Precision recall based on models in '{config.MODEL_PATH}' for files in '{test_dir}'")
 
+    model_short, model_long = load_models()
     df = load_feature_files(test_dir.glob('*_features.csv'))
-    X, y_short, y_long, y_trade = split_target(df)
 
-    model_short, model_long, model_trade = load_models()
+    X, y_short, _ = split_target(df[df['pre_short']])
     proba_short = model_short.predict_proba(X)[:,1]
+
+    X, _, y_long = split_target(df[df['pre_long']])
     proba_long = model_long.predict_proba(X)[:,1]
-    proba_trade = model_trade.predict_proba(X)[:,1]
 
     # Precision und Recall für alle möglichen Schwellenwerte berechnen
     prec_short, _, thres_short = precision_recall_curve(y_short, proba_short)
     prec_long, _, thres_long = precision_recall_curve(y_long, proba_long)
-    prec_trade, _, thres_trade = precision_recall_curve(y_trade, proba_trade)
     ap_short = average_precision_score(y_short, proba_short)
     ap_long = average_precision_score(y_long, proba_long)
-    ap_trade = average_precision_score(y_long, proba_trade)
 
     plt.figure(figsize=(9, 6))
     plt.plot(thres_short, prec_short[:-1], label=f'short precision', color='red', linewidth=2)
     plt.plot(thres_long,  prec_long[:-1],  label=f'long precision',  color='green', linewidth=2)
-    plt.plot(thres_trade, prec_trade[:-1],  label=f'trade precision', color='blue', linewidth=2)
 
     # Optional: Zufalls-Baselines (Anteil der positiven Labels im Testset)
     plt.axhline(y_short.mean(), color='red', linestyle='--', alpha=0.4, label=f'Short Baseline ({y_short.mean():.2%})')
     plt.axhline(y_long.mean(), color='green', linestyle='--', alpha=0.4, label=f'Long Baseline ({y_long.mean():.2%})')
-    plt.axhline(y_trade.mean(), color='blue', linestyle='--', alpha=0.4, label=f'trade baseline ({y_trade.mean():.2%})')
 
     plt.title('precision recall curve')
     plt.xlabel('recall')
@@ -427,15 +457,14 @@ def predict_cmd(test_dir: Path): # pragma: no cover
     click.echo(f"Precision recall based on models in '{config.MODEL_PATH}' for files in '{test_dir}'")
 
     df = load_feature_files(test_dir.glob('*_features.csv'))
-    X, y_short, y_long, y_trades = split_target(df)
+    X, y_short, y_long = split_target(df)
 
-    model_short, model_long, model_trade = load_models()
-    proba_trade = model_trade.predict_proba(X)[:,1]
+    model_short, model_long = load_models()
     proba_short = model_short.predict_proba(X)[:,1]
     proba_long  = model_long.predict_proba(X)[:,1]
     proba_flat  = 1 - (proba_long + proba_short)
 
-    df_proba = pd.DataFrame({'short': proba_short, 'neutral': proba_flat, 'long': proba_long, 'trade': proba_trade})
+    df_proba = pd.DataFrame({'short': proba_short, 'neutral': proba_flat, 'long': proba_long})
     click.secho("distribution of probabilities:", bold=True)
     click.echo(df_proba.describe(percentiles=[0.5, 0.75, 0.90, 0.95, 0.99]))
 
@@ -482,7 +511,7 @@ def predict_cmd(test_dir: Path): # pragma: no cover
     df_cm.loc["precision [%]"] = precision_row
 
     click.echo()
-    click.secho(f'prediction short/longfor probability {config.P_THRESHOLD_SHORT:.2f}/{config.P_THRESHOLD_LONG:.2f}', bold=True)
+    click.secho(f'prediction short/long for probability {config.P_THRESHOLD_SHORT:.2f}/{config.P_THRESHOLD_LONG:.2f}', bold=True)
     click.echo(df_cm.to_string())
     click.echo()
 
@@ -496,7 +525,7 @@ def sim(file: Path, num_candles: int, label: bool, out_file: Path): # pragma; no
     """ evaluate a trades file with Hephaistos """
 
     chart = Hephaistos.simulate(file, num_candles)
-    fieldnames = Candle.OHLC_FIELDNAMES + Hephaistos.FIELDNAMES
+    fieldnames = Candle.FIELDNAMES + Hephaistos.FIELDNAMES
     if label:
         labeler.label(chart)
         fieldnames += FeatureGenerator.TARGET_FIELDNAMES

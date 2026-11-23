@@ -11,7 +11,8 @@ CANDLE_SIZE  = 36 # size of a candle
 TREND_LENGTH = 5 # length of trend (in candles) to be labeled
 RISK         = 24 # maximum risk to be taken (in ticks)
 PROFIT       = 12 # profit to be achieved (in ticks)
-WINDOW_SIZE  = 3 # size of window in candles. Used by tripple barrier labeler and trade labeler
+WINDOW_SIZE  = 5 # size of window in candles. Used by tripple barrier labeler and trade labeler
+MIN_SWING_DISTANCE = 0.4 * RISK # min distance to swing low/high
 LOOK_AHEAD   = 3 # amount of candles to look ahead
 
 DATABENTO_DIR  = Path(os.environ.get('DATABENTO_DIR', '.'))
@@ -24,6 +25,5 @@ TEST_DIR       = HEPHAISTOS_DIR/'test'
 MODEL_PATH = Path(models.__file__).resolve().parent
 
 PROBABILITY_THRESHOLD = 0.30 # threshold probability for trades
-P_THRESHOLD_SHORT = 0.25
-P_THRESHOLD_LONG  = 0.30
-P_THRESHOLD_TRADE = 0.40
+P_THRESHOLD_SHORT = 0.55
+P_THRESHOLD_LONG  = 0.55
